@@ -2,12 +2,18 @@ from ortools.sat.python import cp_model
 
 from courses import courses
 
+import units_and_year_standings as u
 
 
+model = cp_model.CpModel() ##Model Init##
 
-model = cp_model.CpModel()
+semester = {c: model.NewIntVar(1, 12, f"sem_{c}") for c in courses} ##Semester Init##
 
-semester = {c: model.NewIntVar(1, 12, f"sem_{c}") for c in courses}
+# for each global semester s:
+total_units_in_semester = {s: model.NewIntVar(0, u.max_units_for_sem(s), f"total_units_in_sem_{s}") for s in range(1, 13)}
+
+for s in range(1, 13):
+    model.Add(total_units_in_semester[s] <= u.max_units_for_sem(s))
 
 # Prerequisite constraints
 for c, info in courses.items():
@@ -35,3 +41,5 @@ if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
         print(f"{c} → Semester {solver.Value(var)}")
 else:
     print("No valid schedule found.")
+
+
