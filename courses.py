@@ -1,3 +1,10 @@
+YEAR_STANDING_RULES = {
+    "2nd Year Standing": 1,
+    "3rd Year Standing": 2,
+    "4th Year Standing": 3,
+    "Graduating": 3,
+}
+
 courses = {
 
     ########         FIRST YEAR FIRST SEMESTER         ########
