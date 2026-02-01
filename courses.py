@@ -5,6 +5,13 @@ YEAR_STANDING_RULES = {
     "Graduating": 3,
 }
 
+PREREQ_ALIASES = {
+    "CpEE 401": ["Elective Course 1"],
+    "CpEE 403": ["Elective Course 1"],
+    "CpEE 402": ["Elective Course 2"],
+    "CpEE 404": ["Elective Course 2"],
+}
+
 courses = {
 
     ########         FIRST YEAR FIRST SEMESTER         ########
@@ -385,7 +392,7 @@ courses = {
     "Elective Course 2":{
         "course_title": "Elective Course 2",
         "units": 3,
-        "pre-requisites": ["CpE 401"],
+        "pre-requisites": ["Elective Course 1"],
         "co-requisites": [],
         "offered_sems": 7,
         "year_level": 3
@@ -522,7 +529,7 @@ courses = {
     "Elective Course 3":{
         "course_title": "Technopreneurship",
         "units": 3,
-        "pre-requisites": ["CpE 402"],
+        "pre-requisites": ["Elective Course 2"],
         "co-requisites": [],
         "offered_sems": 10,
         "year_level": 4
