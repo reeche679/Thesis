@@ -1,0 +1,2018 @@
+{% extends "base.html" %}
+
+{% block title %}Generate POS | Program of Study Generation System{% endblock %}
+
+{% block header_action %}
+<a href="{% url 'sign_out' %}" class="btn btn-sm btn-outline-light px-3">Sign Out</a>
+{% endblock header_action %}
+
+{% block nav_generate_active %}active{% endblock %}
+
+{% block extra_head %}
+<style>
+    .grade-select {
+        max-width: 80px;
+        text-align: left;
+        margin: 0 auto;
+        display: block;
+        font-size: 0.85rem;
+        -webkit-appearance: none;
+        -moz-appearance: none;
+        appearance: none;
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e");
+        background-repeat: no-repeat;
+        background-position: right 0.25rem center;
+        background-size: 16px 12px;
+        padding: 0.25rem 1.5rem 0.25rem 0.75rem;
+    }
+
+    /* Left-align dropdown options with left indent */
+    .grade-select option {
+        text-align: left;
+        padding-left: 0.5rem;
+        font-size: 0.85rem;
+    }
+
+    /* Elective course cells - centered vertically but left-aligned text */
+    .elective-course-cell {
+        text-align: left;
+        vertical-align: middle;
+        font-size: 1rem !important;
+        color: #212529 !important;
+    }
+
+    /* Course title cells in body rows - left-aligned, vertically centered */
+    .course-title-cell {
+        text-align: left;
+        vertical-align: middle;
+        font-size: 1rem !important;
+        color: #212529 !important;
+    }
+
+    /* Column headers - slightly smaller so Pre-requisite(s) etc. fit and text is easily seen (match Preview) */
+    .table thead th {
+        text-align: center;
+        vertical-align: middle;
+        font-size: 0.9rem;
+        white-space: nowrap;
+    }
+
+    /* Semester headings like \"Second Year - First Semester\" */
+    .pos-card h6.fw-bold {
+        text-align: center;
+    }
+
+    /* Ensure all tables align consistently */
+    .table-responsive {
+        overflow-x: visible;
+    }
+
+    .table {
+        table-layout: fixed;
+        width: 100%;
+    }
+
+    /* All columns - keep text inside column, no overflow; aligned with headers; slightly smaller text (match Preview) */
+    .table thead th,
+    .table tbody td {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        text-align: center;
+        vertical-align: middle;
+        box-sizing: border-box;
+        padding-left: 0.5rem;
+        padding-right: 0.5rem;
+        font-size: 0.9rem;
+    }
+
+    /* Course Title (and elective) - left-aligned, wrap long text inside column */
+    .table .course-title-cell,
+    .table .elective-course-cell {
+        text-align: left;
+        white-space: normal;
+        word-break: break-word;
+        overflow-wrap: break-word;
+        font-size: 0.9rem !important;
+    }
+
+    /* Student photo – left of profile text (display only) */
+    .generate-photo-box {
+        width: 100px;
+        height: 100px;
+        min-width: 100px;
+        min-height: 100px;
+        border: 2px solid #3a3a3a;
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+    }
+    .generate-photo-box img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+    .generate-photo-box .photo-placeholder {
+        text-align: center;
+        color: #666;
+        font-size: 0.7rem;
+        padding: 4px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="mb-3 d-flex justify-content-between align-items-start">
+    <div>
+        <h1 class="h5 mb-1">Generate Program of Study</h1>
+        <p class="text-muted mb-0">
+            Review your current academic profile and specify grades for enrolled courses.
+        </p>
+    </div>
+    <div class="text-end">
+        <div class="small text-muted text-uppercase">Academic Term</div>
+        <div class="fw-semibold">A.Y. 2025 – 2026 · Curriculum 2025-2026</div>
+    </div>
+</div>
+
+<div class="pos-card p-4 mb-4 pos-student-profile-card-bg">
+    <div class="pos-student-profile-inner">
+    <div class="d-flex justify-content-between align-items-start mb-3">
+        <div>
+            <div class="pos-section-title mb-1">Student Profile</div>
+        </div>
+        <div class="fw-semibold text-muted">{% now "F d, Y" %}</div>
+    </div>
+
+    <div class="d-flex align-items-start gap-3">
+        <div class="generate-photo-box flex-shrink-0">
+            {% if student.profile_photo %}
+            <img src="{{ student.profile_photo.url }}" alt="Student photo">
+            {% else %}
+            <span class="photo-placeholder">Photo</span>
+            {% endif %}
+        </div>
+        <div class="row small flex-grow-1">
+            <div class="col-md-4 mb-2">
+                <div class="text-muted text-uppercase">Student Name</div>
+                <div class="fw-semibold">{{ student.full_name|default:"—"|upper }}</div>
+            </div>
+            <div class="col-md-4 mb-2">
+                <div class="text-muted text-uppercase">Year Level</div>
+                <div class="fw-semibold">{{ student.year_level|default:"—" }}</div>
+            </div>
+            <div class="col-md-4 mb-2">
+                <div class="text-muted text-uppercase">Curriculum</div>
+                <div class="fw-semibold">Curriculum 2025-2026</div>
+            </div>
+            <div class="col-md-4 mb-2">
+                <div class="text-muted text-uppercase">SR-Code</div>
+                <div class="fw-semibold">{{ student.sr_code|default:"—" }}</div>
+            </div>
+            <div class="col-md-4 mb-2">
+                <div class="text-muted text-uppercase">Program</div>
+                <div class="fw-semibold">BS Computer Engineering</div>
+            </div>
+            <div class="col-md-4 mb-2">
+                <div class="text-muted text-uppercase">Campus</div>
+                <div class="fw-semibold">Alangilan Campus</div>
+            </div>
+        </div>
+    </div>
+    </div>
+</div>
+
+<div class="pos-card p-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div class="pos-section-title mb-0">Course List by Semester</div>
+        <button type="button" class="btn btn-outline-danger btn-sm">
+            Apply Existing Grades
+        </button>
+    </div>
+
+    <!-- FIRST YEAR - FIRST SEMESTER -->
+    <div class="mb-4">
+        <h6 class="fw-bold mb-2">First Year - First Semester</h6>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle table-bordered mb-0">
+                <thead class="table-light">
+                    <tr class="text-center">
+                        <th style="width: 10%;">Course Code</th>
+                        <th style="width: 40%;">Course Title</th>
+                        <th style="width: 8%;">Units</th>
+                        <th style="width: 15%;">Pre-requisite(s)</th>
+                        <th style="width: 15%;">Co-requisite(s)</th>
+                        <th style="width: 12%;">Grade</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td class="text-center">ENGG 101</td>
+                        <td class="course-title-cell">Introduction to Engineering</td>
+                        <td class="text-center">1</td>
+                        <td class="small text-muted text-center"></td>
+                        <td class="small text-muted text-center"></td>
+                        <td>
+                            <select class="form-select form-select-sm grade-select">
+                                <option selected></option>
+                                <option>1.00</option>
+                                <option>1.25</option>
+                                <option>1.50</option>
+                                <option>1.75</option>
+                                <option>2.00</option>
+                                <option>2.25</option>
+                                <option>2.50</option>
+                                <option>2.75</option>
+                                <option>3.00</option>
+                                <option>5.00</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-center">GEd 108</td>
+                        <td class="course-title-cell">Art Appreciation</td>
+                        <td class="text-center">3</td>
+                        <td class="small text-muted text-center"></td>
+                        <td class="small text-muted text-center"></td>
+                        <td>
+                            <select class="form-select form-select-sm grade-select">
+                                <option selected></option>
+                                <option>1.00</option>
+                                <option>1.25</option>
+                                <option>1.50</option>
+                                <option>1.75</option>
+                                <option>2.00</option>
+                                <option>2.25</option>
+                                <option>2.50</option>
+                                <option>2.75</option>
+                                <option>3.00</option>
+                                <option>5.00</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-center">GEd 104</td>
+                        <td class="course-title-cell">The Contemporary World</td>
+                        <td class="text-center">3</td>
+                        <td class="small text-muted text-center"></td>
+                        <td class="small text-muted text-center"></td>
+                        <td>
+                            <select class="form-select form-select-sm grade-select">
+                                <option selected></option>
+                                <option>1.00</option>
+                                <option>1.25</option>
+                                <option>1.50</option>
+                                <option>1.75</option>
+                                <option>2.00</option>
+                                <option>2.25</option>
+                                <option>2.50</option>
+                                <option>2.75</option>
+                                <option>3.00</option>
+                                <option>5.00</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-center">CpE 101</td>
+                        <td class="course-title-cell">Computer Programming</td>
+                        <td class="text-center">1</td>
+                        <td class="small text-muted text-center"></td>
+                        <td class="small text-muted text-center"></td>
+                        <td>
+                            <select class="form-select form-select-sm grade-select">
+                                <option selected></option>
+                                <option>1.00</option>
+                                <option>1.25</option>
+                                <option>1.50</option>
+                                <option>1.75</option>
+                                <option>2.00</option>
+                                <option>2.25</option>
+                                <option>2.50</option>
+                                <option>2.75</option>
+                                <option>3.00</option>
+                                <option>5.00</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-center">GEd 105</td>
+                        <td class="course-title-cell">Readings in Philippines History</td>
+                        <td class="text-center">3</td>
+                        <td class="small text-muted text-center"></td>
+                        <td class="small text-muted text-center"></td>
+                        <td>
+                            <select class="form-select form-select-sm grade-select">
+                                <option selected></option>
+                                <option>1.00</option>
+                                <option>1.25</option>
+                                <option>1.50</option>
+                                <option>1.75</option>
+                                <option>2.00</option>
+                                <option>2.25</option>
+                                <option>2.50</option>
+                                <option>2.75</option>
+                                <option>3.00</option>
+                                <option>5.00</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-center">MATH 101</td>
+                        <td class="course-title-cell">Differential Calculus</td>
+                        <td class="text-center">4</td>
+                        <td class="small text-muted text-center"></td>
+                        <td class="small text-muted text-center"></td>
+                        <td>
+                            <select class="form-select form-select-sm grade-select">
+                                <option selected></option>
+                                <option>1.00</option>
+                                <option>1.25</option>
+                                <option>1.50</option>
+                                <option>1.75</option>
+                                <option>2.00</option>
+                                <option>2.25</option>
+                                <option>2.50</option>
+                                <option>2.75</option>
+                                <option>3.00</option>
+                                <option>5.00</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-center">CHEM 101</td>
+                        <td class="course-title-cell">Chemistry for Engineers</td>
+                        <td class="text-center">4</td>
+                        <td class="small text-muted text-center"></td>
+                        <td class="small text-muted text-center"></td>
+                        <td>
+                            <select class="form-select form-select-sm grade-select">
+                                <option selected></option>
+                                <option>1.00</option>
+                                <option>1.25</option>
+                                <option>1.50</option>
+                                <option>1.75</option>
+                                <option>2.00</option>
+                                <option>2.25</option>
+                                <option>2.50</option>
+                                <option>2.75</option>
+                                <option>3.00</option>
+                                <option>5.00</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-center">PATHFit 1</td>
+                        <td class="course-title-cell">Movement Competency Training</td>
+                        <td class="text-center">2</td>
+                        <td class="small text-muted text-center"></td>
+                        <td class="small text-muted text-center"></td>
+                        <td>
+                            <select class="form-select form-select-sm grade-select">
+                                <option selected></option>
+                                <option>1.00</option>
+                                <option>1.25</option>
+                                <option>1.50</option>
+                                <option>1.75</option>
+                                <option>2.00</option>
+                                <option>2.25</option>
+                                <option>2.50</option>
+                                <option>2.75</option>
+                                <option>3.00</option>
+                                <option>5.00</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-center">NSTP 111</td>
+                        <td class="course-title-cell">National Service Training Program 1</td>
+                        <td class="text-center">3</td>
+                        <td class="small text-muted text-center"></td>
+                        <td class="small text-muted text-center"></td>
+                        <td>
+                            <select class="form-select form-select-sm grade-select">
+                                <option selected></option>
+                                <option>1.00</option>
+                                <option>1.25</option>
+                                <option>1.50</option>
+                                <option>1.75</option>
+                                <option>2.00</option>
+                                <option>2.25</option>
+                                <option>2.50</option>
+                                <option>2.75</option>
+                                <option>3.00</option>
+                                <option>5.00</option>
+                            </select>
+                        </td>
+                    </tr>
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <th colspan="2" class="text-end">Total Units</th>
+                        <th class="text-center">24</th>
+                        <th colspan="3"></th>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+
+    <!-- FIRST YEAR - SECOND SEMESTER -->
+    <div class="mb-4">
+        <h6 class="fw-bold mb-2">First Year - Second Semester</h6>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle table-bordered mb-0">
+                <thead class="table-light">
+                    <tr class="text-center">
+                        <th style="width: 10%;">Course Code</th>
+                        <th style="width: 40%;">Course Title</th>
+                        <th style="width: 8%;">Units</th>
+                        <th style="width: 15%;">Pre-requisite(s)</th>
+                        <th style="width: 15%;">Co-requisite(s)</th>
+                        <th style="width: 12%;">Grade</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td class="text-center">ENGG 102</td>
+                        <td class="course-title-cell">Engineering Drawing</td>
+                        <td class="text-center">1</td>
+                        <td class="small text-muted text-center"></td>
+                        <td class="small text-muted text-center"></td>
+                        <td>
+                            <select class="form-select form-select-sm grade-select">
+                                <option selected></option>
+                                <option>1.00</option>
+                                <option>1.25</option>
+                                <option>1.50</option>
+                                <option>1.75</option>
+                                <option>2.00</option>
+                                <option>2.25</option>
+                                <option>2.50</option>
+                                <option>2.75</option>
+                                <option>3.00</option>
+                                <option>5.00</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-center">GEd 101</td>
+                        <td class="course-title-cell">Understanding the Self</td>
+                        <td class="text-center">3</td>
+                        <td class="small text-muted text-center"></td>
+                        <td class="small text-muted text-center"></td>
+                        <td>
+                            <select class="form-select form-select-sm grade-select">
+                                <option selected></option>
+                                <option>1.00</option>
+                                <option>1.25</option>
+                                <option>1.50</option>
+                                <option>1.75</option>
+                                <option>2.00</option>
+                                <option>2.25</option>
+                                <option>2.50</option>
+                                <option>2.75</option>
+                                <option>3.00</option>
+                                <option>5.00</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-center">GEd 102</td>
+                        <td class="course-title-cell">Mathematics in the Modern World</td>
+                        <td class="text-center">3</td>
+                        <td class="small text-muted text-center"></td>
+                        <td class="small text-muted text-center"></td>
+                        <td>
+                            <select class="form-select form-select-sm grade-select">
+                                <option selected></option>
+                                <option>1.00</option>
+                                <option>1.25</option>
+                                <option>1.50</option>
+                                <option>1.75</option>
+                                <option>2.00</option>
+                                <option>2.25</option>
+                                <option>2.50</option>
+                                <option>2.75</option>
+                                <option>3.00</option>
+                                <option>5.00</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-center">GEd 106</td>
+                        <td class="course-title-cell">Purposive Communication</td>
+                        <td class="text-center">3</td>
+                        <td class="small text-muted text-center"></td>
+                        <td class="small text-muted text-center"></td>
+                        <td>
+                            <select class="form-select form-select-sm grade-select">
+                                <option selected></option>
+                                <option>1.00</option>
+                                <option>1.25</option>
+                                <option>1.50</option>
+                                <option>1.75</option>
+                                <option>2.00</option>
+                                <option>2.25</option>
+                                <option>2.50</option>
+                                <option>2.75</option>
+                                <option>3.00</option>
+                                <option>5.00</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-center">GEd 109</td>
+                        <td class="course-title-cell">Science, Technology and Society</td>
+                        <td class="text-center">3</td>
+                        <td class="small text-muted text-center"></td>
+                        <td class="small text-muted text-center"></td>
+                        <td>
+                            <select class="form-select form-select-sm grade-select">
+                                <option selected></option>
+                                <option>1.00</option>
+                                <option>1.25</option>
+                                <option>1.50</option>
+                                <option>1.75</option>
+                                <option>2.00</option>
+                                <option>2.25</option>
+                                <option>2.50</option>
+                                <option>2.75</option>
+                                <option>3.00</option>
+                                <option>5.00</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-center">MATH 102</td>
+                        <td class="course-title-cell">Integral Calculus</td>
+                        <td class="text-center">4</td>
+                        <td class="small text-muted text-center">MATH 101</td>
+                        <td class="small text-muted text-center"></td>
+                        <td>
+                            <select class="form-select form-select-sm grade-select">
+                                <option selected></option>
+                                <option>1.00</option>
+                                <option>1.25</option>
+                                <option>1.50</option>
+                                <option>1.75</option>
+                                <option>2.00</option>
+                                <option>2.25</option>
+                                <option>2.50</option>
+                                <option>2.75</option>
+                                <option>3.00</option>
+                                <option>5.00</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-center">PHYS 102</td>
+                        <td class="course-title-cell">Physics for Engineers 1</td>
+                        <td class="text-center">4</td>
+                        <td class="small text-muted text-center">MATH 101</td>
+                        <td class="small text-muted text-center">MATH 102</td>
+                        <td>
+                            <select class="form-select form-select-sm grade-select">
+                                <option selected></option>
+                                <option>1.00</option>
+                                <option>1.25</option>
+                                <option>1.50</option>
+                                <option>1.75</option>
+                                <option>2.00</option>
+                                <option>2.25</option>
+                                <option>2.50</option>
+                                <option>2.75</option>
+                                <option>3.00</option>
+                                <option>5.00</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-center">PATHFit 2</td>
+                        <td class="course-title-cell">Exercise-based Fitness Activities</td>
+                        <td class="text-center">2</td>
+                        <td class="small text-muted text-center">PATHFit 1</td>
+                        <td class="small text-muted text-center"></td>
+                        <td>
+                            <select class="form-select form-select-sm grade-select">
+                                <option selected></option>
+                                <option>1.00</option>
+                                <option>1.25</option>
+                                <option>1.50</option>
+                                <option>1.75</option>
+                                <option>2.00</option>
+                                <option>2.25</option>
+                                <option>2.50</option>
+                                <option>2.75</option>
+                                <option>3.00</option>
+                                <option>5.00</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-center">NSTP 121</td>
+                        <td class="course-title-cell">National Service Training Program 2</td>
+                        <td class="text-center">3</td>
+                        <td class="small text-muted text-center">NSTP 111</td>
+                        <td class="small text-muted text-center"></td>
+                        <td>
+                            <select class="form-select form-select-sm grade-select">
+                                <option selected></option>
+                                <option>1.00</option>
+                                <option>1.25</option>
+                                <option>1.50</option>
+                                <option>1.75</option>
+                                <option>2.00</option>
+                                <option>2.25</option>
+                                <option>2.50</option>
+                                <option>2.75</option>
+                                <option>3.00</option>
+                                <option>5.00</option>
+                            </select>
+                        </td>
+                    </tr>
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <th colspan="2" class="text-end">Total Units</th>
+                        <th class="text-center">26</th>
+                        <th colspan="3"></th>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+
+    <!-- FIRST YEAR - MIDTERM -->
+    <div class="mb-4">
+        <h6 class="fw-bold mb-2">First Year - Midterm</h6>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle table-bordered mb-0">
+                <thead class="table-light">
+                    <tr class="text-center">
+                        <th style="width: 10%;">Course Code</th>
+                        <th style="width: 40%;">Course Title</th>
+                        <th style="width: 8%;">Units</th>
+                        <th style="width: 15%;">Pre-requisite(s)</th>
+                        <th style="width: 15%;">Co-requisite(s)</th>
+                        <th style="width: 12%;">Grade</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td class="text-center">GEd 103</td>
+                        <td class="course-title-cell">Life and Works of Rizal</td>
+                        <td class="text-center">3</td>
+                        <td class="small text-muted text-center"></td>
+                        <td class="small text-muted text-center"></td>
+                        <td>
+                            <select class="form-select form-select-sm grade-select">
+                                <option selected></option>
+                                <option>1.00</option>
+                                <option>1.25</option>
+                                <option>1.50</option>
+                                <option>1.75</option>
+                                <option>2.00</option>
+                                <option>2.25</option>
+                                <option>2.50</option>
+                                <option>2.75</option>
+                                <option>3.00</option>
+                                <option>5.00</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-center">GEd 107</td>
+                        <td class="course-title-cell">Ethics</td>
+                        <td class="text-center">3</td>
+                        <td class="small text-muted text-center"></td>
+                        <td class="small text-muted text-center"></td>
+                        <td>
+                            <select class="form-select form-select-sm grade-select">
+                                <option selected></option>
+                                <option>1.00</option>
+                                <option>1.25</option>
+                                <option>1.50</option>
+                                <option>1.75</option>
+                                <option>2.00</option>
+                                <option>2.25</option>
+                                <option>2.50</option>
+                                <option>2.75</option>
+                                <option>3.00</option>
+                                <option>5.00</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-center">PHYS 103</td>
+                        <td class="course-title-cell">Physics for Engineers 2</td>
+                        <td class="text-center">3</td>
+                        <td class="small text-muted text-center">PHYS 102; MATH 102</td>
+                        <td class="small text-muted text-center"></td>
+                        <td>
+                            <select class="form-select form-select-sm grade-select">
+                                <option selected></option>
+                                <option>1.00</option>
+                                <option>1.25</option>
+                                <option>1.50</option>
+                                <option>1.75</option>
+                                <option>2.00</option>
+                                <option>2.25</option>
+                                <option>2.50</option>
+                                <option>2.75</option>
+                                <option>3.00</option>
+                                <option>5.00</option>
+                            </select>
+                        </td>
+                    </tr>
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <th colspan="2" class="text-end">Total Units</th>
+                        <th class="text-center">9</th>
+                        <th colspan="3"></th>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+
+    <!-- SECOND YEAR - FIRST SEMESTER -->
+    <div class="mb-4">
+        <h6 class="fw-bold mb-2">Second Year - First Semester</h6>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle table-bordered mb-0">
+                <thead class="table-light">
+                    <tr class="text-center">
+                        <th style="width: 10%;">Course Code</th>
+                        <th style="width: 40%;">Course Title</th>
+                        <th style="width: 8%;">Units</th>
+                        <th style="width: 15%;">Pre-requisite(s)</th>
+                        <th style="width: 15%;">Co-requisite(s)</th>
+                        <th style="width: 12%;">Grade</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td class="text-center">CpE 201</td>
+                        <td class="course-title-cell">CpE Discipline, Professional Practice and laws</td>
+                        <td class="text-center">3</td>
+                        <td class="small text-muted text-center"></td>
+                        <td class="small text-muted text-center"></td>
+                        <td>
+                            <select class="form-select form-select-sm grade-select">
+                                <option selected></option>
+                                <option>1.00</option>
+                                <option>1.25</option>
+                                <option>1.50</option>
+                                <option>1.75</option>
+                                <option>2.00</option>
+                                <option>2.25</option>
+                                <option>2.50</option>
+                                <option>2.75</option>
+                                <option>3.00</option>
+                                <option>5.00</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-center">CpE 202</td>
+                        <td class="course-title-cell">Discrete Mathematics</td>
+                        <td class="text-center">3</td>
+                        <td class="small text-muted text-center">MATH 101</td>
+                        <td class="small text-muted text-center"></td>
+                        <td>
+                            <select class="form-select form-select-sm grade-select">
+                                <option selected></option>
+                                <option>1.00</option>
+                                <option>1.25</option>
+                                <option>1.50</option>
+                                <option>1.75</option>
+                                <option>2.00</option>
+                                <option>2.25</option>
+                                <option>2.50</option>
+                                <option>2.75</option>
+                                <option>3.00</option>
+                                <option>5.00</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-center">CpE 203</td>
+                        <td class="course-title-cell">Programming Logic and Design</td>
+                        <td class="text-center">2</td>
+                        <td class="small text-muted text-center"></td>
+                        <td class="small text-muted text-center"></td>
+                        <td>
+                            <select class="form-select form-select-sm grade-select">
+                                <option selected></option>
+                                <option>1.00</option>
+                                <option>1.25</option>
+                                <option>1.50</option>
+                                <option>1.75</option>
+                                <option>2.00</option>
+                                <option>2.25</option>
+                                <option>2.50</option>
+                                <option>2.75</option>
+                                <option>3.00</option>
+                                <option>5.00</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-center">GEdE 101</td>
+                        <td class="course-title-cell">The Entrepreneurial Mind</td>
+                        <td class="text-center">3</td>
+                        <td class="small text-muted text-center"></td>
+                        <td class="small text-muted text-center"></td>
+                        <td>
+                            <select class="form-select form-select-sm grade-select">
+                                <option selected></option>
+                                <option>1.00</option>
+                                <option>1.25</option>
+                                <option>1.50</option>
+                                <option>1.75</option>
+                                <option>2.00</option>
+                                <option>2.25</option>
+                                <option>2.50</option>
+                                <option>2.75</option>
+                                <option>3.00</option>
+                                <option>5.00</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-center">EE 212</td>
+                        <td class="course-title-cell">Fundamentals of Electrical Circuits</td>
+                        <td class="text-center">4</td>
+                        <td class="small text-muted text-center">PHY 103</td>
+                        <td class="small text-muted text-center"></td>
+                        <td>
+                            <select class="form-select form-select-sm grade-select">
+                                <option selected></option>
+                                <option>1.00</option>
+                                <option>1.25</option>
+                                <option>1.50</option>
+                                <option>1.75</option>
+                                <option>2.00</option>
+                                <option>2.25</option>
+                                <option>2.50</option>
+                                <option>2.75</option>
+                                <option>3.00</option>
+                                <option>5.00</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-center">ENGG 103</td>
+                        <td class="course-title-cell">Computer-Aided Design</td>
+                        <td class="text-center">1</td>
+                        <td class="small text-muted text-center">ENGG 102</td>
+                        <td class="small text-muted text-center"></td>
+                        <td>
+                            <select class="form-select form-select-sm grade-select">
+                                <option selected></option>
+                                <option>1.00</option>
+                                <option>1.25</option>
+                                <option>1.50</option>
+                                <option>1.75</option>
+                                <option>2.00</option>
+                                <option>2.25</option>
+                                <option>2.50</option>
+                                <option>2.75</option>
+                                <option>3.00</option>
+                                <option>5.00</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-center">ENGG 104</td>
+                        <td class="course-title-cell">Engineering Economics</td>
+                        <td class="text-center">3</td>
+                        <td class="small text-muted text-center">MATH 102</td>
+                        <td class="small text-muted text-center"></td>
+                        <td>
+                            <select class="form-select form-select-sm grade-select">
+                                <option selected></option>
+                                <option>1.00</option>
+                                <option>1.25</option>
+                                <option>1.50</option>
+                                <option>1.75</option>
+                                <option>2.00</option>
+                                <option>2.25</option>
+                                <option>2.50</option>
+                                <option>2.75</option>
+                                <option>3.00</option>
+                                <option>5.00</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-center">AI 101</td>
+                        <td class="course-title-cell">Linear Algebra for AI</td>
+                        <td class="text-center">3</td>
+                        <td class="small text-muted text-center"></td>
+                        <td class="small text-muted text-center"></td>
+                        <td>
+                            <select class="form-select form-select-sm grade-select">
+                                <option selected></option>
+                                <option>1.00</option>
+                                <option>1.25</option>
+                                <option>1.50</option>
+                                <option>1.75</option>
+                                <option>2.00</option>
+                                <option>2.25</option>
+                                <option>2.50</option>
+                                <option>2.75</option>
+                                <option>3.00</option>
+                                <option>5.00</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-center">MATH 103</td>
+                        <td class="course-title-cell">Differential Equations</td>
+                        <td class="text-center">3</td>
+                        <td class="small text-muted text-center">MATH 102</td>
+                        <td class="small text-muted text-center"></td>
+                        <td>
+                            <select class="form-select form-select-sm grade-select">
+                                <option selected></option>
+                                <option>1.00</option>
+                                <option>1.25</option>
+                                <option>1.50</option>
+                                <option>1.75</option>
+                                <option>2.00</option>
+                                <option>2.25</option>
+                                <option>2.50</option>
+                                <option>2.75</option>
+                                <option>3.00</option>
+                                <option>5.00</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-center">PATHFit 3</td>
+                        <td class="course-title-cell">Choice of dance, sports, Martial Arts, Group exercise, Outdoor and Adventure Activities 1</td>
+                        <td class="text-center">2</td>
+                        <td class="small text-muted text-center">PATHFit 1 & 2</td>
+                        <td class="small text-muted text-center"></td>
+                        <td>
+                            <select class="form-select form-select-sm grade-select">
+                                <option selected></option>
+                                <option>1.00</option>
+                                <option>1.25</option>
+                                <option>1.50</option>
+                                <option>1.75</option>
+                                <option>2.00</option>
+                                <option>2.25</option>
+                                <option>2.50</option>
+                                <option>2.75</option>
+                                <option>3.00</option>
+                                <option>5.00</option>
+                            </select>
+                        </td>
+                    </tr>
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <th colspan="2" class="text-end">Total Units</th>
+                        <th class="text-center">27</th>
+                        <th colspan="3"></th>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+
+    <!-- SECOND YEAR - SECOND SEMESTER -->
+    <div class="mb-4">
+        <h6 class="fw-bold mb-2">Second Year - Second Semester</h6>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle table-bordered mb-0">
+                <thead class="table-light">
+                    <tr class="text-center">
+                        <th style="width: 10%;">Course Code</th>
+                        <th style="width: 40%;">Course Title</th>
+                        <th style="width: 8%;">Units</th>
+                        <th style="width: 15%;">Pre-requisite(s)</th>
+                        <th style="width: 15%;">Co-requisite(s)</th>
+                        <th style="width: 12%;">Grade</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td class="text-center">CpE 204</td>
+                        <td class="course-title-cell">Advance Engineering Mathematics for CpE</td>
+                        <td class="text-center">3</td>
+                        <td class="small text-muted text-center">2nd Year Standing</td>
+                        <td class="small text-muted text-center"></td>
+                        <td>
+                            <select class="form-select form-select-sm grade-select">
+                                <option selected></option>
+                                <option>1.00</option>
+                                <option>1.25</option>
+                                <option>1.50</option>
+                                <option>1.75</option>
+                                <option>2.00</option>
+                                <option>2.25</option>
+                                <option>2.50</option>
+                                <option>2.75</option>
+                                <option>3.00</option>
+                                <option>5.00</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-center">CpE 205</td>
+                        <td class="course-title-cell">Object-Oriented Programming</td>
+                        <td class="text-center">2</td>
+                        <td class="small text-muted text-center">CpE 203</td>
+                        <td class="small text-muted text-center"></td>
+                        <td>
+                            <select class="form-select form-select-sm grade-select">
+                                <option selected></option>
+                                <option>1.00</option>
+                                <option>1.25</option>
+                                <option>1.50</option>
+                                <option>1.75</option>
+                                <option>2.00</option>
+                                <option>2.25</option>
+                                <option>2.50</option>
+                                <option>2.75</option>
+                                <option>3.00</option>
+                                <option>5.00</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-center">Elective Course 1</td>
+                        <td class="elective-course-cell">Elective Course 1</td>
+                        <td class="text-center">3</td>
+                        <td class="small text-muted text-center">2nd Year Standing</td>
+                        <td class="small text-muted text-center"></td>
+                        <td>
+                            <select class="form-select form-select-sm grade-select">
+                                <option selected></option>
+                                <option>1.00</option>
+                                <option>1.25</option>
+                                <option>1.50</option>
+                                <option>1.75</option>
+                                <option>2.00</option>
+                                <option>2.25</option>
+                                <option>2.50</option>
+                                <option>2.75</option>
+                                <option>3.00</option>
+                                <option>5.00</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-center">ECE 405</td>
+                        <td class="course-title-cell">Electronic Circuits: Devices and Analysis</td>
+                        <td class="text-center">4</td>
+                        <td class="small text-muted text-center">EE 212</td>
+                        <td class="small text-muted text-center"></td>
+                        <td>
+                            <select class="form-select form-select-sm grade-select">
+                                <option selected></option>
+                                <option>1.00</option>
+                                <option>1.25</option>
+                                <option>1.50</option>
+                                <option>1.75</option>
+                                <option>2.00</option>
+                                <option>2.25</option>
+                                <option>2.50</option>
+                                <option>2.75</option>
+                                <option>3.00</option>
+                                <option>5.00</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-center">ENGG 114</td>
+                        <td class="course-title-cell">Basic Occupational Safety and Health</td>
+                        <td class="text-center">3</td>
+                        <td class="small text-muted text-center"></td>
+                        <td class="small text-muted text-center"></td>
+                        <td>
+                            <select class="form-select form-select-sm grade-select">
+                                <option selected></option>
+                                <option>1.00</option>
+                                <option>1.25</option>
+                                <option>1.50</option>
+                                <option>1.75</option>
+                                <option>2.00</option>
+                                <option>2.25</option>
+                                <option>2.50</option>
+                                <option>2.75</option>
+                                <option>3.00</option>
+                                <option>5.00</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-center">MATH 104</td>
+                        <td class="course-title-cell">Numerical Methods</td>
+                        <td class="text-center">3</td>
+                        <td class="small text-muted text-center">Math 103</td>
+                        <td class="small text-muted text-center"></td>
+                        <td>
+                            <select class="form-select form-select-sm grade-select">
+                                <option selected></option>
+                                <option>1.00</option>
+                                <option>1.25</option>
+                                <option>1.50</option>
+                                <option>1.75</option>
+                                <option>2.00</option>
+                                <option>2.25</option>
+                                <option>2.50</option>
+                                <option>2.75</option>
+                                <option>3.00</option>
+                                <option>5.00</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-center">AI 102</td>
+                        <td class="course-title-cell">Probability and Statistics for AI</td>
+                        <td class="text-center">3</td>
+                        <td class="small text-muted text-center">MATH 102</td>
+                        <td class="small text-muted text-center"></td>
+                        <td>
+                            <select class="form-select form-select-sm grade-select">
+                                <option selected></option>
+                                <option>1.00</option>
+                                <option>1.25</option>
+                                <option>1.50</option>
+                                <option>1.75</option>
+                                <option>2.00</option>
+                                <option>2.25</option>
+                                <option>2.50</option>
+                                <option>2.75</option>
+                                <option>3.00</option>
+                                <option>5.00</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-center">PATHFit 4</td>
+                        <td class="course-title-cell">Choice of Dance, Sports, Martial Arts, Group Exercise, Outdoor, and Adventure Activities 2</td>
+                        <td class="text-center">2</td>
+                        <td class="small text-muted text-center">PATHFit 1 & 2</td>
+                        <td class="small text-muted text-center"></td>
+                        <td>
+                            <select class="form-select form-select-sm grade-select">
+                                <option selected></option>
+                                <option>1.00</option>
+                                <option>1.25</option>
+                                <option>1.50</option>
+                                <option>1.75</option>
+                                <option>2.00</option>
+                                <option>2.25</option>
+                                <option>2.50</option>
+                                <option>2.75</option>
+                                <option>3.00</option>
+                                <option>5.00</option>
+                            </select>
+                        </td>
+                    </tr>
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <th colspan="2" class="text-end">Total Units</th>
+                        <th class="text-center">23</th>
+                        <th colspan="3"></th>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+
+    <!-- THIRD YEAR - FIRST SEMESTER -->
+    <div class="mb-4">
+        <h6 class="fw-bold mb-2">Third Year - First Semester</h6>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle table-bordered mb-0">
+                <thead class="table-light">
+                    <tr class="text-center">
+                        <th style="width: 10%;">Course Code</th>
+                        <th style="width: 40%;">Course Title</th>
+                        <th style="width: 8%;">Units</th>
+                        <th style="width: 15%;">Pre-requisite(s)</th>
+                        <th style="width: 15%;">Co-requisite(s)</th>
+                        <th style="width: 12%;">Grade</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td class="text-center">CpE 302</td>
+                        <td class="course-title-cell">Logic Circuits and Design</td>
+                        <td class="text-center">4</td>
+                        <td class="small text-muted text-center">ECE 405</td>
+                        <td class="small text-muted text-center"></td>
+                        <td>
+                            <select class="form-select form-select-sm grade-select">
+                                <option selected></option>
+                                <option>1.00</option>
+                                <option>1.25</option>
+                                <option>1.50</option>
+                                <option>1.75</option>
+                                <option>2.00</option>
+                                <option>2.25</option>
+                                <option>2.50</option>
+                                <option>2.75</option>
+                                <option>3.00</option>
+                                <option>5.00</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-center">CpE 303</td>
+                        <td class="course-title-cell">Data Structures and Algorithms</td>
+                        <td class="text-center">2</td>
+                        <td class="small text-muted text-center">CpE 205</td>
+                        <td class="small text-muted text-center"></td>
+                        <td>
+                            <select class="form-select form-select-sm grade-select">
+                                <option selected></option>
+                                <option>1.00</option>
+                                <option>1.25</option>
+                                <option>1.50</option>
+                                <option>1.75</option>
+                                <option>2.00</option>
+                                <option>2.25</option>
+                                <option>2.50</option>
+                                <option>2.75</option>
+                                <option>3.00</option>
+                                <option>5.00</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-center">CpE 304</td>
+                        <td class="course-title-cell">Introduction to Networks, Data and Digital Communications</td>
+                        <td class="text-center">3</td>
+                        <td class="small text-muted text-center">ECE 405</td>
+                        <td class="small text-muted text-center">CpE 302</td>
+                        <td>
+                            <select class="form-select form-select-sm grade-select">
+                                <option selected></option>
+                                <option>1.00</option>
+                                <option>1.25</option>
+                                <option>1.50</option>
+                                <option>1.75</option>
+                                <option>2.00</option>
+                                <option>2.25</option>
+                                <option>2.50</option>
+                                <option>2.75</option>
+                                <option>3.00</option>
+                                <option>5.00</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-center">CpE 305</td>
+                        <td class="course-title-cell">Fundamentals of Mixed Signals and Sensors</td>
+                        <td class="text-center">3</td>
+                        <td class="small text-muted text-center">ECE 405</td>
+                        <td class="small text-muted text-center"></td>
+                        <td>
+                            <select class="form-select form-select-sm grade-select">
+                                <option selected></option>
+                                <option>1.00</option>
+                                <option>1.25</option>
+                                <option>1.50</option>
+                                <option>1.75</option>
+                                <option>2.00</option>
+                                <option>2.25</option>
+                                <option>2.50</option>
+                                <option>2.75</option>
+                                <option>3.00</option>
+                                <option>5.00</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-center">CpE 306</td>
+                        <td class="course-title-cell">Feedback and Control Systems</td>
+                        <td class="text-center">3</td>
+                        <td class="small text-muted text-center">CpE 206; EE 212</td>
+                        <td class="small text-muted text-center"></td>
+                        <td>
+                            <select class="form-select form-select-sm grade-select">
+                                <option selected></option>
+                                <option>1.00</option>
+                                <option>1.25</option>
+                                <option>1.50</option>
+                                <option>1.75</option>
+                                <option>2.00</option>
+                                <option>2.25</option>
+                                <option>2.50</option>
+                                <option>2.75</option>
+                                <option>3.00</option>
+                                <option>5.00</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-center">ENGG 116</td>
+                        <td class="course-title-cell">Methods of Research</td>
+                        <td class="text-center">3</td>
+                        <td class="small text-muted text-center">AI 102, 3rd Year Standing</td>
+                        <td class="small text-muted text-center"></td>
+                        <td>
+                            <select class="form-select form-select-sm grade-select">
+                                <option selected></option>
+                                <option>1.00</option>
+                                <option>1.25</option>
+                                <option>1.50</option>
+                                <option>1.75</option>
+                                <option>2.00</option>
+                                <option>2.25</option>
+                                <option>2.50</option>
+                                <option>2.75</option>
+                                <option>3.00</option>
+                                <option>5.00</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-center">Elective Course 2</td>
+                        <td class="elective-course-cell">Elective Course 2</td>
+                        <td class="text-center">3</td>
+                        <td class="small text-muted text-center">CpEE 401</td>
+                        <td class="small text-muted text-center"></td>
+                        <td>
+                            <select class="form-select form-select-sm grade-select">
+                                <option selected></option>
+                                <option>1.00</option>
+                                <option>1.25</option>
+                                <option>1.50</option>
+                                <option>1.75</option>
+                                <option>2.00</option>
+                                <option>2.25</option>
+                                <option>2.50</option>
+                                <option>2.75</option>
+                                <option>3.00</option>
+                                <option>5.00</option>
+                            </select>
+                        </td>
+                    </tr>
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <th colspan="2" class="text-end">Total Units</th>
+                        <th class="text-center">21</th>
+                        <th colspan="3"></th>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+
+    <!-- THIRD YEAR - SECOND SEMESTER -->
+    <div class="mb-4">
+        <h6 class="fw-bold mb-2">Third Year - Second Semester</h6>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle table-bordered mb-0">
+                <thead class="table-light">
+                    <tr class="text-center">
+                        <th style="width: 10%;">Course Code</th>
+                        <th style="width: 40%;">Course Title</th>
+                        <th style="width: 8%;">Units</th>
+                        <th style="width: 15%;">Pre-requisite(s)</th>
+                        <th style="width: 15%;">Co-requisite(s)</th>
+                        <th style="width: 12%;">Grade</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td class="text-center">CpE 308</td>
+                        <td class="course-title-cell">Microprocessors</td>
+                        <td class="text-center">4</td>
+                        <td class="small text-muted text-center">CpE 302</td>
+                        <td class="small text-muted text-center"></td>
+                        <td>
+                            <select class="form-select form-select-sm grade-select">
+                                <option selected></option>
+                                <option>1.00</option>
+                                <option>1.25</option>
+                                <option>1.50</option>
+                                <option>1.75</option>
+                                <option>2.00</option>
+                                <option>2.25</option>
+                                <option>2.50</option>
+                                <option>2.75</option>
+                                <option>3.00</option>
+                                <option>5.00</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-center">CpE 309</td>
+                        <td class="course-title-cell">Software Design</td>
+                        <td class="text-center">4</td>
+                        <td class="small text-muted text-center">CpE 303</td>
+                        <td class="small text-muted text-center"></td>
+                        <td>
+                            <select class="form-select form-select-sm grade-select">
+                                <option selected></option>
+                                <option>1.00</option>
+                                <option>1.25</option>
+                                <option>1.50</option>
+                                <option>1.75</option>
+                                <option>2.00</option>
+                                <option>2.25</option>
+                                <option>2.50</option>
+                                <option>2.75</option>
+                                <option>3.00</option>
+                                <option>5.00</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-center">CpE 310</td>
+                        <td class="course-title-cell">Digital Signal Processing</td>
+                        <td class="text-center">4</td>
+                        <td class="small text-muted text-center">CpE 305; CpE 306</td>
+                        <td class="small text-muted text-center"></td>
+                        <td>
+                            <select class="form-select form-select-sm grade-select">
+                                <option selected></option>
+                                <option>1.00</option>
+                                <option>1.25</option>
+                                <option>1.50</option>
+                                <option>1.75</option>
+                                <option>2.00</option>
+                                <option>2.25</option>
+                                <option>2.50</option>
+                                <option>2.75</option>
+                                <option>3.00</option>
+                                <option>5.00</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-center">CpE 311</td>
+                        <td class="course-title-cell">Computer Architecture and Organization</td>
+                        <td class="text-center">4</td>
+                        <td class="small text-muted text-center"></td>
+                        <td class="small text-muted text-center">CpE 308</td>
+                        <td>
+                            <select class="form-select form-select-sm grade-select">
+                                <option selected></option>
+                                <option>1.00</option>
+                                <option>1.25</option>
+                                <option>1.50</option>
+                                <option>1.75</option>
+                                <option>2.00</option>
+                                <option>2.25</option>
+                                <option>2.50</option>
+                                <option>2.75</option>
+                                <option>3.00</option>
+                                <option>5.00</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-center">CpE 312</td>
+                        <td class="course-title-cell">Connecting Networks and Security</td>
+                        <td class="text-center">4</td>
+                        <td class="small text-muted text-center">CpE 304</td>
+                        <td class="small text-muted text-center"></td>
+                        <td>
+                            <select class="form-select form-select-sm grade-select">
+                                <option selected></option>
+                                <option>1.00</option>
+                                <option>1.25</option>
+                                <option>1.50</option>
+                                <option>1.75</option>
+                                <option>2.00</option>
+                                <option>2.25</option>
+                                <option>2.50</option>
+                                <option>2.75</option>
+                                <option>3.00</option>
+                                <option>5.00</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-center">AI 103</td>
+                        <td class="course-title-cell">Machine Learning and Neural Networks</td>
+                        <td class="text-center">3</td>
+                        <td class="small text-muted text-center">AI 101, AI 102, CpE 101</td>
+                        <td class="small text-muted text-center"></td>
+                        <td>
+                            <select class="form-select form-select-sm grade-select">
+                                <option selected></option>
+                                <option>1.00</option>
+                                <option>1.25</option>
+                                <option>1.50</option>
+                                <option>1.75</option>
+                                <option>2.00</option>
+                                <option>2.25</option>
+                                <option>2.50</option>
+                                <option>2.75</option>
+                                <option>3.00</option>
+                                <option>5.00</option>
+                            </select>
+                        </td>
+                    </tr>
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <th colspan="2" class="text-end">Total Units</th>
+                        <th class="text-center">23</th>
+                        <th colspan="3"></th>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+
+    <!-- THIRD YEAR - MIDTERM -->
+    <div class="mb-4">
+        <h6 class="fw-bold mb-2">Third Year - Midterm</h6>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle table-bordered mb-0">
+                <thead class="table-light">
+                    <tr class="text-center">
+                        <th style="width: 10%;">Course Code</th>
+                        <th style="width: 40%;">Course Title</th>
+                        <th style="width: 8%;">Units</th>
+                        <th style="width: 15%;">Pre-requisite(s)</th>
+                        <th style="width: 15%;">Co-requisite(s)</th>
+                        <th style="width: 12%;">Grade</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td class="text-center">CpE 313</td>
+                        <td class="course-title-cell">Introduction to HDL</td>
+                        <td class="text-center">1</td>
+                        <td class="small text-muted text-center">CpE 203, CpE 302</td>
+                        <td class="small text-muted text-center"></td>
+                        <td>
+                            <select class="form-select form-select-sm grade-select">
+                                <option selected></option>
+                                <option>1.00</option>
+                                <option>1.25</option>
+                                <option>1.50</option>
+                                <option>1.75</option>
+                                <option>2.00</option>
+                                <option>2.25</option>
+                                <option>2.50</option>
+                                <option>2.75</option>
+                                <option>3.00</option>
+                                <option>5.00</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-center">CpE 314</td>
+                        <td class="course-title-cell">Emerging Technologies in CpE</td>
+                        <td class="text-center">3</td>
+                        <td class="small text-muted text-center">3rd Year Standing</td>
+                        <td class="small text-muted text-center"></td>
+                        <td>
+                            <select class="form-select form-select-sm grade-select">
+                                <option selected></option>
+                                <option>1.00</option>
+                                <option>1.25</option>
+                                <option>1.50</option>
+                                <option>1.75</option>
+                                <option>2.00</option>
+                                <option>2.25</option>
+                                <option>2.50</option>
+                                <option>2.75</option>
+                                <option>3.00</option>
+                                <option>5.00</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-center">CpE 315</td>
+                        <td class="course-title-cell">Computer Engineering Drafting and Design</td>
+                        <td class="text-center">1</td>
+                        <td class="small text-muted text-center">ECE 405</td>
+                        <td class="small text-muted text-center"></td>
+                        <td>
+                            <select class="form-select form-select-sm grade-select">
+                                <option selected></option>
+                                <option>1.00</option>
+                                <option>1.25</option>
+                                <option>1.50</option>
+                                <option>1.75</option>
+                                <option>2.00</option>
+                                <option>2.25</option>
+                                <option>2.50</option>
+                                <option>2.75</option>
+                                <option>3.00</option>
+                                <option>5.00</option>
+                            </select>
+                        </td>
+                    </tr>
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <th colspan="2" class="text-end">Total Units</th>
+                        <th class="text-center">5</th>
+                        <th colspan="3"></th>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+
+    <!-- FOURTH YEAR - FIRST SEMESTER -->
+    <div class="mb-4">
+        <h6 class="fw-bold mb-2">Fourth Year - First Semester</h6>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle table-bordered mb-0">
+                <thead class="table-light">
+                    <tr class="text-center">
+                        <th style="width: 10%;">Course Code</th>
+                        <th style="width: 40%;">Course Title</th>
+                        <th style="width: 8%;">Units</th>
+                        <th style="width: 15%;">Pre-requisite(s)</th>
+                        <th style="width: 15%;">Co-requisite(s)</th>
+                        <th style="width: 12%;">Grade</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td class="text-center">CpE 401</td>
+                        <td class="course-title-cell">Operating Systems</td>
+                        <td class="text-center">3</td>
+                        <td class="small text-muted text-center">CpE 303</td>
+                        <td class="small text-muted text-center"></td>
+                        <td>
+                            <select class="form-select form-select-sm grade-select">
+                                <option selected></option>
+                                <option>1.00</option>
+                                <option>1.25</option>
+                                <option>1.50</option>
+                                <option>1.75</option>
+                                <option>2.00</option>
+                                <option>2.25</option>
+                                <option>2.50</option>
+                                <option>2.75</option>
+                                <option>3.00</option>
+                                <option>5.00</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-center">CpE 402</td>
+                        <td class="course-title-cell">Embedded Systems</td>
+                        <td class="text-center">4</td>
+                        <td class="small text-muted text-center">CpE 308</td>
+                        <td class="small text-muted text-center"></td>
+                        <td>
+                            <select class="form-select form-select-sm grade-select">
+                                <option selected></option>
+                                <option>1.00</option>
+                                <option>1.25</option>
+                                <option>1.50</option>
+                                <option>1.75</option>
+                                <option>2.00</option>
+                                <option>2.25</option>
+                                <option>2.50</option>
+                                <option>2.75</option>
+                                <option>3.00</option>
+                                <option>5.00</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-center">CpE 403</td>
+                        <td class="course-title-cell">Seminars and Fieldtrips</td>
+                        <td class="text-center">2</td>
+                        <td class="small text-muted text-center">4th Year Standing</td>
+                        <td class="small text-muted text-center"></td>
+                        <td>
+                            <select class="form-select form-select-sm grade-select">
+                                <option selected></option>
+                                <option>1.00</option>
+                                <option>1.25</option>
+                                <option>1.50</option>
+                                <option>1.75</option>
+                                <option>2.00</option>
+                                <option>2.25</option>
+                                <option>2.50</option>
+                                <option>2.75</option>
+                                <option>3.00</option>
+                                <option>5.00</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-center">CpE 404</td>
+                        <td class="course-title-cell">CpE Practice and Design 1</td>
+                        <td class="text-center">1</td>
+                        <td class="small text-muted text-center">ENGG 116, CpE 308</td>
+                        <td class="small text-muted text-center"></td>
+                        <td>
+                            <select class="form-select form-select-sm grade-select">
+                                <option selected></option>
+                                <option>1.00</option>
+                                <option>1.25</option>
+                                <option>1.50</option>
+                                <option>1.75</option>
+                                <option>2.00</option>
+                                <option>2.25</option>
+                                <option>2.50</option>
+                                <option>2.75</option>
+                                <option>3.00</option>
+                                <option>5.00</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-center">ENGG 106</td>
+                        <td class="course-title-cell">Engineering Management</td>
+                        <td class="text-center">2</td>
+                        <td class="small text-muted text-center">4th Year Standing</td>
+                        <td class="small text-muted text-center"></td>
+                        <td>
+                            <select class="form-select form-select-sm grade-select">
+                                <option selected></option>
+                                <option>1.00</option>
+                                <option>1.25</option>
+                                <option>1.50</option>
+                                <option>1.75</option>
+                                <option>2.00</option>
+                                <option>2.25</option>
+                                <option>2.50</option>
+                                <option>2.75</option>
+                                <option>3.00</option>
+                                <option>5.00</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-center">ENGG 105</td>
+                        <td class="course-title-cell">Technopreneurship</td>
+                        <td class="text-center">3</td>
+                        <td class="small text-muted text-center">4th Year Standing</td>
+                        <td class="small text-muted text-center"></td>
+                        <td>
+                            <select class="form-select form-select-sm grade-select">
+                                <option selected></option>
+                                <option>1.00</option>
+                                <option>1.25</option>
+                                <option>1.50</option>
+                                <option>1.75</option>
+                                <option>2.00</option>
+                                <option>2.25</option>
+                                <option>2.50</option>
+                                <option>2.75</option>
+                                <option>3.00</option>
+                                <option>5.00</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-center">Elective Course 3</td>
+                        <td class="elective-course-cell">Elective Course 3</td>
+                        <td class="text-center">3</td>
+                        <td class="small text-muted text-center">CpEE 402</td>
+                        <td class="small text-muted text-center"></td>
+                        <td>
+                            <select class="form-select form-select-sm grade-select">
+                                <option selected></option>
+                                <option>1.00</option>
+                                <option>1.25</option>
+                                <option>1.50</option>
+                                <option>1.75</option>
+                                <option>2.00</option>
+                                <option>2.25</option>
+                                <option>2.50</option>
+                                <option>2.75</option>
+                                <option>3.00</option>
+                                <option>5.00</option>
+                            </select>
+                        </td>
+                    </tr>
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <th colspan="2" class="text-end">Total Units</th>
+                        <th class="text-center">18</th>
+                        <th colspan="3"></th>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+
+    <!-- FOURTH YEAR - SECOND SEMESTER -->
+    <div class="mb-4">
+        <h6 class="fw-bold mb-2">Fourth Year - Second Semester</h6>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle table-bordered mb-0">
+                <thead class="table-light">
+                    <tr class="text-center">
+                        <th style="width: 10%;">Course Code</th>
+                        <th style="width: 40%;">Course Title</th>
+                        <th style="width: 8%;">Units</th>
+                        <th style="width: 15%;">Pre-requisite(s)</th>
+                        <th style="width: 15%;">Co-requisite(s)</th>
+                        <th style="width: 12%;">Grade</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td class="text-center">ENGG 117</td>
+                        <td class="course-title-cell">OJT/Internship (320 hrs)</td>
+                        <td class="text-center">4</td>
+                        <td class="small text-muted text-center">4th Year Standing</td>
+                        <td class="small text-muted text-center"></td>
+                        <td>
+                            <select class="form-select form-select-sm grade-select">
+                                <option selected></option>
+                                <option>1.00</option>
+                                <option>1.25</option>
+                                <option>1.50</option>
+                                <option>1.75</option>
+                                <option>2.00</option>
+                                <option>2.25</option>
+                                <option>2.50</option>
+                                <option>2.75</option>
+                                <option>3.00</option>
+                                <option>5.00</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-center">CpE 405</td>
+                        <td class="course-title-cell">CpE Practice and Design 2</td>
+                        <td class="text-center">2</td>
+                        <td class="small text-muted text-center">CpE 404</td>
+                        <td class="small text-muted text-center"></td>
+                        <td>
+                            <select class="form-select form-select-sm grade-select">
+                                <option selected></option>
+                                <option>1.00</option>
+                                <option>1.25</option>
+                                <option>1.50</option>
+                                <option>1.75</option>
+                                <option>2.00</option>
+                                <option>2.25</option>
+                                <option>2.50</option>
+                                <option>2.75</option>
+                                <option>3.00</option>
+                                <option>5.00</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-center">CpE 406</td>
+                        <td class="course-title-cell">Comprehensive Examination for CpE</td>
+                        <td class="text-center">2</td>
+                        <td class="small text-muted text-center">Graduating</td>
+                        <td class="small text-muted text-center"></td>
+                        <td>
+                            <select class="form-select form-select-sm grade-select">
+                                <option selected></option>
+                                <option>1.00</option>
+                                <option>1.25</option>
+                                <option>1.50</option>
+                                <option>1.75</option>
+                                <option>2.00</option>
+                                <option>2.25</option>
+                                <option>2.50</option>
+                                <option>2.75</option>
+                                <option>3.00</option>
+                                <option>5.00</option>
+                            </select>
+                        </td>
+                    </tr>
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <th colspan="2" class="text-end">Total Units</th>
+                        <th class="text-center">8</th>
+                        <th colspan="3"></th>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+
+    <div class="mt-4 d-flex justify-content-end gap-2">
+        <button type="button" class="btn btn-outline-secondary" id="clearGradesBtn">
+            Clear Grades
+        </button>
+        <button type="button" class="btn btn-danger" id="generatePosBtn">
+            Generate POS
+        </button>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+{{ saved_grades|json_script:"pos-saved-grades" }}
+<script>
+    // CSRF token for AJAX
+    function getCookie(name) {
+        var match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+        return match ? match[2] : null;
+    }
+
+    function collectGrades() {
+        const grades = {};
+        document.querySelectorAll('.grade-select').forEach(function(select) {
+            const courseCode = select.getAttribute('data-course-code');
+            const value = select.value;
+            if (courseCode && value) { grades[courseCode] = value; }
+        });
+        return grades;
+    }
+
+    // Save to server (per-user, persists across logins)
+    function saveGradesToServer(grades, done) {
+        fetch("{% url 'save_pos_grades' %}", {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken')
+            },
+            body: JSON.stringify(grades),
+            credentials: 'same-origin'
+        }).then(function(r) { return r.json(); }).then(function(data) { if (done) done(data); }).catch(function() { if (done) done({ ok: false }); });
+    }
+
+    // Save to localStorage (same tab) and to server (debounced)
+    var saveToServerTimer = null;
+    function saveGradesToStorage() {
+        const grades = collectGrades();
+        localStorage.setItem('posGrades', JSON.stringify(grades));
+        clearTimeout(saveToServerTimer);
+        saveToServerTimer = setTimeout(function() { saveGradesToServer(grades); }, 500);
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        const gradeSelects = document.querySelectorAll('.grade-select');
+        gradeSelects.forEach(function(select) {
+            const row = select.closest('tr');
+            if (row) {
+                const courseCodeCell = row.querySelector('td:first-child');
+                if (courseCodeCell) {
+                    const courseCode = courseCodeCell.textContent.trim();
+                    select.setAttribute('data-course-code', courseCode);
+                }
+            }
+        });
+
+        // Restore from server (per-user) so each account sees their own grades when they log in
+        var serverGrades = {};
+        try {
+            var el = document.getElementById('pos-saved-grades');
+            if (el && el.textContent) { serverGrades = JSON.parse(el.textContent); }
+        } catch (e) {}
+        gradeSelects.forEach(function(select) {
+            const courseCode = select.getAttribute('data-course-code');
+            if (courseCode && serverGrades[courseCode]) {
+                select.value = serverGrades[courseCode];
+            }
+        });
+
+        gradeSelects.forEach(function(select) {
+            select.addEventListener('change', saveGradesToStorage);
+        });
+    });
+
+    document.getElementById('clearGradesBtn').addEventListener('click', function() {
+        const gradeSelects = document.querySelectorAll('.grade-select');
+        gradeSelects.forEach(function(select) { select.selectedIndex = 0; });
+        localStorage.removeItem('posGrades');
+        saveGradesToServer({}, function() {});
+    });
+
+    document.getElementById('generatePosBtn').addEventListener('click', function() {
+        const grades = collectGrades();
+        const csvRows = ['Course Code,Grade'];
+        Object.keys(grades).sort().forEach(function(code) {
+            csvRows.push('"' + code.replace(/"/g, '""') + '",' + grades[code]);
+        });
+        const blob = new Blob(["\ufeff" + csvRows.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'pos_grades.csv';
+        a.style.display = 'none';
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(function() { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+        localStorage.setItem('posGrades', JSON.stringify(grades));
+        saveGradesToServer(grades, function() {
+            setTimeout(function() { window.location.href = "{% url 'pos_preview' %}"; }, 300);
+        });
+    });
+</script>
+{% endblock %}

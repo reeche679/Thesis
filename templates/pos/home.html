@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Home | Program of Study Generation System{% endblock %}
+
+{% block header_action %}
+<a href="{% url 'sign_out' %}" class="btn btn-sm btn-outline-light px-3">Sign Out</a>
+{% endblock header_action %}
+
+{% block nav_home_active %}active{% endblock %}
+
+{% block extra_head %}
+<style>
+    .home-outer-card {
+        background-color: rgba(255, 255, 255, 0.655);
+        border-radius: 8px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+        padding: 24px 32px 28px;
+        max-width: 1100px;
+        margin: 1px auto 2px;
+    }
+
+    .home-student-label {
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        color: #666666;
+        font-weight: 600;
+    }
+
+    .home-student-value {
+        font-size: 1.2rem;
+        font-weight: 500;
+        color: #000000;
+        text-transform: uppercase;
+    }
+
+    .home-student-value:last-child {
+        margin-bottom: 0;
+    }
+
+    .home-student-meta {
+        font-size: 0.9rem;
+        color: #555555;
+    }
+
+    /* Upload photo box – left of student info */
+    .home-photo-box {
+        width: 120px;
+        height: 120px;
+        min-width: 120px;
+        min-height: 120px;
+        border: 2px solid #3a3a3a;
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        position: relative;
+    }
+    .home-photo-box img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+    .home-photo-box .photo-placeholder {
+        text-align: center;
+        color: #666;
+        font-size: 0.7rem;
+        padding: 4px;
+    }
+    .home-photo-box input[type="file"] {
+        position: absolute;
+        inset: 0;
+        opacity: 0;
+        cursor: pointer;
+        width: 100%;
+        height: 100%;
+    }
+
+    /* Student info card – BSU colored background (positioned to show upper part: sky, building top, logo) */
+    .home-student-card {
+        background: linear-gradient(rgba(255, 255, 255, 0.75), rgba(255, 255, 255, 0.75)),
+                    url('{% static "img/BSU_colored_bg.jpg" %}') no-repeat center 25%;
+        background-size: cover;
+        border-radius: 0.5rem;
+        border: 1px solid #dee2e6;
+    }
+
+    /* Reduce font sizes for Current Academic Term section */
+    .home-academic-term .pos-section-title {
+        font-size: 0.95rem;
+        margin-bottom: 0.75rem;
+    }
+
+    .home-academic-term .text-uppercase {
+        font-size: 0.7rem !important;
+    }
+
+    .home-academic-term .fs-5 {
+        font-size: 0.9rem !important;
+    }
+
+    .home-academic-term .fw-semibold.text-success {
+        font-size: 0.9rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="home-outer-card">
+    <!-- Top: Student Information and details -->
+    <div class="pos-card home-student-card p-4 mb-4">
+        <div class="pos-student-profile-inner">
+        <div class="mb-3 d-flex justify-content-between align-items-center">
+            <div class="d-flex align-items-center gap-3">
+                <form method="post" action="{% url 'pos_home' %}" enctype="multipart/form-data" class="home-photo-form">
+                    {% csrf_token %}
+                    <label class="home-photo-box mb-0" for="id_profile_photo" title="Click to upload photo">
+                        {% if student.profile_photo %}
+                        <img src="{{ student.profile_photo.url }}" alt="Your photo">
+                        {% else %}
+                        <span class="photo-placeholder">Upload<br>Photo</span>
+                        {% endif %}
+                        <input type="file" name="profile_photo" id="id_profile_photo" accept="image/*" onchange="if(this.files.length) this.form.submit()">
+                    </label>
+                </form>
+                <div>
+                <div class="home-student-value"><strong>{{ student.surname|default:"—" }}</strong></div>
+
+                <div class="home-student-value"><strong>{{ student.first_names|default:"—" }}</strong></div>
+                
+                <div class="home-student-value"><strong>{{ student.sr_code|default:"—" }}</strong></div>
+                </div>
+            </div>
+            <div class="text-end home-student-meta">
+                <div class="mb-1 fw-semibold">{% now "F d, Y" %}</div>
+                <div class="mb-2 small">{% now "g:i A" %}</div>
+                <div>College of Engineering - Alangilan Campus</div>
+            
+                <div class="year-program">
+                    <strong class="year">{{ student.year_level|upper|default:"—" }}</strong>
+                    <span class="separator"> - </span>
+                    <strong class="program">BS Computer Engineering</strong>
+                </div>
+            </div>
+        </div>
+        </div>
+    </div>
+
+    <!-- Bottom: Current Academic Term -->
+    <div class="pos-card p-4 home-academic-term">
+        <div class="pos-section-title mb-3">Current Academic Term</div>
+
+        <div class="mb-3">
+            <div class="text-muted small text-uppercase">ACADEMIC YEAR</div>
+            <div class="fw-semibold fs-5">A.Y. 2025 – 2026</div>
+        </div>
+
+        <div class="mb-3">
+            <div class="text-muted small text-uppercase">SEMESTER</div>
+            <div class="fw-semibold fs-5">First Semester</div>
+        </div>
+
+        <div class="mb-3">
+            <div class="text-muted small text-uppercase">STATUS</div>
+            <div class="fw-semibold text-success">Active</div>
+        </div>
+
+        <hr>
+
+        <p class="small text-muted mb-3">
+            You may proceed to generate your Program of Study for the current term or review previously generated POS.
+        </p>
+
+        <div class="d-flex gap-2">
+            <a href="{% url 'pos_generate' %}" class="btn btn-danger">
+                Generate POS
+            </a>
+            <a href="{% url 'pos_preview' %}" class="btn btn-outline-secondary">
+                Preview Latest POS
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}

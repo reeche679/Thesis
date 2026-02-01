@@ -1,0 +1,300 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Login | Program of Study Generation System{% endblock %}
+
+{% block extra_head %}
+<style>
+    /* Override base styles for login page */
+    body {
+        background: url('{% static "img/BSU_Background.jpg" %}') no-repeat center center fixed;
+        background-size: cover;
+        position: relative;
+        min-height: 100vh;
+        margin: 0;
+        padding: 0;
+        font-family: Arial, sans-serif;
+        overflow-x: hidden;
+        overflow-y: auto;
+    }
+
+    html {
+        overflow-x: hidden;
+        overflow-y: auto;
+    }
+
+    /* Hide default header, navbar, and footer – remove any top gap */
+    .pos-sticky-header-wrapper,
+    header.pos-header-bar,
+    nav.pos-navbar,
+    footer.pos-footer {
+        display: none !important;
+    }
+
+    /* Remove default main padding and top gap; allow scroll so "Create account" is visible */
+    .pos-main {
+        padding: 0 !important;
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: flex-start;
+        justify-content: center;
+        overflow-y: auto;
+    }
+
+    /* Outer card – min-height so content can scroll */
+    .outer-card {
+        position: relative;
+        z-index: 1;
+        background-color: rgba(255, 255, 255, 0.7);
+        max-width: 900px;
+        width: 85%;
+        min-height: 100vh;
+        margin: 0 auto;
+        padding: 0;
+        border-radius: 8px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        overflow: visible;
+        display: flex;
+        flex-direction: column;
+    }
+
+    /* Header image */
+    .header-image {
+        width: 100%;
+        height: auto;
+        max-height: 300px;
+        object-fit: contain;
+        display: block;
+        flex-shrink: 0;
+    }
+
+    /* Content area – scrollable so "Don't have an account yet?" is visible */
+    .content-area {
+        position: relative;
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        overflow-y: auto;
+        min-height: 0;
+    }
+
+    /* Inner card */
+    .inner-card {
+        position: relative;
+        z-index: 3;
+        background-color: transparent;
+        padding: 40px 50px;
+        text-align: left;
+        border: 2px solid #dee2e6;
+        border-radius: 12px;
+        width: 100%;
+        max-width: 650px;
+        margin: 0 auto;
+    }
+
+    .inner-card h1 {
+        font-size: 1.1rem;
+        font-weight: 600;
+    }
+
+    .inner-card p {
+        font-size: 0.85rem;
+    }
+
+    .inner-card .form-label {
+        text-align: left;
+        font-weight: 500;
+        font-size: 0.85rem;
+    }
+
+    .inner-card .form-control {
+        font-size: 0.85rem;
+    }
+
+    .inner-card .btn {
+        width: 170px;
+        border-radius: 25px;
+        padding: 8px 18px;
+        font-size: 0.8rem;
+        border: 1px solid #555;
+    }
+
+    .inner-card .small {
+        font-size: 0.8rem;
+    }
+
+    .inner-card .form-check {
+        font-size: 0.8rem;
+    }
+
+    .inner-card .form-check-input {
+        width: 0.9rem;
+        height: 0.9rem;
+        margin-top: 0.15rem;
+    }
+
+    .inner-card .form-check-label {
+        font-size: 0.8rem;
+    }
+
+    .inner-card .form-control::placeholder {
+        color: #999;
+        opacity: 1;
+    }
+
+    .inner-card .form-control::-webkit-input-placeholder {
+        color: #999;
+    }
+
+    .inner-card .form-control::-moz-placeholder {
+        color: #999;
+        opacity: 1;
+    }
+
+    .inner-card .form-control:-ms-input-placeholder {
+        color: #999;
+    }
+
+    .password-toggle-wrap .password-toggle-btn {
+        border-color: #ced4da;
+        background: #fff;
+        padding: 0.25rem 0.4rem;
+        flex: 0 0 auto;
+        width: 2.25rem;
+        min-width: 2.25rem;
+        border-radius: 0.25rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .password-toggle-wrap .password-toggle-btn:hover {
+        background: #e9ecef;
+    }
+    .password-toggle-wrap .password-toggle-btn svg {
+        width: 14px;
+        height: 14px;
+        display: block;
+        flex-shrink: 0;
+    }
+</style>
+<script>
+    // Restrict SR-Code to format ##-##### (auto-format) for login page
+    document.addEventListener('DOMContentLoaded', function() {
+        const srCodeField = document.getElementById('sr_code');
+        if (srCodeField) {
+            srCodeField.setAttribute('maxlength', '8');
+            
+            srCodeField.addEventListener('input', function(e) {
+                // Remove any characters that are not numbers
+                let value = this.value.replace(/[^0-9]/g, '');
+                
+                // Limit to 7 digits (2 + 5)
+                if (value.length > 7) {
+                    value = value.substring(0, 7);
+                }
+                
+                // Auto-add dash after 2 digits
+                if (value.length > 2) {
+                    value = value.substring(0, 2) + '-' + value.substring(2);
+                }
+                
+                this.value = value;
+            });
+            
+            srCodeField.addEventListener('keypress', function(e) {
+                // Only allow numbers
+                const char = String.fromCharCode(e.which);
+                if (!/[0-9]/.test(char) && e.which !== 8 && e.which !== 46 && e.which !== 37 && e.which !== 39) {
+                    e.preventDefault();
+                }
+            });
+        }
+
+        // Password visibility toggle (eye icon)
+        document.querySelectorAll('.password-toggle-btn').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                const targetId = this.getAttribute('data-target');
+                const input = document.getElementById(targetId);
+                const eye = this.querySelector('.icon-eye');
+                const slash = this.querySelector('.icon-eye-slash');
+                if (!input || !eye || !slash) return;
+                if (input.type === 'password') {
+                    input.type = 'text';
+                    eye.classList.add('d-none');
+                    slash.classList.remove('d-none');
+                    this.setAttribute('aria-label', 'Hide password');
+                    this.setAttribute('title', 'Hide password');
+                } else {
+                    input.type = 'password';
+                    eye.classList.remove('d-none');
+                    slash.classList.add('d-none');
+                    this.setAttribute('aria-label', 'Show password');
+                    this.setAttribute('title', 'Show password');
+                }
+            });
+        });
+    });
+</script>
+{% endblock %}
+
+{% block header %}{% endblock header %}
+{% block navbar %}{% endblock navbar %}
+{% block footer %}{% endblock footer %}
+
+{% block content_container %}
+<div style="width: 100%; height: 100vh; position: relative; padding: 0; margin: 0;">
+    <div class="outer-card">
+        <img src="{% static 'img/BSU_Header.png' %}" alt="BSU Header" class="header-image">
+        
+        <div class="content-area">
+            <div class="inner-card">
+                <h1 class="fw-semibold mb-3">Student Login</h1>
+                <p class="text-muted mb-4">
+                    Sign in using your Batangas State University credentials.
+                </p>
+
+                <form method="post" action="{% url 'login' %}">
+                    {% csrf_token %}
+                    {% if error %}
+                    <div class="alert alert-danger small mb-3" role="alert">{{ error }}</div>
+                    {% endif %}
+                    <div class="mb-3">
+                        <label for="sr_code" class="form-label">SR-Code</label>
+                        <input type="text" class="form-control" id="sr_code" name="sr_code" placeholder="e.g. 23-00000" maxlength="8" required
+                               pattern="^\d{2}-\d{5}$"
+                               title="Please enter a valid SR-Code (e.g. 23-00000)">
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="password" class="form-label">Password</label>
+                        <div class="input-group password-toggle-wrap">
+                            <input type="password" class="form-control" id="password" name="password" placeholder="Enter your password" required>
+                            <button type="button" class="btn btn-outline-secondary password-toggle-btn" data-target="password" aria-label="Show password" title="Show password">
+                                <svg class="icon-eye" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                                <svg class="icon-eye-slash d-none" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="d-grid gap-2 mb-3">
+                        <button type="submit" class="btn btn-danger mx-auto">
+                            Login
+                        </button>
+                    </div>
+                </form>
+
+                <hr class="my-4">
+
+                <div class="small">
+                    Don't have an account yet?
+                    <a href="{% url 'register' %}" class="text-decoration-none">Create an account</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+

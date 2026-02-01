@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Contact Us | Program of Study Generation System{% endblock %}
+
+{% block nav_contact_active %}active{% endblock %}
+
+{% block extra_head %}
+<style>
+    .developer-img-wrap {
+        position: relative;
+        width: 100px;
+        height: 100px;
+        margin: 0 auto 0.5rem;
+        display: inline-block;
+    }
+    .developer-img-bg {
+        position: absolute;
+        inset: 0;
+        background: url('{% static "img/BSU_Logo.png" %}') center 75% / 96% no-repeat;
+        opacity: 0.03;
+        z-index: 1;
+        border-radius: 50%;
+        pointer-events: none;
+    }
+    .developer-profile-img {
+        position: relative;
+        z-index: 0;
+        width: 100px;
+        height: 100px;
+        object-fit: cover;
+        border: 2px solid #dee2e6;
+    }
+    .developer-email {
+        font-size: 0.75rem;
+        color: #495057;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .developer-email .bi {
+        font-size: 0.7rem;
+        margin-right: 0.15rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="position-relative">
+    <div class="pos-page-bsu-bg-fixed" aria-hidden="true"></div>
+    <div class="pos-content-above-bsu-bg">
+        <div class="row justify-content-center">
+            <div class="col-lg-9">
+                <div class="pos-card pos-card-translucent-bg p-4 mt-2">
+            <div class="mb-3">
+                <h1 class="h5 mb-1">Contact Us</h1>
+                <p class="text-muted mb-0">
+                    Get in touch with us for support, inquiries, or feedback about the Program of Study Generation System.
+                </p>
+            </div>
+
+            <section class="mb-4">
+                <h2 class="pos-section-title">University Contact Information</h2>
+                <div class="mb-3">
+                    <p class="mb-2">
+                        <strong>Batangas State University – The National Engineering University</strong><br>
+                        Alangilan Campus<br>
+                        Batangas City, Philippines
+                    </p>
+                </div>
+            </section>
+
+            <section class="mb-4">
+                <h2 class="pos-section-title">System Support</h2>
+                <p class="mb-2">
+                    For technical support, questions, or issues regarding the Program of Study Generation System, please contact:
+                </p>
+                <ul class="mb-0">
+                    <li><strong>Email:</strong> pos-support@g.batstate-u.edu.ph</li>
+                    <li><strong>Office Hours:</strong> Monday to Friday, 8:00 AM - 5:00 PM</li>
+                </ul>
+            </section>
+
+            <section class="mb-4">
+                <h2 class="pos-section-title">Academic Inquiries</h2>
+                <p class="mb-2">
+                    For questions about your Program of Study, curriculum, or academic requirements, please contact your academic adviser or the Registrar's Office.
+                </p>
+            </section>
+
+            <section class="mb-4">
+                <h2 class="pos-section-title">Feedback</h2>
+                <p class="mb-0">
+                    We welcome your feedback to help us improve the system. Please send your suggestions, comments, or concerns to the support email address listed above.
+                </p>
+            </section>
+
+            <section>
+                <h2 class="pos-section-title mb-4">Developers</h2>
+                <div class="row justify-content-center g-4">
+                    <div class="col-md-4 text-center">
+                        <div class="developer-img-wrap">
+                            <div class="developer-img-bg" aria-hidden="true"></div>
+                            <img src="{% static 'img/Singh_Profile.png' %}" alt="Joriel Laurence S. Singh" class="rounded-circle developer-profile-img">
+                        </div>
+                        <div class="fw-semibold">Joriel Laurence S. Singh</div>
+                        <div class="developer-email mt-1"><i class="bi bi-envelope-fill"></i> 22-07120@g.batstate-u.edu.ph</div>
+                    </div>
+                    <div class="col-md-4 text-center">
+                        <div class="developer-img-wrap">
+                            <div class="developer-img-bg" aria-hidden="true"></div>
+                            <img src="{% static 'img/Lingal_Profile.png' %}" alt="Richmond S. Lingal" class="rounded-circle developer-profile-img">
+                        </div>
+                        <div class="fw-semibold">Richmond S. Lingal</div>
+                        <div class="developer-email mt-1"><i class="bi bi-envelope-fill"></i> 22-07529@g.batstate-u.edu.ph</div>
+                    </div>
+                    <div class="col-md-4 text-center">
+                        <div class="developer-img-wrap">
+                            <div class="developer-img-bg" aria-hidden="true"></div>
+                            <img src="{% static 'img/DeVilla_Profile.png' %}" alt="Knudcen Gradly C. De Villa" class="rounded-circle developer-profile-img">
+                        </div>
+                        <div class="fw-semibold">Knudcen Gradly C. De Villa</div>
+                        <div class="developer-email mt-1"><i class="bi bi-envelope-fill"></i> 22-05272@g.batstate-u.edu.ph</div>
+                    </div>
+                </div>
+            </section>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

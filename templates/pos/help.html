@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Help | Program of Study Generation System{% endblock %}
+
+{% block nav_help_active %}active{% endblock %}
+
+{% block content %}
+<div class="position-relative">
+    <div class="pos-page-bsu-bg-fixed" aria-hidden="true"></div>
+    <div class="pos-content-above-bsu-bg">
+        <div class="row justify-content-center">
+            <div class="col-lg-9">
+                <div class="pos-card pos-card-translucent-bg p-4 mt-2">
+            <div class="mb-3">
+                <h1 class="h5 mb-1">Help & Documentation</h1>
+                <p class="text-muted mb-0">
+                    Find answers to common questions and learn how to use the Program of Study Generation System.
+                </p>
+            </div>
+
+            <section class="mb-4">
+                <h2 class="pos-section-title">Getting Started</h2>
+                <p class="mb-2">
+                    Welcome to the Program of Study Generation System. This system helps you visualize and organize your academic course sequence throughout your degree program.
+                </p>
+                <ol class="mb-0">
+                    <li>Log in using your SR-Code and password</li>
+                    <li>View your current academic information on the Home page</li>
+                    <li>Generate your Program of Study for the current term</li>
+                    <li>Preview and download your Program of Study</li>
+                </ol>
+            </section>
+
+            <section class="mb-4">
+                <h2 class="pos-section-title">Frequently Asked Questions</h2>
+                
+                <div class="mb-3">
+                    <h3 class="h6 mb-1"><strong>How do I generate my Program of Study?</strong></h3>
+                    <p class="mb-0 small">
+                        Navigate to the "Generate POS" page, review your student profile, and select grades for your enrolled courses. Click "Generate POS" to create your Program of Study.
+                    </p>
+                </div>
+
+                <div class="mb-3">
+                    <h3 class="h6 mb-1"><strong>Can I edit my Program of Study after generating it?</strong></h3>
+                    <p class="mb-0 small">
+                        You can generate a new Program of Study at any time. Previous versions are saved in your History for reference.
+                    </p>
+                </div>
+
+                <div class="mb-3">
+                    <h3 class="h6 mb-1"><strong>How do I download my Program of Study?</strong></h3>
+                    <p class="mb-0 small">
+                        After generating your Program of Study, go to the "Preview POS" page and click the "Download PDF" button to save a copy.
+                    </p>
+                </div>
+
+                <div class="mb-3">
+                    <h3 class="h6 mb-1"><strong>What should I do if I encounter an error?</strong></h3>
+                    <p class="mb-0 small">
+                        If you experience any technical issues, please contact system support at pos-support@g.batstate-u.edu.ph or visit the Contact Us page.
+                    </p>
+                </div>
+            </section>
+
+            <section class="mb-4">
+                <h2 class="pos-section-title">System Features</h2>
+                <ul class="mb-0">
+                    <li><strong>Home:</strong> View your student information and current academic term</li>
+                    <li><strong>Generate POS:</strong> Create your Program of Study by selecting course grades</li>
+                    <li><strong>Preview POS:</strong> Review and download your generated Program of Study</li>
+                    <li><strong>History:</strong> Access previously generated Programs of Study</li>
+                </ul>
+            </section>
+
+            <section>
+                <h2 class="pos-section-title">Need More Help?</h2>
+                <p class="mb-0">
+                    If you need additional assistance, please visit the <a href="{% url 'contact_us' %}">Contact Us</a> page or reach out to your academic adviser.
+                </p>
+            </section>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
