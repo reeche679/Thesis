@@ -4,6 +4,10 @@
 
 {% block nav_history_active %}active{% endblock %}
 
+{% block header_action %}
+<a href="{% url 'sign_out' %}" class="btn btn-sm btn-outline-light px-3">Sign Out</a>
+{% endblock header_action %}
+
 {% block extra_head %}
 <style>
     .history-action-btn {

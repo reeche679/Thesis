@@ -1061,62 +1061,59 @@
 {% endblock %}
 
 {% block extra_scripts %}
+{{ saved_grades|json_script:"preview-grades-data" }}
 <script>
-    // On page load, populate grades from localStorage
+    // On page load, populate grades from current user's server data (not localStorage)
     document.addEventListener('DOMContentLoaded', function() {
-        const gradesData = localStorage.getItem('posGrades');
-        if (gradesData) {
-            const grades = JSON.parse(gradesData);
-            
-            // Find all grade display cells and populate them
-            const gradeCells = document.querySelectorAll('.grade-display');
-            gradeCells.forEach(function(cell) {
-                const row = cell.closest('tr');
-                if (row) {
-                    const courseCodeCell = row.querySelector('td:first-child');
-                    if (courseCodeCell) {
-                        const courseCode = courseCodeCell.textContent.trim();
-                        cell.setAttribute('data-course-code', courseCode);
-                        
-                        // Set grade value if available
-                        if (grades[courseCode]) {
-                            cell.textContent = grades[courseCode];
+        const gradesEl = document.getElementById('preview-grades-data');
+        const grades = gradesEl ? JSON.parse(gradesEl.textContent) : {};
+
+        // Find all grade display cells and populate them
+        const gradeCells = document.querySelectorAll('.grade-display');
+        gradeCells.forEach(function(cell) {
+            const row = cell.closest('tr');
+            if (row) {
+                const courseCodeCell = row.querySelector('td:first-child');
+                if (courseCodeCell) {
+                    const courseCode = courseCodeCell.textContent.trim();
+                    cell.setAttribute('data-course-code', courseCode);
+
+                    if (grades[courseCode]) {
+                        cell.textContent = grades[courseCode];
+                    } else {
+                        cell.textContent = '—';
+                    }
+                }
+            }
+        });
+
+        // Find all remarks cells and populate them
+        const remarksCells = document.querySelectorAll('.remarks-display');
+        remarksCells.forEach(function(cell) {
+            const row = cell.closest('tr');
+            if (row) {
+                const courseCodeCell = row.querySelector('td:first-child');
+                if (courseCodeCell) {
+                    const courseCode = courseCodeCell.textContent.trim();
+                    cell.setAttribute('data-course-code', courseCode);
+
+                    if (grades[courseCode]) {
+                        const grade = parseFloat(grades[courseCode]);
+                        if (grade <= 3.00) {
+                            cell.textContent = 'Passed';
+                            cell.classList.add('text-success');
+                        } else if (grade === 5.00) {
+                            cell.textContent = 'Failed';
+                            cell.classList.add('text-danger');
                         } else {
                             cell.textContent = '—';
                         }
+                    } else {
+                        cell.textContent = '—';
                     }
                 }
-            });
-            
-            // Find all remarks cells and populate them
-            const remarksCells = document.querySelectorAll('.remarks-display');
-            remarksCells.forEach(function(cell) {
-                const row = cell.closest('tr');
-                if (row) {
-                    const courseCodeCell = row.querySelector('td:first-child');
-                    if (courseCodeCell) {
-                        const courseCode = courseCodeCell.textContent.trim();
-                        cell.setAttribute('data-course-code', courseCode);
-                        
-                        // Determine remarks based on grade
-                        if (grades[courseCode]) {
-                            const grade = parseFloat(grades[courseCode]);
-                            if (grade <= 3.00) {
-                                cell.textContent = 'Passed';
-                                cell.classList.add('text-success');
-                            } else if (grade === 5.00) {
-                                cell.textContent = 'Failed';
-                                cell.classList.add('text-danger');
-                            } else {
-                                cell.textContent = '—';
-                            }
-                        } else {
-                            cell.textContent = '—';
-                        }
-                    }
-                }
-            });
-        }
+            }
+        });
     });
 </script>
 {% endblock %}

@@ -5,6 +5,10 @@
 
 {% block nav_contact_active %}active{% endblock %}
 
+{% block header_action %}
+<a href="{% url 'sign_out' %}" class="btn btn-sm btn-outline-light px-3">Sign Out</a>
+{% endblock header_action %}
+
 {% block extra_head %}
 <style>
     .developer-img-wrap {

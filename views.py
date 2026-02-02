@@ -212,12 +212,14 @@ def _prune_old_pos_records(student):
 
 @_require_student
 def pos_preview(request):
-    """Preview POS page - Read-only POS table"""
+    """Preview POS page - Read-only POS table; uses current user's saved grades only."""
     if not _has_academic_term(request):
         return redirect(reverse('pos_home') + '?required=1')
     student = get_logged_in_student(request)
+    saved_grades = {g.course_code: g.grade for g in student.grades.all()}
     context = {
         'student': student,
+        'saved_grades': saved_grades,
         'session_academic_year': request.session.get('academic_year', ''),
         'session_semester': request.session.get('semester', ''),
     }

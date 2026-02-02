@@ -104,6 +104,26 @@
     .home-academic-term .fw-semibold.text-success {
         font-size: 0.9rem;
     }
+
+    /* BSU transparent logo behind text in Current Academic Term (no layout shift) */
+    .home-academic-term {
+        position: relative;
+    }
+    .home-term-bsu-logo {
+        position: absolute;
+        left: 0;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        background: url('{% static "img/BSU_Logo.png" %}') 90% center / 45% no-repeat;
+        opacity: 0.08;
+        pointer-events: none;
+        z-index: 0;
+    }
+    .home-academic-term .home-term-content {
+        position: relative;
+        z-index: 1;
+    }
 </style>
 {% endblock %}
 
@@ -153,74 +173,80 @@
 
     <!-- Bottom: Current Academic Term -->
     <div class="pos-card p-4 home-academic-term">
-        <div class="pos-section-title mb-3">Current Academic Term</div>
-
-        {% if required_term %}
-        <div class="alert alert-warning py-2 mb-3 small" role="alert">
-            Please select Academic Year, Semester, and Year Level below, then click <strong>Continue</strong> to access Generate POS and Preview.
-        </div>
-        {% endif %}
-
-        <form method="post" action="{% url 'set_academic_term' %}" id="academic-term-form">
-            {% csrf_token %}
-            <div class="mb-3">
-                <label class="text-muted small text-uppercase" for="id_academic_year">ACADEMIC YEAR</label>
-                <select name="academic_year" id="id_academic_year" class="form-select form-select-sm" style="max-width: 240px;">
-                    <option value="">-- Select --</option>
-                    {% for value, label in academic_year_choices %}
-                    <option value="{{ value }}" {% if session_academic_year == value %}selected{% endif %}>{{ label }}</option>
-                    {% endfor %}
-                </select>
+        <div class="home-term-bsu-logo" aria-hidden="true"></div>
+        <div class="home-term-content">
+            <div class="border border-danger rounded py-2 px-3 mb-3 bg-danger bg-opacity-10">
+                <p class="text-danger small fw-semibold mb-0">Complete your information before proceeding</p>
             </div>
+            <div class="pos-section-title mb-3">Current Academic Term</div>
 
-            <div class="mb-3">
-                <label class="text-muted small text-uppercase" for="id_semester">SEMESTER</label>
-                <select name="semester" id="id_semester" class="form-select form-select-sm" style="max-width: 240px;">
-                    <option value="">-- Select --</option>
-                    {% for value, label in semester_choices %}
-                    <option value="{{ value }}" {% if session_semester == value %}selected{% endif %}>{{ label }}</option>
-                    {% endfor %}
-                </select>
+            {% if required_term %}
+            <div class="alert alert-warning py-2 mb-3 small" role="alert">
+                Please select Academic Year, Semester, and Year Level below, then click <strong>Continue</strong> to access Generate POS and Preview.
             </div>
+            {% endif %}
 
-            <div class="mb-3">
-                <label class="text-muted small text-uppercase" for="id_year_level">YEAR LEVEL</label>
-                <select name="year_level" id="id_year_level" class="form-select form-select-sm" style="max-width: 240px;">
-                    <option value="">-- Select --</option>
-                    {% for value, label in year_level_choices %}
-                    <option value="{{ value }}" {% if session_year_level == value %}selected{% endif %}>{{ label }}</option>
-                    {% endfor %}
-                </select>
-            </div>
+            <form method="post" action="{% url 'set_academic_term' %}" id="academic-term-form">
+                {% csrf_token %}
+                <div class="mb-3">
+                    <label class="text-muted small text-uppercase" for="id_academic_year">ACADEMIC YEAR</label>
+                    <select name="academic_year" id="id_academic_year" class="form-select form-select-sm" style="max-width: 240px;">
+                        <option value="">-- Select --</option>
+                        {% for value, label in academic_year_choices %}
+                        <option value="{{ value }}" {% if session_academic_year == value %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="mb-3">
+                    <label class="text-muted small text-uppercase" for="id_semester">SEMESTER</label>
+                    <select name="semester" id="id_semester" class="form-select form-select-sm" style="max-width: 240px;">
+                        <option value="">-- Select --</option>
+                        {% for value, label in semester_choices %}
+                        <option value="{{ value }}" {% if session_semester == value %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="mb-3">
+                    <label class="text-muted small text-uppercase" for="id_year_level">YEAR LEVEL</label>
+                    <select name="year_level" id="id_year_level" class="form-select form-select-sm" style="max-width: 240px;">
+                        <option value="">-- Select --</option>
+                        {% for value, label in year_level_choices %}
+                        <option value="{{ value }}" {% if session_year_level == value %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                {% if has_academic_term %}
+                <button type="submit" class="btn btn-outline-primary btn-sm mb-3">Update term</button>
+                {% else %}
+                <button type="submit" class="btn btn-primary btn-sm mb-3">Continue</button>
+                {% endif %}
+            </form>
 
             {% if has_academic_term %}
-            <button type="submit" class="btn btn-outline-primary btn-sm mb-3">Update term</button>
+
+            <hr>
+
+            <p class="small text-muted mb-3">
+                You may proceed to generate your Program of Study for the current term or review previously generated POS.
+            </p>
+
+            <div class="d-flex gap-2">
+                <a href="{% url 'pos_generate' %}" class="btn btn-danger">
+                    Generate POS
+                </a>
+                <a href="{% url 'pos_preview' %}" class="btn btn-outline-secondary">
+                    Preview Latest POS
+                </a>
+            </div>
             {% else %}
-            <button type="submit" class="btn btn-primary btn-sm mb-3">Continue</button>
+            <p class="small text-muted mb-0">
+                Select Academic Year, Semester, and Year Level above and click <strong>Continue</strong> to enable Generate POS and Preview.
+            </p>
             {% endif %}
-        </form>
-
-        {% if has_academic_term %}
-
-        <hr>
-
-        <p class="small text-muted mb-3">
-            You may proceed to generate your Program of Study for the current term or review previously generated POS.
-        </p>
-
-        <div class="d-flex gap-2">
-            <a href="{% url 'pos_generate' %}" class="btn btn-danger">
-                Generate POS
-            </a>
-            <a href="{% url 'pos_preview' %}" class="btn btn-outline-secondary">
-                Preview Latest POS
-            </a>
         </div>
-        {% else %}
-        <p class="small text-muted mb-0">
-            Select Academic Year, Semester, and Year Level above and click <strong>Continue</strong> to enable Generate POS and Preview.
-        </p>
-        {% endif %}
     </div>
 </div>
 {% endblock %}

@@ -5,6 +5,10 @@
 
 {% block nav_help_active %}active{% endblock %}
 
+{% block header_action %}
+<a href="{% url 'sign_out' %}" class="btn btn-sm btn-outline-light px-3">Sign Out</a>
+{% endblock header_action %}
+
 {% block content %}
 <div class="position-relative">
     <div class="pos-page-bsu-bg-fixed" aria-hidden="true"></div>
