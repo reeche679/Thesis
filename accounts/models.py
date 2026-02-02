@@ -11,7 +11,9 @@ class Student(models.Model):
     middle_name = models.CharField(max_length=100)
     last_name = models.CharField(max_length=100)
     email = models.EmailField()
-    year_level = models.CharField(max_length=20)  # e.g. 1st Year, 2nd Year
+    year_level = models.CharField(max_length=20, blank=True)  # e.g. 1st Year; set on home with AY/semester
+    academic_year = models.CharField(max_length=32, blank=True)   # e.g. A.Y. 2025 – 2026 (persists across sign-out)
+    semester = models.CharField(max_length=32, blank=True)         # e.g. First Semester (persists across sign-out)
 
     class Meta:
         ordering = ['last_name', 'first_name']
@@ -52,3 +54,15 @@ class StudentGrade(models.Model):
     class Meta:
         unique_together = [['student', 'course_code']]
         ordering = ['course_code']
+
+
+class POSRecord(models.Model):
+    """One record per generated POS for history; stores when and for which term the user generated it."""
+    student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name='pos_records')
+    generated_at = models.DateTimeField(auto_now_add=True)
+    academic_year = models.CharField(max_length=32, blank=True)   # e.g. A.Y. 2025 – 2026
+    semester = models.CharField(max_length=32, blank=True)         # e.g. First Semester
+    year_level = models.CharField(max_length=32, blank=True)       # e.g. 3rd Year (per generated POS)
+
+    class Meta:
+        ordering = ['-generated_at']

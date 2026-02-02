@@ -11,26 +11,26 @@
 {% block extra_head %}
 <style>
     .grade-select {
-        max-width: 80px;
+        max-width: 56px;
         text-align: left;
         margin: 0 auto;
         display: block;
-        font-size: 0.85rem;
+        font-size: 0.8rem;
         -webkit-appearance: none;
         -moz-appearance: none;
         appearance: none;
         background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e");
         background-repeat: no-repeat;
-        background-position: right 0.25rem center;
-        background-size: 16px 12px;
-        padding: 0.25rem 1.5rem 0.25rem 0.75rem;
+        background-position: right 0.15rem center;
+        background-size: 12px 10px;
+        padding: 0.15rem 1.1rem 0.15rem 0.4rem;
     }
 
     /* Left-align dropdown options with left indent */
     .grade-select option {
         text-align: left;
         padding-left: 0.5rem;
-        font-size: 0.85rem;
+        font-size: 0.8rem;
     }
 
     /* Elective course cells - centered vertically but left-aligned text */
@@ -49,12 +49,14 @@
         color: #212529 !important;
     }
 
-    /* Column headers - slightly smaller so Pre-requisite(s) etc. fit and text is easily seen (match Preview) */
+    /* Column headers - slightly smaller so Pre-requisite(s) etc. fit; compact row (match Preview) */
     .table thead th {
         text-align: center;
         vertical-align: middle;
         font-size: 0.9rem;
         white-space: nowrap;
+        padding-top: 0.35rem;
+        padding-bottom: 0.35rem;
     }
 
     /* Semester headings like \"Second Year - First Semester\" */
@@ -72,7 +74,7 @@
         width: 100%;
     }
 
-    /* All columns - keep text inside column, no overflow; aligned with headers; slightly smaller text (match Preview) */
+    /* All columns - keep text inside column, no overflow; aligned with headers; compact rows (match Preview) */
     .table thead th,
     .table tbody td {
         min-width: 0;
@@ -82,8 +84,10 @@
         text-align: center;
         vertical-align: middle;
         box-sizing: border-box;
-        padding-left: 0.5rem;
-        padding-right: 0.5rem;
+        padding-left: 0.4rem;
+        padding-right: 0.4rem;
+        padding-top: 0.2rem;
+        padding-bottom: 0.2rem;
         font-size: 0.9rem;
     }
 
@@ -95,6 +99,19 @@
         word-break: break-word;
         overflow-wrap: break-word;
         font-size: 0.9rem !important;
+    }
+
+    /* Pre-requisite(s) and Co-requisite(s) - show full text, wrap to multiple lines, smaller font */
+    .table td:nth-child(4),
+    .table td:nth-child(5) {
+        white-space: normal;
+        word-break: break-word;
+        overflow-wrap: break-word;
+        overflow: visible;
+        text-overflow: clip;
+        font-size: 0.75rem;
+        line-height: 1.25;
+        vertical-align: middle;
     }
 
     /* Student photo – left of profile text (display only) */
@@ -135,7 +152,7 @@
     </div>
     <div class="text-end">
         <div class="small text-muted text-uppercase">Academic Term</div>
-        <div class="fw-semibold">A.Y. 2025 – 2026 · Curriculum 2025-2026</div>
+        <div class="fw-semibold">{{ session_academic_year|default:"—" }}{% if session_semester %} · {{ session_semester }}{% endif %}</div>
     </div>
 </div>
 
@@ -167,7 +184,7 @@
             </div>
             <div class="col-md-4 mb-2">
                 <div class="text-muted text-uppercase">Curriculum</div>
-                <div class="fw-semibold">Curriculum 2025-2026</div>
+                <div class="fw-semibold">BSCpE Curriculum 2025-2026</div>
             </div>
             <div class="col-md-4 mb-2">
                 <div class="text-muted text-uppercase">SR-Code</div>
@@ -1049,7 +1066,7 @@
                         </td>
                     </tr>
                     <tr>
-                        <td class="text-center">Elective Course 1</td>
+                        <td class="text-center">CpEE 401</td>
                         <td class="elective-course-cell">Elective Course 1</td>
                         <td class="text-center">3</td>
                         <td class="small text-muted text-center">2nd Year Standing</td>
@@ -1341,7 +1358,7 @@
                         </td>
                     </tr>
                     <tr>
-                        <td class="text-center">Elective Course 2</td>
+                        <td class="text-center">CpEE 402</td>
                         <td class="elective-course-cell">Elective Course 2</td>
                         <td class="text-center">3</td>
                         <td class="small text-muted text-center">CpEE 401</td>
@@ -1777,7 +1794,7 @@
                         </td>
                     </tr>
                     <tr>
-                        <td class="text-center">Elective Course 3</td>
+                        <td class="text-center">CpEE 403</td>
                         <td class="elective-course-cell">Elective Course 3</td>
                         <td class="text-center">3</td>
                         <td class="small text-muted text-center">CpEE 402</td>
@@ -1935,14 +1952,16 @@
     }
 
     // Save to server (per-user, persists across logins)
-    function saveGradesToServer(grades, done) {
+    function saveGradesToServer(grades, recordGenerated, done) {
+        if (typeof recordGenerated === 'function') { done = recordGenerated; recordGenerated = false; }
+        var payload = recordGenerated ? { grades: grades, generated: true } : grades;
         fetch("{% url 'save_pos_grades' %}", {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'X-CSRFToken': getCookie('csrftoken')
             },
-            body: JSON.stringify(grades),
+            body: JSON.stringify(payload),
             credentials: 'same-origin'
         }).then(function(r) { return r.json(); }).then(function(data) { if (done) done(data); }).catch(function() { if (done) done({ ok: false }); });
     }
@@ -2010,7 +2029,7 @@
         a.click();
         setTimeout(function() { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
         localStorage.setItem('posGrades', JSON.stringify(grades));
-        saveGradesToServer(grades, function() {
+        saveGradesToServer(grades, true, function() {
             setTimeout(function() { window.location.href = "{% url 'pos_preview' %}"; }, 300);
         });
     });

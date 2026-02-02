@@ -2,7 +2,21 @@
 
 {% block title %}POS History | Program of Study Generation System{% endblock %}
 
-{% block nav_preview_active %}{% endblock %}
+{% block nav_history_active %}active{% endblock %}
+
+{% block extra_head %}
+<style>
+    .history-action-btn {
+        width: 28px;
+        height: 28px;
+        padding: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 4px;
+    }
+</style>
+{% endblock %}
 
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
@@ -24,46 +38,36 @@
                     <th style="width: 15%;">Semester</th>
                     <th style="width: 17%;">Year Level</th>
                     <th style="width: 15%;">Status</th>
-                    <th style="width: 15%;">Action</th>
+                    <th style="width: 22%;">Action</th>
                 </tr>
             </thead>
             <tbody>
+                {% for record in pos_records %}
                 <tr>
-                    <td class="text-center">January 15, 2026</td>
-                    <td class="text-center">2025 – 2026</td>
-                    <td class="text-center">1st Semester</td>
-                    <td class="text-center">3rd Year</td>
-                    <td class="text-center text-success">Active</td>
+                    <td class="text-center">{{ record.generated_at|date:"F d, Y" }}</td>
+                    <td class="text-center">{{ record.academic_year|default:"—" }}</td>
+                    <td class="text-center">{{ record.semester|default:"—" }}</td>
+                    <td class="text-center">{{ record.year_level|default:"—" }}</td>
+                    <td class="text-center {% if forloop.first %}text-success{% else %}text-muted{% endif %}">{% if forloop.first %}Active{% else %}Archived{% endif %}</td>
                     <td class="text-center">
-                        <a href="{% url 'pos_preview' %}" class="btn btn-outline-secondary btn-sm">
-                            View
-                        </a>
+                        <div class="d-flex gap-2 justify-content-center align-items-center">
+                            <button type="button" class="btn btn-outline-secondary btn-sm history-action-btn" title="Download generated POS (coming soon)" aria-label="Download">
+                                <i class="bi bi-download"></i>
+                            </button>
+                            <form method="post" action="{% url 'delete_pos_record' record_id=record.pk %}" class="d-inline m-0" onsubmit="return confirm('Remove this record from history?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-outline-danger btn-sm history-action-btn" title="Remove from history" aria-label="Delete">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </form>
+                        </div>
                     </td>
                 </tr>
+                {% empty %}
                 <tr>
-                    <td class="text-center">July 05, 2025</td>
-                    <td class="text-center">2024 – 2025</td>
-                    <td class="text-center">2nd Semester</td>
-                    <td class="text-center">2nd Year</td>
-                    <td class="text-center text-muted">Archived</td>
-                    <td class="text-center">
-                        <button type="button" class="btn btn-outline-secondary btn-sm" disabled>
-                            View
-                        </button>
-                    </td>
+                    <td colspan="6" class="text-center text-muted py-4">No generated Programs of Study yet. Generate one from the Generate POS page.</td>
                 </tr>
-                <tr>
-                    <td class="text-center">January 10, 2025</td>
-                    <td class="text-center">2024 – 2025</td>
-                    <td class="text-center">1st Semester</td>
-                    <td class="text-center">2nd Year</td>
-                    <td class="text-center text-muted">Archived</td>
-                    <td class="text-center">
-                        <button type="button" class="btn btn-outline-secondary btn-sm" disabled>
-                            View
-                        </button>
-                    </td>
-                </tr>
+                {% endfor %}
             </tbody>
         </table>
     </div>

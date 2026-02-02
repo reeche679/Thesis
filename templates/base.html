@@ -16,6 +16,9 @@
             background: url('{% static "img/BSU_Background.jpg" %}') no-repeat center center fixed;
             background-size: cover;
             color: #212529;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
         }
 
         .pos-header-bar {
@@ -83,6 +86,7 @@
         .pos-main {
             padding-top: 1.5rem;
             padding-bottom: 2.5rem;
+            flex: 1;
         }
 
         /* Sticky header/navbar wrapper */
@@ -171,6 +175,29 @@
         /* Card with transparent background so fixed logo shows through */
         .pos-card-translucent-bg {
             background-color: rgba(255, 255, 255, 0.65);
+        }
+        /* Contact Us & Help pages – slightly smaller text for better fit */
+        .contact-help-card {
+            font-size: 0.875rem;
+        }
+        .contact-help-card h1,
+        .contact-help-card .h5 {
+            font-size: 1rem;
+        }
+        .contact-help-card .pos-section-title,
+        .contact-help-card h2 {
+            font-size: 0.95rem;
+        }
+        .contact-help-card h3,
+        .contact-help-card h6 {
+            font-size: 0.85rem;
+        }
+        .contact-help-card p,
+        .contact-help-card li {
+            font-size: 0.875rem;
+        }
+        .contact-help-card .text-muted {
+            font-size: 0.8rem;
         }
 
         /* Fixed small logo at bottom right – every page; click goes to batstateu.edu.ph */
@@ -334,15 +361,21 @@
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link {% block nav_generate_active %}{% endblock %}" href="{% url 'pos_generate' %}">
+                        <a class="nav-link {% block nav_generate_active %}{% endblock %}" href="{% if has_academic_term %}{% url 'pos_generate' %}{% else %}{% url 'pos_home' %}?required=1{% endif %}">
                             <i class="bi bi-journal-plus"></i>
                             Generate POS
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link {% block nav_preview_active %}{% endblock %}" href="{% url 'pos_preview' %}">
+                        <a class="nav-link {% block nav_preview_active %}{% endblock %}" href="{% if has_academic_term %}{% url 'pos_preview' %}{% else %}{% url 'pos_home' %}?required=1{% endif %}">
                             <i class="bi bi-eye-fill"></i>
                             Preview POS
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% block nav_history_active %}{% endblock %}" href="{% url 'pos_history' %}">
+                            <i class="bi bi-clock-history"></i>
+                            History
                         </a>
                     </li>
                     <li class="nav-item">

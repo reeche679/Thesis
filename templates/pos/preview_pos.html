@@ -74,6 +74,19 @@
         font-size: 0.9rem !important;
     }
 
+    /* Pre-requisite(s) and Co-requisite(s) - show full text, wrap to multiple lines, smaller font */
+    .table td:nth-child(4),
+    .table td:nth-child(5) {
+        white-space: normal;
+        word-break: break-word;
+        overflow-wrap: break-word;
+        overflow: visible;
+        text-overflow: clip;
+        font-size: 0.75rem;
+        line-height: 1.25;
+        vertical-align: middle;
+    }
+
     /* Grade display cells */
     .grade-display {
         font-weight: 500;
@@ -117,10 +130,7 @@
     </div>
     <div class="text-end">
         <div class="small text-muted text-uppercase">Academic Term</div>
-        <div class="fw-semibold">A.Y. 2025 – 2026 · Curriculum 2025-2026</div>
-        <button type="button" class="btn btn-outline-danger btn-sm mt-2">
-            Download PDF
-        </button>
+        <div class="fw-semibold">{{ session_academic_year|default:"—" }}{% if session_semester %} · {{ session_semester }}{% endif %}</div>
     </div>
 </div>
 
@@ -152,7 +162,7 @@
             </div>
             <div class="col-md-4 mb-2">
                 <div class="text-muted text-uppercase">Curriculum</div>
-                <div class="fw-semibold">Curriculum 2025-2026</div>
+                <div class="fw-semibold">BSCpE Curriculum 2025-2026</div>
             </div>
             <div class="col-md-4 mb-2">
                 <div class="text-muted text-uppercase">SR-Code</div>
@@ -197,7 +207,7 @@
                         <td class="text-center">ENGG 101</td>
                         <td class="course-title-cell">Introduction to Engineering</td>
                         <td class="text-center">1</td>
-                        <td class="small text-muted text-center">None</td>
+                        <td class="small text-muted text-center"></td>
                         <td class="small text-muted text-center"></td>
                         <td class="text-center grade-display" data-course-code=""></td>
                         <td class="text-center remarks-display" data-course-code=""></td>
@@ -206,7 +216,7 @@
                         <td class="text-center">GEd 108</td>
                         <td class="course-title-cell">Art Appreciation</td>
                         <td class="text-center">3</td>
-                        <td class="small text-muted text-center">None</td>
+                        <td class="small text-muted text-center"></td>
                         <td class="small text-muted text-center"></td>
                         <td class="text-center grade-display" data-course-code=""></td>
                         <td class="text-center remarks-display" data-course-code=""></td>
@@ -215,7 +225,7 @@
                         <td class="text-center">GEd 104</td>
                         <td class="course-title-cell">The Contemporary World</td>
                         <td class="text-center">3</td>
-                        <td class="small text-muted text-center">None</td>
+                        <td class="small text-muted text-center"></td>
                         <td class="small text-muted text-center"></td>
                         <td class="text-center grade-display" data-course-code=""></td>
                         <td class="text-center remarks-display" data-course-code=""></td>
@@ -224,7 +234,7 @@
                         <td class="text-center">CpE 101</td>
                         <td class="course-title-cell">Computer Programming</td>
                         <td class="text-center">1</td>
-                        <td class="small text-muted text-center">None</td>
+                        <td class="small text-muted text-center"></td>
                         <td class="small text-muted text-center"></td>
                         <td class="text-center grade-display" data-course-code=""></td>
                         <td class="text-center remarks-display" data-course-code=""></td>
@@ -233,7 +243,7 @@
                         <td class="text-center">GEd 105</td>
                         <td class="course-title-cell">Readings in Philippines History</td>
                         <td class="text-center">3</td>
-                        <td class="small text-muted text-center">None</td>
+                        <td class="small text-muted text-center"></td>
                         <td class="small text-muted text-center"></td>
                         <td class="text-center grade-display" data-course-code=""></td>
                         <td class="text-center remarks-display" data-course-code=""></td>
@@ -242,7 +252,7 @@
                         <td class="text-center">MATH 101</td>
                         <td class="course-title-cell">Differential Calculus</td>
                         <td class="text-center">4</td>
-                        <td class="small text-muted text-center">None</td>
+                        <td class="small text-muted text-center"></td>
                         <td class="small text-muted text-center"></td>
                         <td class="text-center grade-display" data-course-code=""></td>
                         <td class="text-center remarks-display" data-course-code=""></td>
@@ -251,7 +261,7 @@
                         <td class="text-center">CHEM 101</td>
                         <td class="course-title-cell">Chemistry for Engineers</td>
                         <td class="text-center">4</td>
-                        <td class="small text-muted text-center">None</td>
+                        <td class="small text-muted text-center"></td>
                         <td class="small text-muted text-center"></td>
                         <td class="text-center grade-display" data-course-code=""></td>
                         <td class="text-center remarks-display" data-course-code=""></td>
@@ -260,7 +270,7 @@
                         <td class="text-center">PATHFit 1</td>
                         <td class="course-title-cell">Movement Competency Training</td>
                         <td class="text-center">2</td>
-                        <td class="small text-muted text-center">None</td>
+                        <td class="small text-muted text-center"></td>
                         <td class="small text-muted text-center"></td>
                         <td class="text-center grade-display" data-course-code=""></td>
                         <td class="text-center remarks-display" data-course-code=""></td>
@@ -269,7 +279,7 @@
                         <td class="text-center">NSTP 111</td>
                         <td class="course-title-cell">National Service Training Program 1</td>
                         <td class="text-center">3</td>
-                        <td class="small text-muted text-center">None</td>
+                        <td class="small text-muted text-center"></td>
                         <td class="small text-muted text-center"></td>
                         <td class="text-center grade-display" data-course-code=""></td>
                         <td class="text-center remarks-display" data-course-code=""></td>
@@ -307,7 +317,7 @@
                         <td class="text-center">GEd 101</td>
                         <td class="course-title-cell">Understanding the Self</td>
                         <td class="text-center">3</td>
-                        <td class="small text-muted text-center">None</td>
+                        <td class="small text-muted text-center"></td>
                         <td class="small text-muted text-center"></td>
                         <td class="text-center grade-display" data-course-code=""></td>
                         <td class="text-center remarks-display" data-course-code=""></td>
@@ -316,7 +326,7 @@
                         <td class="text-center">GEd 102</td>
                         <td class="course-title-cell">Mathematics in the Modern World</td>
                         <td class="text-center">3</td>
-                        <td class="small text-muted text-center">None</td>
+                        <td class="small text-muted text-center"></td>
                         <td class="small text-muted text-center"></td>
                         <td class="text-center grade-display" data-course-code=""></td>
                         <td class="text-center remarks-display" data-course-code=""></td>
@@ -325,7 +335,7 @@
                         <td class="text-center">GEd 106</td>
                         <td class="course-title-cell">Purposive Communication</td>
                         <td class="text-center">3</td>
-                        <td class="small text-muted text-center">None</td>
+                        <td class="small text-muted text-center"></td>
                         <td class="small text-muted text-center"></td>
                         <td class="text-center grade-display" data-course-code=""></td>
                         <td class="text-center remarks-display" data-course-code=""></td>
@@ -334,7 +344,7 @@
                         <td class="text-center">GEd 109</td>
                         <td class="course-title-cell">Science, Technology and Society</td>
                         <td class="text-center">3</td>
-                        <td class="small text-muted text-center">None</td>
+                        <td class="small text-muted text-center"></td>
                         <td class="small text-muted text-center"></td>
                         <td class="text-center grade-display" data-course-code=""></td>
                         <td class="text-center remarks-display" data-course-code=""></td>
@@ -408,7 +418,7 @@
                         <td class="text-center">GEd 103</td>
                         <td class="course-title-cell">Life and Works of Rizal</td>
                         <td class="text-center">3</td>
-                        <td class="small text-muted text-center">None</td>
+                        <td class="small text-muted text-center"></td>
                         <td class="small text-muted text-center"></td>
                         <td class="text-center grade-display" data-course-code=""></td>
                         <td class="text-center remarks-display" data-course-code=""></td>
@@ -417,7 +427,7 @@
                         <td class="text-center">GEd 107</td>
                         <td class="course-title-cell">Ethics</td>
                         <td class="text-center">3</td>
-                        <td class="small text-muted text-center">None</td>
+                        <td class="small text-muted text-center"></td>
                         <td class="small text-muted text-center"></td>
                         <td class="text-center grade-display" data-course-code=""></td>
                         <td class="text-center remarks-display" data-course-code=""></td>
@@ -464,7 +474,7 @@
                         <td class="text-center">CpE 201</td>
                         <td class="course-title-cell">CpE Discipline, Professional Practice and laws</td>
                         <td class="text-center">3</td>
-                        <td class="small text-muted text-center">None</td>
+                        <td class="small text-muted text-center"></td>
                         <td class="small text-muted text-center"></td>
                         <td class="text-center grade-display" data-course-code=""></td>
                         <td class="text-center remarks-display" data-course-code=""></td>
@@ -482,7 +492,7 @@
                         <td class="text-center">CpE 203</td>
                         <td class="course-title-cell">Programming Logic and Design</td>
                         <td class="text-center">2</td>
-                        <td class="small text-muted text-center">None</td>
+                        <td class="small text-muted text-center"></td>
                         <td class="small text-muted text-center"></td>
                         <td class="text-center grade-display" data-course-code=""></td>
                         <td class="text-center remarks-display" data-course-code=""></td>
@@ -491,7 +501,7 @@
                         <td class="text-center">GEdE 101</td>
                         <td class="course-title-cell">The Entrepreneurial Mind</td>
                         <td class="text-center">3</td>
-                        <td class="small text-muted text-center">None</td>
+                        <td class="small text-muted text-center"></td>
                         <td class="small text-muted text-center"></td>
                         <td class="text-center grade-display" data-course-code=""></td>
                         <td class="text-center remarks-display" data-course-code=""></td>
@@ -527,7 +537,7 @@
                         <td class="text-center">AI 101</td>
                         <td class="course-title-cell">Linear Algebra for AI</td>
                         <td class="text-center">3</td>
-                        <td class="small text-muted text-center">None</td>
+                        <td class="small text-muted text-center"></td>
                         <td class="small text-muted text-center"></td>
                         <td class="text-center grade-display" data-course-code=""></td>
                         <td class="text-center remarks-display" data-course-code=""></td>
@@ -598,7 +608,7 @@
                         <td class="text-center remarks-display" data-course-code=""></td>
                     </tr>
                     <tr>
-                        <td class="text-center">Elective Course 1</td>
+                        <td class="text-center">CpEE 401</td>
                         <td class="elective-course-cell">Elective Course 1</td>
                         <td class="text-center">3</td>
                         <td class="small text-muted text-center">2nd Year Standing</td>
@@ -619,7 +629,7 @@
                         <td class="text-center">ENGG 114</td>
                         <td class="course-title-cell">Basic Occupational Safety and Health</td>
                         <td class="text-center">3</td>
-                        <td class="small text-muted text-center">None</td>
+                        <td class="small text-muted text-center"></td>
                         <td class="small text-muted text-center"></td>
                         <td class="text-center grade-display" data-course-code=""></td>
                         <td class="text-center remarks-display" data-course-code=""></td>
@@ -966,7 +976,7 @@
                         <td class="text-center remarks-display" data-course-code=""></td>
                     </tr>
                     <tr>
-                        <td class="text-center">Elective Course 3</td>
+                        <td class="text-center">CpEE 403</td>
                         <td class="elective-course-cell">Elective Course 3</td>
                         <td class="text-center">3</td>
                         <td class="small text-muted text-center">CpEE 402</td>
