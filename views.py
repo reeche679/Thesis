@@ -3,9 +3,11 @@ Views for POS templates and auth (register, login, session).
 """
 import json
 import re
+import os
+from django.conf import settings
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
-from django.http import HttpResponseBadRequest, JsonResponse
+from django.http import HttpResponse, HttpResponseBadRequest, JsonResponse
 from django.views.decorators.http import require_POST
 from django.views.decorators.csrf import ensure_csrf_cookie
 
@@ -88,9 +90,20 @@ def _has_academic_term(request):
     return ay in valid_ays and sem in valid_sems and yl in valid_yl
 
 
+def _has_profile_photo(request):
+    """True if logged-in student has a profile photo uploaded."""
+    student = get_logged_in_student(request)
+    return bool(student and student.profile_photo)
+
+
 def academic_term_context(request):
-    """Context processor: expose has_academic_term so nav can show/disable Generate and Preview."""
-    return {'has_academic_term': _has_academic_term(request)}
+    """Context processor: expose has_academic_term and has_complete_info (term + photo) for nav."""
+    has_ay = _has_academic_term(request)
+    has_photo = _has_profile_photo(request)
+    return {
+        'has_academic_term': has_ay,
+        'has_complete_info': has_ay and has_photo,
+    }
 
 
 def pos_main(request):
@@ -115,6 +128,7 @@ def pos_home(request):
         'session_semester': request.session.get('semester'),
         'session_year_level': request.session.get('year_level'),
         'has_academic_term': _has_academic_term(request),
+        'has_complete_info': _has_academic_term(request) and _has_profile_photo(request),
         'required_term': request.GET.get('required') == '1',
     }
     return render(request, "pos/home.html", context)
@@ -149,7 +163,7 @@ def set_academic_term(request):
 @_require_student
 def pos_generate(request):
     """Generate POS page - Course table with grade dropdowns; pass saved grades for this user."""
-    if not _has_academic_term(request):
+    if not _has_academic_term(request) or not _has_profile_photo(request):
         return redirect(reverse('pos_home') + '?required=1')
     student = get_logged_in_student(request)
     saved_grades = {g.course_code: g.grade for g in student.grades.all()}
@@ -213,7 +227,7 @@ def _prune_old_pos_records(student):
 @_require_student
 def pos_preview(request):
     """Preview POS page - Read-only POS table; uses current user's saved grades only."""
-    if not _has_academic_term(request):
+    if not _has_academic_term(request) or not _has_profile_photo(request):
         return redirect(reverse('pos_home') + '?required=1')
     student = get_logged_in_student(request)
     saved_grades = {g.course_code: g.grade for g in student.grades.all()}
@@ -224,6 +238,32 @@ def pos_preview(request):
         'session_semester': request.session.get('semester', ''),
     }
     return render(request, "pos/preview_pos.html", context)
+
+
+@_require_student
+def download_pos_pdf(request):
+    """Generate and download POS PDF with student info and grades (BSU BSCpE layout)."""
+    if not _has_academic_term(request) or not _has_profile_photo(request):
+        return redirect(reverse('pos_home') + '?required=1')
+    student = get_logged_in_student(request)
+    grades_dict = {g.course_code: g.grade for g in student.grades.all()}
+    academic_year = request.session.get('academic_year', '') or student.academic_year or ''
+
+    from pos_pdf import build_pos_pdf
+    logo_path = os.path.abspath(os.path.normpath(os.path.join(str(settings.BASE_DIR), 'static', 'img', 'BSU_Logo.png')))
+    if not os.path.isfile(logo_path):
+        logo_path = None
+    pdf_bytes = build_pos_pdf(
+        student_name=student.full_name or '',
+        sr_code=student.sr_code or '',
+        academic_year=academic_year,
+        grades_dict=grades_dict,
+        logo_path=logo_path,
+    )
+    filename = f"POS_{student.sr_code or 'POS'}.pdf"
+    response = HttpResponse(pdf_bytes, content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response
 
 
 @_require_student

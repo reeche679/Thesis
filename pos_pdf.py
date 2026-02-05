@@ -1,0 +1,609 @@
+"""
+Generate POS (Program of Study) PDF in BSU BSCpE layout.
+Design matches template: BSU logo, header with specified fonts, student info table, course tables, footer.
+"""
+import os
+from io import BytesIO
+from datetime import date
+
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import legal  # legal bond, long (8.5" x 14")
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch
+from reportlab.lib.utils import ImageReader
+from reportlab.platypus import (
+    SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image,
+)
+
+# Curriculum: (section_title_line1, section_title_line2, total_units, lec_total, lab_total, rows).
+# Each row: (course_code, course_title, units, lec, lab, prereq, coreq)
+POS_CURRICULUM = [
+    ("FIRST YEAR", "FIRST SEMESTER", 24, 21, 9, [
+        ("ENGG 101", "Introduction to Engineering", 1, 0, 3, "", ""),
+        ("GEd 108", "Art Appreciation", 3, 3, 0, "", ""),
+        ("GEd 104", "The Contemporary World", 3, 3, 0, "", ""),
+        ("CpE 101", "Computer Programming", 1, 0, 3, "", ""),
+        ("GEd 105", "Readings in Philippines History", 3, 3, 0, "", ""),
+        ("MATH 101", "Differential Calculus", 4, 4, 0, "", ""),
+        ("CHEM 101", "Chemistry for Engineers", 4, 3, 3, "", ""),
+        ("PATHFit 1", "Movement Competency Training", 2, 2, 0, "", ""),
+        ("NSTP 111", "National Service Training Program 1", 3, 3, 0, "", ""),
+    ]),
+    ("FIRST YEAR", "SECOND SEMESTER", 27, 24, 6, [
+        ("ENGG 102", "Engineering Drawing", 1, 0, 3, "", ""),
+        ("GEd 101", "Understanding the Self", 3, 3, 0, "", ""),
+        ("GEd 102", "Mathematics in the Modern World", 3, 3, 0, "", ""),
+        ("GEd 106", "Purposive Communication", 3, 3, 0, "", ""),
+        ("GEd 109", "Science, Technology and Society", 3, 3, 0, "", ""),
+        ("MATH 102", "Integral Calculus", 4, 4, 0, "MATH 101", ""),
+        ("PHYS 102", "Physics for Engineers 1", 4, 3, 3, "MATH 101", "MATH 102"),
+        ("PATHFit 2", "Exercise-based Fitness Activities", 2, 2, 0, "PATHFit 1", ""),
+        ("NSTP 121", "National Service Training Program 2", 3, 3, 0, "NSTP 111", ""),
+    ]),
+    ("FIRST YEAR", "MIDTERM", 9, 8, 3, [
+        ("GEd 103", "Life and Works of Rizal", 3, 3, 0, "", ""),
+        ("GEd 107", "Ethics", 3, 3, 0, "", ""),
+        ("PHYS 103", "Physics for Engineers 2", 3, 2, 3, "PHYS 102; MATH 102", ""),
+    ]),
+    ("SECOND YEAR", "FIRST SEMESTER", 27, 23, 12, [
+        ("CpE 201", "CpE Discipline, Professional Practice and laws", 3, 3, 0, "", ""),
+        ("CpE 202", "Discrete Mathematics", 3, 3, 0, "MATH 101", ""),
+        ("CpE 203", "Programming Logic and Design", 2, 0, 6, "", ""),
+        ("GEdE 101", "The Entrepreneurial Mind", 3, 3, 0, "", ""),
+        ("EE 212", "Fundamentals of Electrical Circuits", 4, 3, 3, "PHY 103", ""),
+        ("ENGG 103", "Computer-Aided Design", 1, 0, 3, "ENGG 102", ""),
+        ("ENGG 104", "Engineering Economics", 3, 3, 0, "MATH 102", ""),
+        ("AI 101", "Linear Algebra for AI", 3, 3, 0, "", ""),
+        ("MATH 103", "Differential Equations", 3, 3, 0, "MATH 102", ""),
+        ("PATHFit 3", "Choice of dance, sports, Martial Arts, Group exercise, Outdoor and Adventure Activities 1", 2, 2, 0, "PATHFit 1 & 2", ""),
+    ]),
+    ("SECOND YEAR", "SECOND SEMESTER", 23, 19, 12, [
+        ("CpE 204", "Advance Engineering Mathematics for CpE", 3, 3, 0, "2nd Year Standing", ""),
+        ("CpE 205", "Object-Oriented Programming", 2, 0, 6, "CpE 203", ""),
+        ("CpEE 401", "Elective Course 1", 3, 2, 3, "2nd Year Standing", ""),
+        ("ECE 405", "Electronic Circuits: Devices and Analysis", 4, 3, 3, "EE 212", ""),
+        ("ENGG 114", "Basic Occupational Safety and Health", 3, 3, 0, "", ""),
+        ("MATH 104", "Numerical Methods", 3, 3, 0, "Math 103", ""),
+        ("AI 102", "Probability and Statistics for AI", 3, 3, 0, "MATH 102", ""),
+        ("PATHFit 4", "Choice of Dance, Sports, Martial Arts, Group Exercise, Outdoor, and Adventure Activities 2", 2, 2, 0, "PATHFit 1 & 2", ""),
+    ]),
+    ("THIRD YEAR", "FIRST SEMESTER", 21, 16, 15, [
+        ("CpE 302", "Logic Circuits and Design", 4, 3, 3, "ECE 405", ""),
+        ("CpE 303", "Data Structures and Algorithms", 2, 0, 6, "CpE 205", ""),
+        ("CpE 304", "Introduction to Networks, Data and Digital Communications", 3, 2, 3, "ECE 405", "CpE 302"),
+        ("CpE 305", "Fundamentals of Mixed Signals and Sensors", 3, 3, 0, "ECE 405", ""),
+        ("CpE 306", "Feedback and Control Systems", 3, 3, 0, "CpE 206; EE 212", ""),
+        ("ENGG 116", "Methods of Research", 3, 3, 0, "AI 102, 3rd Year Standing", ""),
+        ("CpEE 402", "Elective Course 2", 3, 2, 3, "CpEE 402", ""),
+    ]),
+    ("THIRD YEAR", "SECOND SEMESTER", 23, 17, 18, [
+        ("CpE 308", "Microprocessors", 4, 3, 3, "CpE 302", ""),
+        ("CpE 309", "Software Design", 4, 3, 3, "CpE 303", ""),
+        ("CpE 310", "Digital Signal Processing", 4, 3, 3, "CpE 305; CpE 306", ""),
+        ("CpE 311", "Computer Architecture and Organization", 4, 3, 3, "", "CpE 308"),
+        ("CpE 312", "Connecting Networks and Security", 4, 3, 3, "CpE 304", ""),
+        ("AI 103", "Machine Learning and Neural Networks", 3, 2, 3, "AI 101, AI 102, CpE 101", ""),
+    ]),
+    ("THIRD YEAR", "MIDTERM", 5, 3, 6, [
+        ("CpE 313", "Introduction to HDL", 1, 0, 3, "CpE 203, CpE 302", ""),
+        ("CpE 314", "Emerging Technologies in CpE", 3, 3, 0, "3rd Year Standing", ""),
+        ("CpE 315", "Computer Engineering Drafting and Design", 1, 0, 3, "ECE 405", ""),
+    ]),
+    ("FOURTH YEAR", "FIRST SEMESTER", 18, 13, 15, [
+        ("CpE 401", "Operating Systems", 3, 3, 0, "CpE 303", ""),
+        ("CpE 402", "Embedded Systems", 4, 3, 3, "CpE 308", ""),
+        ("CpE 403", "Seminars and Fieldtrips", 2, 0, 6, "4th Year Standing", ""),
+        ("CpE 404", "CpE Practice and Design 1", 1, 0, 3, "ENGG 116, CpE 308", ""),
+        ("ENGG 106", "Engineering Management", 2, 2, 0, "4th Year Standing", ""),
+        ("ENGG 105", "Technopreneurship", 3, 3, 0, "4th Year Standing", ""),
+        ("CpEE 403", "Elective Course 3", 3, 2, 3, "CpEE 403", ""),
+    ]),
+    ("FOURTH YEAR", "SECOND SEMESTER", 8, 0, 12, [
+        ("ENGG 117", "OJT/Internship (320 hrs)", 4, "320 hrs", "—", "4th Year Standing", ""),
+        ("CpE 405", "CpE Practice and Design 2", 2, 0, 6, "CpE 404", ""),
+        ("CpE 406", "Comprehensive Examination for CpE", 2, 0, 6, "Graduating", ""),
+    ]),
+]
+
+# Times New Roman = Times-Roman in reportlab; Arial = Helvetica for sans-serif
+def _cell_style():
+    """Table cell style: Times New Roman, size 10, for course tables."""
+    styles = getSampleStyleSheet()
+    return ParagraphStyle(
+        name="Cell",
+        parent=styles["Normal"],
+        fontName="Times-Roman",
+        fontSize=10,
+        leading=11,
+        wordWrap="CJK",
+        leftIndent=0,
+        rightIndent=0,
+    )
+
+
+def _header_cell_style():
+    """Centered bold style for column headers so they fit and center in each column."""
+    styles = getSampleStyleSheet()
+    return ParagraphStyle(
+        name="HeaderCell",
+        parent=styles["Normal"],
+        fontName="Times-Bold",
+        fontSize=10,
+        alignment=1,  # TA_CENTER
+        wordWrap="CJK",
+        leftIndent=0,
+        rightIndent=0,
+    )
+
+
+def _cell_style_center():
+    """Table cell style for Prerequisite/Co-requisite columns: centered text."""
+    styles = getSampleStyleSheet()
+    return ParagraphStyle(
+        name="CellCenter",
+        parent=styles["Normal"],
+        fontName="Times-Roman",
+        fontSize=10,
+        leading=11,
+        alignment=1,  # CENTER
+        wordWrap="CJK",
+        leftIndent=0,
+        rightIndent=0,
+    )
+
+
+def _resolve_logo_path(logo_path):
+    """Return an absolute path to the logo file, or None. Tries fallback relative to this module."""
+    if logo_path:
+        p = os.path.abspath(os.path.normpath(str(logo_path)))
+        if os.path.isfile(p):
+            return p
+    # Fallback: static/img/BSU_Logo.png next to this file's directory (project root)
+    _root = os.path.dirname(os.path.abspath(__file__))
+    fallback = os.path.join(_root, "static", "img", "BSU_Logo.png")
+    if os.path.isfile(fallback):
+        return fallback
+    return None
+
+
+def _logo_image(logo_path, max_width=1.1 * inch, max_height=1.1 * inch):
+    """Return a platypus Image with aspect ratio preserved, or None if invalid."""
+    path = _resolve_logo_path(logo_path)
+    if not path:
+        return None
+    try:
+        reader = ImageReader(path)
+        iw, ih = reader.getSize()
+        if iw <= 0:
+            return None
+        scale = min(max_width / float(iw), max_height / float(ih), 1.0)
+        w, h = iw * scale, ih * scale
+        return Image(path, width=w, height=h)
+    except Exception:
+        return None
+
+
+def _header_flowables(logo_path=None):
+    """
+    BSU header: logo (if path given) + centered text, or centered text only.
+    - Republic of the Philippines: Times New Roman 12
+    - The National Engineering University: Arial 16 red
+    - Alangilan Campus: Times 12
+    - Address + Tel: Times 10
+    - E-mail line: Times 10, email in blue
+    - Curriculum block: Times 12
+    """
+    styles = getSampleStyleSheet()
+    normal = styles["Normal"]
+    # Republic of the Philippines - Times 12, centered
+    p_republic = ParagraphStyle(
+        name="Republic",
+        parent=normal,
+        alignment=1,
+        fontName="Times-Roman",
+        fontSize=12,
+        spaceAfter=2,
+    )
+    # BATANGAS STATE UNIVERSITY - Times 12 bold, centered (user didn't specify; keep professional)
+    p_bsu = ParagraphStyle(
+        name="BSU",
+        parent=normal,
+        alignment=1,
+        fontName="Times-Bold",
+        fontSize=12,
+        spaceAfter=2,
+    )
+    # The National Engineering University - Arial bold, red, a bit smaller
+    p_national = ParagraphStyle(
+        name="National",
+        parent=normal,
+        alignment=1,
+        fontName="Helvetica-Bold",
+        fontSize=9,
+        textColor=colors.HexColor("#CC0000"),
+        spaceAfter=2,
+    )
+    # Alangilan Campus - Times 12
+    p_campus = ParagraphStyle(
+        name="Campus",
+        parent=normal,
+        alignment=1,
+        fontName="Times-Roman",
+        fontSize=12,
+        spaceAfter=2,
+    )
+    # Address + Tel - Times 10
+    p_address = ParagraphStyle(
+        name="Address",
+        parent=normal,
+        alignment=1,
+        fontName="Times-Roman",
+        fontSize=10,
+        spaceAfter=1,
+    )
+    # E-mail line: Times 10, with email in blue
+    email_para = Paragraph(
+        'E-mail Address: <font color="blue">coe.alangilan@g.batstate-u.edu.ph</font> | Website Address: http://www.batstate-u.edu.ph',
+        ParagraphStyle(
+            name="Email",
+            parent=normal,
+            alignment=1,
+            fontName="Times-Roman",
+            fontSize=10,
+            spaceAfter=6,
+        )
+    )
+    # College of Engineering - Times 12 bold, left
+    p_college = ParagraphStyle(
+        name="College",
+        parent=normal,
+        alignment=0,
+        fontName="Times-Bold",
+        fontSize=12,
+        spaceAfter=4,
+    )
+    # Curriculum block - all Times 12 centered, line spacing 1.15
+    p_curriculum = ParagraphStyle(
+        name="Curriculum",
+        parent=normal,
+        alignment=1,
+        fontName="Times-Roman",
+        fontSize=12,
+        leading=12 * 1.15,  # line spacing 1.15
+        spaceAfter=2,
+    )
+    p_curriculum_bold = ParagraphStyle(
+        name="CurriculumBold",
+        parent=normal,
+        alignment=1,
+        fontName="Times-Bold",
+        fontSize=12,
+        leading=12 * 1.15,  # line spacing 1.15
+        spaceAfter=4,
+    )
+
+    # Page header (logo + school text + line + College of Engineering) is drawn on every page via canvas.
+    # These are the flowables that should appear under the header on the first page.
+    return [
+        Paragraph("CURRICULUM<br/>BACHELOR OF SCIENCE IN COMPUTER ENGINEERING", p_curriculum_bold),
+        Paragraph(
+            "Reference CMOs: CMO No. 87 s. 2017, CMO No. 4 s. 2018 and CMO No. 20,<br/>"
+            "s. 2013, CMO 39, s. 2021, CMO 40, s. 2021",
+            p_curriculum,
+        ),
+        Spacer(1, 0.08 * inch),
+        Paragraph("BS COMPUTER ENGINEERING<br/>PROGRAM OF STUDY<br/>EVALUATION", p_curriculum_bold),
+        Spacer(1, 0.12 * inch),
+    ]
+
+
+def _draw_logo_on_canvas(canvas, logo_path, max_w=1.25 * inch, max_h=1.25 * inch):
+    """Draw logo in top-left of first page; no layout space. Preserve aspect ratio."""
+    path = _resolve_logo_path(logo_path)
+    if not path:
+        return
+    try:
+        reader = ImageReader(path)
+        iw, ih = reader.getSize()
+        if iw <= 0:
+            return
+        scale = min(max_w / float(iw), max_h / float(ih), 1.0)
+        w, h = iw * scale, ih * scale
+        x = 0.65 * inch
+        y = legal[1] - 0.35 * inch - h  # a bit higher
+        canvas.saveState()
+        canvas.drawImage(path, x, y, width=w, height=h)
+        canvas.restoreState()
+    except Exception:
+        pass
+
+
+def _footer_canvas(canvas, doc):
+    """Draw slogan at bottom of each page: italic, bold, bigger font, Arial (Helvetica)."""
+    canvas.saveState()
+    canvas.setFillColor(colors.HexColor("#CC0000"))  # same red as "The National Engineering University"
+    canvas.setFont("Helvetica-BoldOblique", 12)  # Arial bold italic, bigger
+    canvas.drawCentredString(legal[0] / 2, 0.4 * inch, "Leading Innovations, Transforming Lives, Building the Nation")
+    canvas.restoreState()
+
+
+def _page_header_canvas(canvas, logo_path):
+    """Draw repeating header at top of every page (keeps original colors, incl. blue email)."""
+    canvas.saveState()
+    left = 0.5 * inch
+    right = legal[0] - 0.5 * inch
+    width = right - left
+
+    # Draw logo (kept separate so header text stays centered)
+    _draw_logo_on_canvas(canvas, logo_path)
+
+    # Build header paragraphs (same look as your original header)
+    styles = getSampleStyleSheet()
+    normal = styles["Normal"]
+    p_republic = ParagraphStyle("HdrRepublic", parent=normal, alignment=1, fontName="Times-Roman", fontSize=12, leading=12, spaceAfter=2)
+    p_bsu = ParagraphStyle("HdrBSU", parent=normal, alignment=1, fontName="Times-Bold", fontSize=12, leading=12, spaceAfter=2)
+    p_national = ParagraphStyle("HdrNational", parent=normal, alignment=1, fontName="Helvetica-Bold", fontSize=9, leading=10, textColor=colors.HexColor("#CC0000"), spaceAfter=2)
+    p_campus = ParagraphStyle("HdrCampus", parent=normal, alignment=1, fontName="Times-Roman", fontSize=12, leading=12, spaceAfter=2)
+    p_address = ParagraphStyle("HdrAddress", parent=normal, alignment=1, fontName="Times-Roman", fontSize=10, leading=11, spaceAfter=1)
+    p_email = ParagraphStyle("HdrEmail", parent=normal, alignment=1, fontName="Times-Roman", fontSize=10, leading=11, spaceAfter=6)
+
+    header_flow = [
+        Paragraph("Republic of the Philippines", p_republic),
+        Paragraph("BATANGAS STATE UNIVERSITY", p_bsu),
+        Paragraph("The National Engineering University", p_national),
+        Paragraph("Alangilan Campus", p_campus),
+        Paragraph(
+            "Golden Country Homes, Alangilan Batangas City, Batangas, Philippines 4200<br/>"
+            "Tel Nos.: (+63 43) 425-0139 local 2121 / 2221",
+            p_address,
+        ),
+        Paragraph(
+            'E-mail Address: <u><font color="blue">coe.alangilan@g.batstate-u.edu.ph</font></u> | '
+            'Website Address: http://www.batstate-u.edu.ph',
+            p_email,
+        ),
+    ]
+
+    # Lay out from near top downwards
+    y = legal[1] - 0.55 * inch
+    for para in header_flow:
+        w, h = para.wrap(width, 10 * inch)
+        y -= h
+        para.drawOn(canvas, left, y)
+
+    # Horizontal line (thin) aligned to margins
+    y -= 4
+    canvas.setLineWidth(0.5)
+    canvas.setStrokeColor(colors.black)
+    canvas.line(left, y, right, y)
+
+    # College of Engineering (left, bold)
+    y -= 14
+    canvas.setFont("Times-Bold", 12)
+    canvas.setFillColor(colors.black)
+    canvas.drawString(left, y, "College of Engineering")
+    canvas.restoreState()
+
+
+def build_pos_pdf(student_name, sr_code, academic_year, grades_dict, eval_date=None, logo_path=None):
+    """
+    Build POS PDF with structured design: header (with optional BSU logo), student info table, course tables, footer.
+    logo_path: optional path to BSU logo image (e.g. static/img/BSU_Logo.png).
+    """
+    if eval_date is None:
+        eval_date = date.today()
+    date_str = eval_date.strftime("%B %d, %Y")
+
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=legal,
+        leftMargin=0.5 * inch,
+        rightMargin=0.5 * inch,
+        topMargin=2.15 * inch,  # reserve space for repeated page header (reduced to remove gap)
+        bottomMargin=1.0 * inch,  # more space above footer
+    )
+
+    styles = getSampleStyleSheet()
+    normal = styles["Normal"]
+    cell_style = _cell_style()
+    cell_style_center = _cell_style_center()
+    header_cell_style = _header_cell_style()
+    # Semester section titles - Times 10 bold (table-area styling)
+    section_line1 = ParagraphStyle(
+        name="Section1",
+        parent=normal,
+        fontSize=10,
+        fontName="Times-Bold",
+        spaceAfter=0,
+        spaceBefore=12,
+    )
+    section_line2 = ParagraphStyle(
+        name="Section2",
+        parent=normal,
+        fontSize=10,
+        fontName="Times-Bold",
+        alignment=1,
+        spaceAfter=6,
+        spaceBefore=0,
+    )
+    evaluated_style = ParagraphStyle(
+        name="Evaluated",
+        parent=normal,
+        fontName="Times-Roman",
+        fontSize=10,
+        alignment=2,  # RIGHT
+        spaceAfter=14,
+        spaceBefore=10,  # extra space above "Evaluated by"
+    )
+    # Bottom-left block on last page: Checked and Reviewed / Approved by
+    sign_style = ParagraphStyle(
+        name="SignLabel",
+        parent=normal,
+        fontName="Times-Roman",
+        fontSize=10,
+        alignment=0,  # LEFT
+        spaceAfter=2,
+        spaceBefore=6,
+    )
+    sign_name_style = ParagraphStyle(
+        name="SignName",
+        parent=normal,
+        fontName="Times-Bold",
+        fontSize=10,
+        alignment=0,
+        spaceAfter=0,
+        spaceBefore=0,
+    )
+
+    story = []
+    story.extend(_header_flowables(logo_path))
+
+    # Student info: 4-column table; total 7.2 inch
+    info_cols = [
+        0.84 * inch,   # Name: / SR-code: labels
+        3.50 * inch,   # name / sr-code value
+        1.24 * inch,   # Date: / Academic Year: labels
+        1.62 * inch,   # date / academic year value
+    ]
+    info_data = [
+        ["Name:", (student_name or "—"), "Date:", date_str],
+        ["SR-code:", (sr_code or "—"), "Academic Year:", (academic_year or "—")],
+    ]
+    info_tbl = Table(info_data, colWidths=info_cols)
+    info_tbl.setStyle(
+        TableStyle([
+            ("FONTNAME", (0, 0), (-1, -1), "Times-Roman"),
+            ("FONTSIZE", (0, 0), (-1, -1), 11),
+            ("BOX", (0, 0), (-1, -1), 0.5, colors.black),
+            ("INNERGRID", (0, 0), (-1, -1), 0.5, colors.black),
+            ("LEFTPADDING", (0, 0), (-1, -1), 8),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+            ("TOPPADDING", (0, 0), (-1, -1), 5),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ])
+    )
+    story.append(info_tbl)
+    story.append(Spacer(1, 0.25 * inch))
+
+    # Column widths: total 7.2 inch
+    col_widths = [
+        0.88 * inch,   # Course Code
+        2.35 * inch,   # Course Title (shorter so Co-requisite(s) fits one line)
+        0.57 * inch,   # Credit Units
+        0.39 * inch,   # Lec
+        0.39 * inch,   # Lab
+        1.08 * inch,   # Prerequisite(s)
+        1.01 * inch,   # Co-requisite(s) - one line
+        0.53 * inch,   # Grade
+    ]
+    # Sum = 7.2 inch
+
+    for title1, title2, total_units, lec_total, lab_total, rows in POS_CURRICULUM:
+        # Year and semester as title rows inside the table (like attached photo: beige year, grey semester)
+        title_year_para = Paragraph("<b>" + title1 + "</b>", ParagraphStyle(
+            name="YearTitle", parent=normal, alignment=1, fontName="Times-Bold", fontSize=10,
+        ))
+        title_sem_para = Paragraph("<b>" + title2 + "</b>", ParagraphStyle(
+            name="SemTitle", parent=normal, alignment=1, fontName="Times-Bold", fontSize=10,
+        ))
+        # Row 0: FIRST YEAR (spans all cols), Row 1: SECOND SEMESTER (spans all cols), then header row, data, total
+        table_data = [
+            [title_year_para] + [""] * (len(col_widths) - 1),
+            [title_sem_para] + [""] * (len(col_widths) - 1),
+            [
+                Paragraph("Course Code", header_cell_style),
+                Paragraph("Course Title", header_cell_style),
+                Paragraph("Credit Units", header_cell_style),
+                Paragraph("Lec", header_cell_style),
+                Paragraph("Lab", header_cell_style),
+                Paragraph("Prerequisite(s)", header_cell_style),
+                Paragraph("Co-requisite(s)", header_cell_style),
+                Paragraph("Grade", header_cell_style),
+            ],
+        ]
+        for code, title, units, lec, lab, prereq, coreq in rows:
+            grade = (grades_dict or {}).get(code, "").strip() or ""
+            table_data.append([
+                Paragraph(code.replace("&", "&amp;"), cell_style),
+                Paragraph(title.replace("&", "&amp;"), cell_style),
+                str(units),
+                str(lec),
+                str(lab),
+                Paragraph(prereq.replace("&", "&amp;") or " ", cell_style_center),
+                Paragraph(coreq.replace("&", "&amp;") or " ", cell_style_center),
+                grade,
+            ])
+        # Total row: total units, lec total, lab total in the three columns
+        table_data.append(["Total", "", str(total_units), str(lec_total), str(lab_total), "", "", ""])
+
+        t = Table(table_data, colWidths=col_widths, repeatRows=0)
+        ncols = len(col_widths)
+        t.setStyle(
+            TableStyle([
+                # Year title row (0): span all columns, beige background, centered, bold
+                ("SPAN", (0, 0), (ncols - 1, 0)),
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F5F5DC")),
+                ("ALIGN", (0, 0), (-1, 0), "CENTER"),
+                ("VALIGN", (0, 0), (-1, 0), "MIDDLE"),
+                ("FONTNAME", (0, 0), (-1, 0), "Times-Bold"),
+                ("TOPPADDING", (0, 0), (-1, 0), 5),
+                ("BOTTOMPADDING", (0, 0), (-1, 0), 5),
+                # Semester title row (1): span all columns, light grey background, centered, bold
+                ("SPAN", (0, 1), (ncols - 1, 1)),
+                ("BACKGROUND", (0, 1), (-1, 1), colors.HexColor("#E0E0E0")),
+                ("ALIGN", (0, 1), (-1, 1), "CENTER"),
+                ("VALIGN", (0, 1), (-1, 1), "MIDDLE"),
+                ("FONTNAME", (0, 1), (-1, 1), "Times-Bold"),
+                ("TOPPADDING", (0, 1), (-1, 1), 5),
+                ("BOTTOMPADDING", (0, 1), (-1, 1), 5),
+                # Column header row (2): centered, fit to column, no background
+                ("FONTNAME", (0, 2), (-1, 2), "Times-Bold"),
+                ("ALIGN", (0, 2), (-1, 2), "CENTER"),
+                ("LINEABOVE", (0, 0), (-1, 0), 0.5, colors.black),
+                ("LINEBELOW", (0, 0), (-1, 0), 0.5, colors.black),
+                ("LINEBELOW", (0, 1), (-1, 1), 0.5, colors.black),
+                ("LINEABOVE", (0, 2), (-1, 2), 0.5, colors.black),
+                ("LINEBELOW", (0, 2), (-1, 2), 0.5, colors.black),
+                # All body and total
+                ("FONTNAME", (0, 0), (-1, -1), "Times-Roman"),
+                ("FONTSIZE", (0, 0), (-1, -1), 10),
+                ("LINEBELOW", (0, -1), (-1, -1), 0.5, colors.black),
+                ("LINEABOVE", (0, -1), (-1, -1), 0.5, colors.black),
+                ("BOX", (0, 0), (-1, -1), 0.5, colors.black),
+                ("INNERGRID", (0, 2), (-1, -1), 0.5, colors.black),
+                # Center Units, Lec, Lab, Prerequisite(s), Co-requisite(s), Grade (cols 2,3,4,5,6,7)
+                ("ALIGN", (2, 2), (4, -1), "CENTER"),
+                ("ALIGN", (5, 2), (6, -1), "CENTER"),
+                ("ALIGN", (7, 2), (7, -1), "CENTER"),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 4),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+                ("TOPPADDING", (0, 2), (-1, -1), 3),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+                ("FONTNAME", (0, -1), (-1, -1), "Times-Bold"),
+            ])
+        )
+        story.append(t)
+        story.append(Paragraph("Evaluated by: ______________________________", evaluated_style))
+
+    # Last page bottom left: Checked and Reviewed / Approved by
+    story.append(Spacer(1, 0.4 * inch))
+    story.append(Paragraph("Checked and Reviewed:", sign_style))
+    story.append(Paragraph("<b>Engr. MARK JOHN FEL T. RAYOS</b>", sign_name_style))
+    story.append(Paragraph("Program Chair, CpE Program", sign_style))
+    story.append(Paragraph("Date:", sign_style))
+    story.append(Spacer(1, 0.12 * inch))
+    story.append(Paragraph("Approved by:", sign_style))
+    story.append(Paragraph("<b>Engr. RICMART V. GARBIN</b>", sign_name_style))
+    story.append(Paragraph("Department Chair, EE Department", sign_style))
+    story.append(Paragraph("Date:", sign_style))
+
+    def page_canvas(canvas, doc):
+        _page_header_canvas(canvas, logo_path)
+        _footer_canvas(canvas, doc)
+
+    doc.build(story, onFirstPage=page_canvas, onLaterPages=page_canvas)
+    buffer.seek(0)
+    return buffer.getvalue()

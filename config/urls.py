@@ -27,7 +27,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE_DIR))
 
 from views import (
-    pos_main, pos_home, pos_generate, pos_preview,
+    pos_main, pos_home, pos_generate, pos_preview, download_pos_pdf,
     pos_history, pos_about, login_view, register_view, sign_out,
     contact_us, help_page, save_pos_grades, set_academic_term, delete_pos_record
 )
@@ -42,6 +42,7 @@ urlpatterns = [
     path('generate/', pos_generate, name='pos_generate'),
     path('generate/save-grades/', save_pos_grades, name='save_pos_grades'),
     path('preview/', pos_preview, name='pos_preview'),
+    path('preview/download-pdf/', download_pos_pdf, name='download_pos_pdf'),
     path('history/<int:record_id>/delete/', delete_pos_record, name='delete_pos_record'),
     path('history/', pos_history, name='pos_history'),
     path('about/', pos_about, name='pos_about'),

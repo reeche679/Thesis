@@ -361,13 +361,13 @@
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link {% block nav_generate_active %}{% endblock %}" href="{% if has_academic_term %}{% url 'pos_generate' %}{% else %}{% url 'pos_home' %}?required=1{% endif %}">
+                        <a class="nav-link {% block nav_generate_active %}{% endblock %}" href="{% if has_complete_info %}{% url 'pos_generate' %}{% else %}{% url 'pos_home' %}?required=1{% endif %}">
                             <i class="bi bi-journal-plus"></i>
                             Generate POS
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link {% block nav_preview_active %}{% endblock %}" href="{% if has_academic_term %}{% url 'pos_preview' %}{% else %}{% url 'pos_home' %}?required=1{% endif %}">
+                        <a class="nav-link {% block nav_preview_active %}{% endblock %}" href="{% if has_complete_info %}{% url 'pos_preview' %}{% else %}{% url 'pos_home' %}?required=1{% endif %}">
                             <i class="bi bi-eye-fill"></i>
                             Preview POS
                         </a>

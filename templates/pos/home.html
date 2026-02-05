@@ -175,14 +175,11 @@
     <div class="pos-card p-4 home-academic-term">
         <div class="home-term-bsu-logo" aria-hidden="true"></div>
         <div class="home-term-content">
-            <div class="border border-danger rounded py-2 px-3 mb-3 bg-danger bg-opacity-10">
-                <p class="text-danger small fw-semibold mb-0">Complete your information before proceeding</p>
-            </div>
             <div class="pos-section-title mb-3">Current Academic Term</div>
 
-            {% if required_term %}
-            <div class="alert alert-warning py-2 mb-3 small" role="alert">
-                Please select Academic Year, Semester, and Year Level below, then click <strong>Continue</strong> to access Generate POS and Preview.
+            {% if not has_complete_info %}
+            <div class="alert alert-warning small mb-3" role="alert">
+                Complete your information before proceeding. Upload your <strong>photo</strong> above and select Academic Year, Semester, and Year Level below, then click <strong>Continue</strong> to start generating.
             </div>
             {% endif %}
 
@@ -218,14 +215,14 @@
                     </select>
                 </div>
 
-                {% if has_academic_term %}
-                <button type="submit" class="btn btn-outline-primary btn-sm mb-3">Update term</button>
-                {% else %}
-                <button type="submit" class="btn btn-primary btn-sm mb-3">Continue</button>
-                {% endif %}
+            {% if has_academic_term %}
+            <button type="submit" class="btn btn-outline-primary btn-sm mb-3">Update term</button>
+            {% else %}
+            <button type="submit" class="btn btn-primary btn-sm mb-3">Continue</button>
+            {% endif %}
             </form>
 
-            {% if has_academic_term %}
+            {% if has_complete_info %}
 
             <hr>
 
@@ -241,11 +238,11 @@
                     Preview Latest POS
                 </a>
             </div>
-            {% else %}
-            <p class="small text-muted mb-0">
-                Select Academic Year, Semester, and Year Level above and click <strong>Continue</strong> to enable Generate POS and Preview.
-            </p>
-            {% endif %}
+        {% else %}
+        <p class="small text-muted mb-0">
+            Upload your photo above and select Academic Year, Semester, and Year Level, then click <strong>Continue</strong> to enable Generate POS and Preview.
+        </p>
+        {% endif %}
         </div>
     </div>
 </div>
