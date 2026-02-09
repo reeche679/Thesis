@@ -5,7 +5,6 @@
 
 {% block extra_head %}
 <style>
-    /* Override base styles for register page */
     body {
         background: url('{% static "img/BSU_Background.jpg" %}') no-repeat center center fixed;
         background-size: cover;
@@ -23,7 +22,6 @@
         overflow-y: auto;
     }
 
-    /* Hide default header, navbar, and footer – remove any top gap */
     .pos-sticky-header-wrapper,
     header.pos-header-bar,
     nav.pos-navbar,
@@ -31,7 +29,6 @@
         display: none !important;
     }
 
-    /* Remove default main padding and top gap */
     .pos-main {
         padding: 0 !important;
         margin: 0;
@@ -42,7 +39,6 @@
         overflow-y: auto;
     }
 
-    /* Outer card - same as main.html */
     .outer-card {
         position: relative;
         z-index: 1;
@@ -60,7 +56,6 @@
         flex-direction: column;
     }
 
-    /* Header image */
     .header-image {
         width: 100%;
         height: auto;
@@ -70,7 +65,6 @@
         flex-shrink: 0;
     }
 
-    /* Content area */
     .content-area {
         position: relative;
         flex: 1;
@@ -81,7 +75,6 @@
         overflow-y: auto;
     }
 
-    /* Inner card */
     .inner-card {
         position: relative;
         z-index: 3;
@@ -187,20 +180,15 @@
     }
 </style>
 <script>
-    // Restrict name fields to letters and spaces only
     document.addEventListener('DOMContentLoaded', function() {
         const nameFields = ['first_name', 'middle_name', 'last_name'];
-        
         nameFields.forEach(function(fieldId) {
             const field = document.getElementById(fieldId);
             if (field) {
                 field.addEventListener('input', function(e) {
-                    // Remove any characters that are not letters or spaces
                     this.value = this.value.replace(/[^a-zA-Z\s]/g, '');
                 });
-                
                 field.addEventListener('keypress', function(e) {
-                    // Prevent typing numbers and symbols
                     const char = String.fromCharCode(e.which);
                     if (!/[a-zA-Z\s]/.test(char)) {
                         e.preventDefault();
@@ -209,31 +197,17 @@
             }
         });
 
-        // Restrict SR-Code to format ##-##### (auto-format)
         const srCodeField = document.getElementById('sr_code');
         if (srCodeField) {
             srCodeField.setAttribute('maxlength', '8');
-
             srCodeField.addEventListener('input', function () {
-                // Keep only digits
                 let value = this.value.replace(/[^0-9]/g, '');
-
-                // Limit to 7 digits (2 + 5)
-                if (value.length > 7) {
-                    value = value.substring(0, 7);
-                }
-
-                // Auto-add dash after 2 digits
-                if (value.length > 2) {
-                    value = value.substring(0, 2) + '-' + value.substring(2);
-                }
-
+                if (value.length > 7) value = value.substring(0, 7);
+                if (value.length > 2) value = value.substring(0, 2) + '-' + value.substring(2);
                 this.value = value;
             });
-
             srCodeField.addEventListener('keypress', function (e) {
                 const char = String.fromCharCode(e.which);
-                // Only allow numbers and navigation keys
                 if (!/[0-9]/.test(char) &&
                     e.which !== 8 &&  // backspace
                     e.which !== 46 && // delete
@@ -244,9 +218,6 @@
             });
         }
 
-        // Valid BSU email: ##-#####@g.batstate-u.edu.ph
-        const EMAIL_REGEX = /^\d{2}-\d{5}@g\.batstate-u\.edu\.ph$/;
-        // Complete SR-Code: ##-##### (2 digits, dash, 5 digits)
         const SR_CODE_REGEX = /^\d{2}-\d{5}$/;
 
         function isPasswordStrong(pw) {
@@ -257,7 +228,6 @@
             return true;
         }
 
-        // Prevent Create Account if any field is empty or invalid
         const createAccountBtn = document.getElementById('create-account-btn');
         const registerForm = document.querySelector('form');
         if (createAccountBtn && registerForm) {
@@ -310,7 +280,6 @@
             });
         }
 
-        // Email: show @g.batstate-u.edu.ph inside the same field when user types SR code
         (function() {
             const emailLocalEl = document.getElementById('email_local');
             const emailSuffixEl = document.getElementById('email_suffix');
@@ -332,7 +301,6 @@
             document.getElementById('email-input-wrap').addEventListener('click', function() { emailLocalEl.focus(); });
         })();
 
-        // Password visibility toggle (eye icon)
         document.querySelectorAll('.password-toggle-btn').forEach(function(btn) {
             btn.addEventListener('click', function() {
                 const targetId = this.getAttribute('data-target');

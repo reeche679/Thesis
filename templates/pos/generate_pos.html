@@ -26,14 +26,12 @@
         padding: 0.15rem 1.1rem 0.15rem 0.4rem;
     }
 
-    /* Left-align dropdown options with left indent */
     .grade-select option {
         text-align: left;
         padding-left: 0.5rem;
         font-size: 0.8rem;
     }
 
-    /* Elective course cells - centered vertically but left-aligned text */
     .elective-course-cell {
         text-align: left;
         vertical-align: middle;
@@ -41,7 +39,6 @@
         color: #212529 !important;
     }
 
-    /* Course title cells in body rows - left-aligned, vertically centered */
     .course-title-cell {
         text-align: left;
         vertical-align: middle;
@@ -57,7 +54,6 @@
         white-space: nowrap;
     }
 
-    /* Column headers - slightly smaller so Pre-requisite(s) etc. fit; compact row (match Preview) */
     .table thead th {
         text-align: center;
         vertical-align: middle;
@@ -67,12 +63,10 @@
         padding-bottom: 0.35rem;
     }
 
-    /* Semester headings like \"Second Year - First Semester\" */
     .pos-card h6.fw-bold {
         text-align: center;
     }
 
-    /* Ensure all tables align consistently */
     .table-responsive {
         overflow-x: visible;
     }
@@ -82,7 +76,6 @@
         width: 100%;
     }
 
-    /* All columns - keep text inside column, no overflow; aligned with headers; compact rows (match Preview) */
     .table thead th,
     .table tbody td {
         min-width: 0;
@@ -99,7 +92,6 @@
         font-size: 0.9rem;
     }
 
-    /* Course Title (and elective) - left-aligned, wrap long text inside column */
     .table .course-title-cell,
     .table .elective-course-cell {
         text-align: left;
@@ -109,12 +101,10 @@
         font-size: 0.9rem !important;
     }
 
-    /* Lec and Lab - compact center */
     .table td:nth-child(4),
     .table td:nth-child(5) {
         font-size: 0.8rem;
     }
-    /* Pre-requisite(s) and Co-requisite(s) - show full text, wrap to multiple lines, smaller font */
     .table td:nth-child(6),
     .table td:nth-child(7) {
         white-space: normal;
@@ -127,7 +117,6 @@
         vertical-align: middle;
     }
 
-    /* Student photo – left of profile text (display only) */
     .generate-photo-box {
         width: 100px;
         height: 100px;
@@ -2125,7 +2114,6 @@
 {% block extra_scripts %}
 {{ saved_grades|json_script:"pos-saved-grades" }}
 <script>
-    // CSRF token for AJAX
     function getCookie(name) {
         var match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
         return match ? match[2] : null;
@@ -2141,7 +2129,6 @@
         return grades;
     }
 
-    // Save to server (per-user, persists across logins)
     function saveGradesToServer(grades, recordGenerated, done) {
         if (typeof recordGenerated === 'function') { done = recordGenerated; recordGenerated = false; }
         var payload = recordGenerated ? { grades: grades, generated: true } : grades;
@@ -2156,7 +2143,6 @@
         }).then(function(r) { return r.json(); }).then(function(data) { if (done) done(data); }).catch(function() { if (done) done({ ok: false }); });
     }
 
-    // Save to localStorage (same tab) and to server (debounced)
     var saveToServerTimer = null;
     function saveGradesToStorage() {
         const grades = collectGrades();
@@ -2178,7 +2164,6 @@
             }
         });
 
-        // Restore from server (per-user) so each account sees their own grades when they log in
         var serverGrades = {};
         try {
             var el = document.getElementById('pos-saved-grades');

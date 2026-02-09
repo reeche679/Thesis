@@ -10,7 +10,6 @@
 
 {% block extra_head %}
 <style>
-    /* Course title cells in body rows - left-aligned, vertically centered (match Generate page size) */
     .course-title-cell {
         text-align: left;
         vertical-align: middle;
@@ -18,7 +17,6 @@
         color: #212529 !important;
     }
 
-    /* Elective course cells - centered vertically but left-aligned text */
     .elective-course-cell {
         text-align: left;
         vertical-align: middle;
@@ -34,7 +32,6 @@
         white-space: nowrap;
     }
 
-    /* Column headers - slightly smaller so Pre-requisite(s) fits on one line (like Generate POS) */
     .table thead th {
         text-align: center;
         vertical-align: middle;
@@ -42,12 +39,10 @@
         white-space: nowrap;
     }
 
-    /* Semester headings like "Second Year - First Semester" */
     .pos-card h6.fw-bold {
         text-align: center;
     }
 
-    /* Ensure all tables align consistently */
     .table-responsive {
         overflow-x: visible;
     }
@@ -57,7 +52,6 @@
         width: 100%;
     }
 
-    /* All columns - keep text inside column, no overflow; aligned with headers (match Generate page size) */
     .table thead th,
     .table tbody td {
         min-width: 0;
@@ -72,7 +66,6 @@
         font-size: 0.9rem;
     }
 
-    /* Course Title (and elective) - left-aligned, wrap long text inside column */
     .table .course-title-cell,
     .table .elective-course-cell {
         text-align: left;
@@ -82,12 +75,10 @@
         font-size: 0.9rem !important;
     }
 
-    /* Lec and Lab - compact center */
     .table td:nth-child(4),
     .table td:nth-child(5) {
         font-size: 0.8rem;
     }
-    /* Pre-requisite(s) and Co-requisite(s) - show full text, wrap to multiple lines, smaller font */
     .table td:nth-child(6),
     .table td:nth-child(7) {
         white-space: normal;
@@ -100,12 +91,10 @@
         vertical-align: middle;
     }
 
-    /* Grade display cells */
     .grade-display {
         font-weight: 500;
     }
 
-    /* Student photo – left of profile text (display only, match Generate page) */
     .preview-photo-box {
         width: 100px;
         height: 100px;
@@ -1265,12 +1254,10 @@
 {% block extra_scripts %}
 {{ saved_grades|json_script:"preview-grades-data" }}
 <script>
-    // On page load, populate grades from current user's server data (not localStorage)
     document.addEventListener('DOMContentLoaded', function() {
         const gradesEl = document.getElementById('preview-grades-data');
         const grades = gradesEl ? JSON.parse(gradesEl.textContent) : {};
 
-        // Find all grade display cells and populate them
         const gradeCells = document.querySelectorAll('.grade-display');
         gradeCells.forEach(function(cell) {
             const row = cell.closest('tr');
@@ -1299,7 +1286,6 @@
             }
         });
 
-        // Find all remarks cells and populate them
         const remarksCells = document.querySelectorAll('.remarks-display');
         remarksCells.forEach(function(cell) {
             const row = cell.closest('tr');

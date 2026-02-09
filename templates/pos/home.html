@@ -43,7 +43,6 @@
         color: #555555;
     }
 
-    /* Upload photo box – left of student info */
     .home-photo-box {
         width: 120px;
         height: 120px;
@@ -78,7 +77,6 @@
         height: 100%;
     }
 
-    /* Student info card – BSU colored background (positioned to show upper part: sky, building top, logo) */
     .home-student-card {
         background: linear-gradient(rgba(255, 255, 255, 0.75), rgba(255, 255, 255, 0.75)),
                     url('{% static "img/BSU_colored_bg.jpg" %}') no-repeat center 25%;
@@ -87,7 +85,6 @@
         border: 1px solid #dee2e6;
     }
 
-    /* Reduce font sizes for Current Academic Term section */
     .home-academic-term .pos-section-title {
         font-size: 0.95rem;
         margin-bottom: 0.75rem;
@@ -105,7 +102,6 @@
         font-size: 0.9rem;
     }
 
-    /* BSU transparent logo behind text in Current Academic Term (no layout shift) */
     .home-academic-term {
         position: relative;
     }
@@ -129,7 +125,6 @@
 
 {% block content %}
 <div class="home-outer-card">
-    <!-- Top: Student Information and details -->
     <div class="pos-card home-student-card p-4 mb-4">
         <div class="pos-student-profile-inner">
         <div class="mb-3 d-flex justify-content-between align-items-center">
@@ -171,7 +166,6 @@
         </div>
     </div>
 
-    <!-- Bottom: Current Academic Term -->
     <div class="pos-card p-4 home-academic-term">
         <div class="home-term-bsu-logo" aria-hidden="true"></div>
         <div class="home-term-content">

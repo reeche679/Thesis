@@ -5,7 +5,6 @@
 
 {% block extra_head %}
 <style>
-    /* Override base styles for landing page */
     body {
         background: url('{% static "img/BSU_Background.jpg" %}') no-repeat center center fixed;
         background-size: cover;
@@ -15,7 +14,6 @@
         font-family: Arial, sans-serif;
     }
 
-    /* Hide default header, navbar, footer, and sticky wrapper on landing page */
     .pos-sticky-header-wrapper,
     header.pos-header-bar,
     nav.pos-navbar,
@@ -23,7 +21,6 @@
         display: none !important;
     }
 
-    /* Remove default main padding */
     .pos-main {
         padding: 0;
         height: 100vh;
@@ -32,7 +29,6 @@
         justify-content: center;
     }
 
-    /* Outer card - bigger, desktop-like, less rounded, full height to bottom */
     .outer-card {
         position: relative;
         z-index: 1;
@@ -49,7 +45,6 @@
         flex-direction: column;
     }
 
-    /* Header image */
     .header-image {
         width: 100%;
         height: auto;
@@ -57,7 +52,6 @@
         flex-shrink: 0;
     }
 
-    /* Content area - takes remaining space */
     .content-area {
         position: relative;
         flex: 1;
@@ -67,7 +61,6 @@
         padding: 40px 20px;
     }
 
-    /* Semi-transparent BSU logo - positioned in content area only, behind text */
     .bg-logo {
         position: absolute;
         top: 50%;
@@ -80,7 +73,6 @@
         pointer-events: none;
     }
 
-    /* Inner card - contains the content with gray outline box */
     .inner-card {
         position: relative;
         z-index: 3;
@@ -146,7 +138,6 @@
         text-decoration: underline;
     }
 
-    /* Main page popup modals – same style as Privacy Policy */
     #mainHelpModal .modal-dialog,
     #mainContactModal .modal-dialog {
         max-width: 560px;
@@ -208,19 +199,11 @@
 {% block footer %}{% endblock footer %}
 
 {% block content_container %}
-<!-- Override container for full-width landing page -->
 <div style="width: 100%; min-height: 100vh; position: relative;">
-    <!-- Outer card - bigger, desktop-like -->
     <div class="outer-card">
-        <!-- Header image -->
         <img src="{% static 'img/BSU_Header.png' %}" alt="BSU Header" class="header-image">
-        
-        <!-- Content area with logo and inner card -->
         <div class="content-area">
-            <!-- Semi-transparent BSU logo - above text, behind text -->
             <img src="{% static 'img/BSU_Logo.png' %}" alt="BSU Logo" class="bg-logo">
-
-            <!-- Inner card - contains the content with gray outline -->
             <div class="inner-card">
                 <p class="prompt">Choose an Option Below to Continue</p>
                 
@@ -240,7 +223,6 @@
     </div>
 </div>
 
-<!-- Need Help? popup – important info for new users only -->
 <div class="modal fade" id="mainHelpModal" tabindex="-1" aria-labelledby="mainHelpModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content">
@@ -262,7 +244,6 @@
     </div>
 </div>
 
-<!-- Contact Us popup – important contact info for new users only -->
 <div class="modal fade" id="mainContactModal" tabindex="-1" aria-labelledby="mainContactModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content">

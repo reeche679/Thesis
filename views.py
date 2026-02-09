@@ -14,7 +14,6 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 from django.utils import timezone
 from accounts.models import Student, StudentGrade, POSRecord
 
-# Validation (match frontend)
 SR_CODE_REGEX = re.compile(r'^\d{2}-\d{5}$')
 EMAIL_REGEX = re.compile(r'^\d{2}-\d{5}@g\.batstate-u\.edu\.ph$')
 
@@ -51,7 +50,6 @@ def _require_student(view_func):
     return wrapper
 
 
-# Academic term options (must complete on home before Generate/Preview)
 ACADEMIC_YEAR_CHOICES = [
     ('A.Y. 2025 – 2026', 'A.Y. 2025 – 2026'),
     ('A.Y. 2026 – 2027', 'A.Y. 2026 – 2027'),
@@ -188,14 +186,12 @@ def save_pos_grades(request):
         return JsonResponse({'ok': False, 'error': 'Invalid JSON'}, status=400)
     if not isinstance(data, dict):
         return JsonResponse({'ok': False, 'error': 'Expected object'}, status=400)
-    # Support both { course_code: grade, ... } and { grades: { ... }, generated?: true }
     if 'grades' in data:
         grades_dict = data.get('grades') or {}
         record_generated = data.get('generated') is True
     else:
         grades_dict = data
         record_generated = False
-    # Replace all grades for this student
     StudentGrade.objects.filter(student=student).delete()
     for course_code, grade in grades_dict.items():
         if course_code and grade:
@@ -204,7 +200,6 @@ def save_pos_grades(request):
         ay = request.session.get('academic_year') or ''
         sem = request.session.get('semester') or ''
         yl = request.session.get('year_level') or ''
-        # Snapshot grades for this POS so history download uses this version
         snapshot = {str(k).strip(): str(v).strip() for k, v in grades_dict.items() if k and v}
         POSRecord.objects.create(
             student=student,
@@ -214,12 +209,10 @@ def save_pos_grades(request):
             year_level=yl,
             grades_snapshot=snapshot,
         )
-        # Keep only the last N records per user to limit database growth
         _prune_old_pos_records(student)
     return JsonResponse({'ok': True})
 
 
-# Maximum POS history records kept per user (oldest are deleted when exceeded)
 MAX_POS_RECORDS_PER_USER = 50
 
 
@@ -356,7 +349,6 @@ def login_view(request):
             return render(request, "auth/login.html", {'error': 'Invalid SR-Code or password.'})
 
         request.session['student_id'] = student.pk
-        # Restore saved academic term and year level so they persist across sign-out / login
         if student.academic_year and student.semester:
             request.session['academic_year'] = student.academic_year
             request.session['semester'] = student.semester

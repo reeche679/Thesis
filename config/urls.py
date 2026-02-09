@@ -22,7 +22,6 @@ from django.views.generic import RedirectView
 import sys
 from pathlib import Path
 
-# Add project root to path to import views
 BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE_DIR))
 
@@ -34,9 +33,7 @@ from views import (
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    # Main Window (landing page)
     path('', pos_main, name='pos_main'),
-    # POS pages
     path('home/', pos_home, name='pos_home'),
     path('home/set-term/', set_academic_term, name='set_academic_term'),
     path('generate/', pos_generate, name='pos_generate'),
@@ -47,11 +44,9 @@ urlpatterns = [
     path('history/<int:record_id>/download-pdf/', download_pos_pdf_record, name='download_pos_pdf_record'),
     path('history/', pos_history, name='pos_history'),
     path('about/', pos_about, name='pos_about'),
-    # Auth pages
     path('login/', login_view, name='login'),
     path('register/', register_view, name='register'),
     path('signout/', sign_out, name='sign_out'),
-    # Support pages
     path('contact/', contact_us, name='contact_us'),
     path('help/', help_page, name='help'),
 ]

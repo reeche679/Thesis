@@ -7,7 +7,7 @@ from io import BytesIO
 from datetime import date
 
 from reportlab.lib import colors
-from reportlab.lib.pagesizes import legal  # legal bond, long (8.5" x 14")
+from reportlab.lib.pagesizes import legal
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from reportlab.lib.utils import ImageReader
@@ -105,7 +105,6 @@ POS_CURRICULUM = [
     ]),
 ]
 
-# Times New Roman = Times-Roman in reportlab; Arial = Helvetica for sans-serif
 def _cell_style():
     """Table cell style: Times New Roman, size 10, for course tables."""
     styles = getSampleStyleSheet()
@@ -165,7 +164,6 @@ def _resolve_logo_path(logo_path):
         p = os.path.abspath(os.path.normpath(str(logo_path)))
         if os.path.isfile(p):
             return p
-    # Fallback: static/img/BSU_Logo.png next to this file's directory (project root)
     _root = os.path.dirname(os.path.abspath(__file__))
     fallback = os.path.join(_root, "static", "img", "BSU_Logo.png")
     if os.path.isfile(fallback):
@@ -202,7 +200,6 @@ def _header_flowables(logo_path=None):
     """
     styles = getSampleStyleSheet()
     normal = styles["Normal"]
-    # Republic of the Philippines - Times 12, centered
     p_republic = ParagraphStyle(
         name="Republic",
         parent=normal,
@@ -211,7 +208,6 @@ def _header_flowables(logo_path=None):
         fontSize=12,
         spaceAfter=2,
     )
-    # BATANGAS STATE UNIVERSITY - Times 12 bold, centered (user didn't specify; keep professional)
     p_bsu = ParagraphStyle(
         name="BSU",
         parent=normal,
@@ -220,7 +216,6 @@ def _header_flowables(logo_path=None):
         fontSize=12,
         spaceAfter=2,
     )
-    # The National Engineering University - Arial bold, red, a bit smaller
     p_national = ParagraphStyle(
         name="National",
         parent=normal,
@@ -230,7 +225,6 @@ def _header_flowables(logo_path=None):
         textColor=colors.HexColor("#CC0000"),
         spaceAfter=2,
     )
-    # Alangilan Campus - Times 12
     p_campus = ParagraphStyle(
         name="Campus",
         parent=normal,
@@ -239,7 +233,6 @@ def _header_flowables(logo_path=None):
         fontSize=12,
         spaceAfter=2,
     )
-    # Address + Tel - Times 10
     p_address = ParagraphStyle(
         name="Address",
         parent=normal,
@@ -248,7 +241,6 @@ def _header_flowables(logo_path=None):
         fontSize=10,
         spaceAfter=1,
     )
-    # E-mail line: Times 10, with email in blue
     email_para = Paragraph(
         'E-mail Address: <font color="blue">coe.alangilan@g.batstate-u.edu.ph</font> | Website Address: http://www.batstate-u.edu.ph',
         ParagraphStyle(
@@ -260,7 +252,6 @@ def _header_flowables(logo_path=None):
             spaceAfter=6,
         )
     )
-    # College of Engineering - Times 12 bold, left
     p_college = ParagraphStyle(
         name="College",
         parent=normal,
@@ -269,7 +260,6 @@ def _header_flowables(logo_path=None):
         fontSize=12,
         spaceAfter=4,
     )
-    # Curriculum block - all Times 12 centered, line spacing 1.15
     p_curriculum = ParagraphStyle(
         name="Curriculum",
         parent=normal,
@@ -289,8 +279,6 @@ def _header_flowables(logo_path=None):
         spaceAfter=4,
     )
 
-    # Page header (logo + school text + line + College of Engineering) is drawn on every page via canvas.
-    # These are the flowables that should appear under the header on the first page.
     return [
         Paragraph("CURRICULUM<br/>BACHELOR OF SCIENCE IN COMPUTER ENGINEERING", p_curriculum_bold),
         Paragraph(
@@ -341,10 +329,7 @@ def _page_header_canvas(canvas, logo_path):
     right = legal[0] - 0.5 * inch
     width = right - left
 
-    # Draw logo (kept separate so header text stays centered)
     _draw_logo_on_canvas(canvas, logo_path)
-
-    # Build header paragraphs (same look as your original header)
     styles = getSampleStyleSheet()
     normal = styles["Normal"]
     p_republic = ParagraphStyle("HdrRepublic", parent=normal, alignment=1, fontName="Times-Roman", fontSize=12, leading=12, spaceAfter=2)
@@ -371,20 +356,17 @@ def _page_header_canvas(canvas, logo_path):
         ),
     ]
 
-    # Lay out from near top downwards
     y = legal[1] - 0.55 * inch
     for para in header_flow:
         w, h = para.wrap(width, 10 * inch)
         y -= h
         para.drawOn(canvas, left, y)
 
-    # Horizontal line (thin) aligned to margins
     y -= 4
     canvas.setLineWidth(0.5)
     canvas.setStrokeColor(colors.black)
     canvas.line(left, y, right, y)
 
-    # College of Engineering (left, bold)
     y -= 14
     canvas.setFont("Times-Bold", 12)
     canvas.setFillColor(colors.black)
@@ -407,8 +389,8 @@ def build_pos_pdf(student_name, sr_code, academic_year, grades_dict, eval_date=N
         pagesize=legal,
         leftMargin=0.5 * inch,
         rightMargin=0.5 * inch,
-        topMargin=2.15 * inch,  # reserve space for repeated page header (reduced to remove gap)
-        bottomMargin=1.0 * inch,  # more space above footer
+        topMargin=2.15 * inch,
+        bottomMargin=1.0 * inch,
     )
 
     styles = getSampleStyleSheet()
@@ -424,7 +406,6 @@ def build_pos_pdf(student_name, sr_code, academic_year, grades_dict, eval_date=N
         alignment=1,
         leading=9,
     )
-    # Semester section titles - Times 10 bold (table-area styling)
     section_line1 = ParagraphStyle(
         name="Section1",
         parent=normal,
@@ -451,7 +432,6 @@ def build_pos_pdf(student_name, sr_code, academic_year, grades_dict, eval_date=N
         spaceAfter=14,
         spaceBefore=10,  # extra space above "Evaluated by"
     )
-    # Bottom-left block on last page: Checked and Reviewed / Approved by
     sign_style = ParagraphStyle(
         name="SignLabel",
         parent=normal,
@@ -474,12 +454,11 @@ def build_pos_pdf(student_name, sr_code, academic_year, grades_dict, eval_date=N
     story = []
     story.extend(_header_flowables(logo_path))
 
-    # Student info: 4-column table; total 7.2 inch
     info_cols = [
-        0.84 * inch,   # Name: / SR-code: labels
-        3.50 * inch,   # name / sr-code value
-        1.24 * inch,   # Date: / Academic Year: labels
-        1.62 * inch,   # date / academic year value
+        0.84 * inch,
+        3.50 * inch,
+        1.24 * inch,
+        1.62 * inch,
     ]
     info_data = [
         ["Name:", (student_name or "—").upper(), "Date:", date_str],
@@ -502,30 +481,25 @@ def build_pos_pdf(student_name, sr_code, academic_year, grades_dict, eval_date=N
     story.append(info_tbl)
     story.append(Spacer(1, 0.25 * inch))
 
-    # Column widths: total 7.2 inch
     col_widths = [
-        0.88 * inch,   # Course Code
-        2.35 * inch,   # Course Title (shorter so Co-requisite(s) fits one line)
-        0.57 * inch,   # Credit Units
-        0.39 * inch,   # Lec
-        0.39 * inch,   # Lab
-        1.08 * inch,   # Prerequisite(s)
-        1.01 * inch,   # Co-requisite(s) - one line
-        0.53 * inch,   # Grade
+        0.88 * inch,
+        2.35 * inch,
+        0.57 * inch,
+        0.39 * inch,
+        0.39 * inch,
+        1.08 * inch,
+        1.01 * inch,
+        0.53 * inch,
     ]
-    # Sum = 7.2 inch
 
     for title1, title2, total_units, lec_total, lab_total, rows in POS_CURRICULUM:
-        # Year and semester as title rows inside the table (like attached photo: beige year, grey semester)
         title_year_para = Paragraph("<b>" + title1 + "</b>", ParagraphStyle(
             name="YearTitle", parent=normal, alignment=1, fontName="Times-Bold", fontSize=10,
         ))
         title_sem_para = Paragraph("<b>" + title2 + "</b>", ParagraphStyle(
             name="SemTitle", parent=normal, alignment=1, fontName="Times-Bold", fontSize=10,
         ))
-        # Row 0: Year (span all), Row 1: Semester (span all), Rows 2-3: two-row header so "No. of hour/s" is only above Lec and Lab
-        # Row 2: Course Code, Course Title, Credit Units (each span down); No. of hour/s (span Lec+Lab); Prereq, Coreq, Grade (each span down)
-        # Row 3: only Lec and Lab (other cells covered by row spans)
+        # Table: rows 0-1 = Year/Semester; rows 2-3 = two-row header (No. of hour/s only above Lec+Lab)
         table_data = [
             [title_year_para] + [""] * (len(col_widths) - 1),
             [title_sem_para] + [""] * (len(col_widths) - 1),
@@ -534,14 +508,13 @@ def build_pos_pdf(student_name, sr_code, academic_year, grades_dict, eval_date=N
                 Paragraph("Course Title", header_cell_style),
                 Paragraph("Credit Units", header_cell_style),
                 Paragraph("No. of hour/s", hours_header_style),
-                "",  # part of No. of hour/s span
+                "",
                 Paragraph("Prerequisite(s)", header_cell_style),
                 Paragraph("Co-requisite(s)", header_cell_style),
                 Paragraph("Grade", header_cell_style),
             ],
             ["", "", "", Paragraph("Lec", header_cell_style), Paragraph("Lab", header_cell_style), "", "", ""],
         ]
-        # Grade cell: show "5" / "5.00" in red
         def _grade_cell(grade_str):
             if not grade_str:
                 return grade_str
@@ -567,14 +540,12 @@ def build_pos_pdf(student_name, sr_code, academic_year, grades_dict, eval_date=N
                 Paragraph(_requisite_display_text(coreq).replace("&", "&amp;") or " ", cell_style_center),
                 _grade_cell(grade),
             ])
-        # Total row: total units, lec total, lab total in the three columns
         table_data.append(["Total", "", str(total_units), str(lec_total), str(lab_total), "", "", ""])
 
         t = Table(table_data, colWidths=col_widths, repeatRows=0)
         ncols = len(col_widths)
         t.setStyle(
             TableStyle([
-                # Year title row (0): span all columns, beige background, centered, bold
                 ("SPAN", (0, 0), (ncols - 1, 0)),
                 ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F5F5DC")),
                 ("ALIGN", (0, 0), (-1, 0), "CENTER"),
@@ -582,7 +553,6 @@ def build_pos_pdf(student_name, sr_code, academic_year, grades_dict, eval_date=N
                 ("FONTNAME", (0, 0), (-1, 0), "Times-Bold"),
                 ("TOPPADDING", (0, 0), (-1, 0), 5),
                 ("BOTTOMPADDING", (0, 0), (-1, 0), 5),
-                # Semester title row (1): span all columns, light grey background, centered, bold
                 ("SPAN", (0, 1), (ncols - 1, 1)),
                 ("BACKGROUND", (0, 1), (-1, 1), colors.HexColor("#E0E0E0")),
                 ("ALIGN", (0, 1), (-1, 1), "CENTER"),
@@ -590,14 +560,13 @@ def build_pos_pdf(student_name, sr_code, academic_year, grades_dict, eval_date=N
                 ("FONTNAME", (0, 1), (-1, 1), "Times-Bold"),
                 ("TOPPADDING", (0, 1), (-1, 1), 5),
                 ("BOTTOMPADDING", (0, 1), (-1, 1), 5),
-                # Two-row header (2-3): Course Code/Title/Units and Prereq/Coreq/Grade span 2 rows; "No. of hour/s" spans Lec+Lab only, with Lec/Lab below
-                ("SPAN", (0, 2), (0, 3)),   # Course Code
-                ("SPAN", (1, 2), (1, 3)),   # Course Title
-                ("SPAN", (2, 2), (2, 3)),   # Credit Units
-                ("SPAN", (3, 2), (4, 2)),   # No. of hour/s above Lec and Lab only
-                ("SPAN", (5, 2), (5, 3)),   # Prerequisite(s)
-                ("SPAN", (6, 2), (6, 3)),   # Co-requisite(s)
-                ("SPAN", (7, 2), (7, 3)),   # Grade
+                ("SPAN", (0, 2), (0, 3)),
+                ("SPAN", (1, 2), (1, 3)),
+                ("SPAN", (2, 2), (2, 3)),
+                ("SPAN", (3, 2), (4, 2)),
+                ("SPAN", (5, 2), (5, 3)),
+                ("SPAN", (6, 2), (6, 3)),
+                ("SPAN", (7, 2), (7, 3)),
                 ("FONTNAME", (0, 2), (-1, 3), "Times-Bold"),
                 ("ALIGN", (0, 2), (-1, 3), "CENTER"),
                 ("VALIGN", (0, 2), (-1, 3), "MIDDLE"),
@@ -606,14 +575,12 @@ def build_pos_pdf(student_name, sr_code, academic_year, grades_dict, eval_date=N
                 ("LINEBELOW", (0, 1), (-1, 1), 0.5, colors.black),
                 ("LINEABOVE", (0, 2), (-1, 2), 0.5, colors.black),
                 ("LINEBELOW", (0, 3), (-1, 3), 0.5, colors.black),
-                # All body and total
                 ("FONTNAME", (0, 0), (-1, -1), "Times-Roman"),
                 ("FONTSIZE", (0, 0), (-1, -1), 10),
                 ("LINEBELOW", (0, -1), (-1, -1), 0.5, colors.black),
                 ("LINEABOVE", (0, -1), (-1, -1), 0.5, colors.black),
                 ("BOX", (0, 0), (-1, -1), 0.5, colors.black),
                 ("INNERGRID", (0, 2), (-1, -1), 0.5, colors.black),
-                # Center Units, Lec, Lab, Prerequisite(s), Co-requisite(s), Grade (cols 2,3,4,5,6,7)
                 ("ALIGN", (2, 2), (4, -1), "CENTER"),
                 ("ALIGN", (5, 2), (6, -1), "CENTER"),
                 ("ALIGN", (7, 2), (7, -1), "CENTER"),
@@ -628,7 +595,6 @@ def build_pos_pdf(student_name, sr_code, academic_year, grades_dict, eval_date=N
         story.append(t)
         story.append(Paragraph("Evaluated by: ______________________________", evaluated_style))
 
-    # Last page bottom left: Checked and Reviewed / Approved by
     story.append(Spacer(1, 0.4 * inch))
     story.append(Paragraph("Checked and Reviewed:", sign_style))
     story.append(Paragraph("<b>Engr. MARK JOHN FEL T. RAYOS</b>", sign_name_style))
