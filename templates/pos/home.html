@@ -146,9 +146,12 @@
                 <div class="home-student-value"><strong>{{ student.first_names|default:"—" }}</strong></div>
                 
                 <div class="home-student-value"><strong>{{ student.sr_code|default:"—" }}</strong></div>
-                {% if has_academic_term %}
-                <div class="fw-semibold text-success mt-2">Active</div>
-                {% endif %}
+                <div class="d-flex align-items-center mt-2 fw-semibold">
+                    <button type="button" class="home-email-toggle-btn btn btn-link p-0 border-0 text-secondary fw-semibold" id="home-email-toggle" aria-label="Show or hide email" title="Show or hide email">
+                        <i class="bi bi-envelope fs-5" aria-hidden="true"></i>
+                    </button>
+                    <span class="home-email-value ms-2 small text-muted fw-semibold" id="home-email-value" style="display: none;">{{ student.email|default:"" }}</span>
+                </div>
                 </div>
             </div>
             <div class="text-end home-student-meta">
@@ -240,4 +243,21 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        var btn = document.getElementById('home-email-toggle');
+        var emailEl = document.getElementById('home-email-value');
+        if (btn && emailEl) {
+            btn.addEventListener('click', function() {
+                var hidden = emailEl.style.display === 'none';
+                emailEl.style.display = hidden ? 'inline' : 'none';
+                btn.setAttribute('aria-label', hidden ? 'Hide email' : 'Show or hide email');
+                btn.setAttribute('title', hidden ? 'Hide email' : 'Show email');
+            });
+        }
+    });
+</script>
 {% endblock %}
