@@ -149,6 +149,21 @@
         color: #999;
     }
 
+    .inner-card #email_local::placeholder {
+        color: #999;
+        opacity: 1;
+    }
+    .inner-card #email_local::-webkit-input-placeholder {
+        color: #999;
+    }
+    .inner-card #email_local::-moz-placeholder {
+        color: #999;
+        opacity: 1;
+    }
+    .inner-card #email_local:-ms-input-placeholder {
+        color: #999;
+    }
+
     .password-toggle-wrap .password-toggle-btn {
         border-color: #ced4da;
         background: #fff;
@@ -371,7 +386,7 @@
                     <div class="row g-3">
                         <div class="col-md-5">
                             <label for="first_name" class="form-label">First Name</label>
-                            <input type="text" class="form-control" id="first_name" name="first_name" placeholder="Juan" required>
+                            <input type="text" class="form-control" id="first_name" name="first_name" placeholder="Juan Martinez" required>
                         </div>
                         <div class="col-md-3">
                             <label for="middle_name" class="form-label">Middle Name</label>

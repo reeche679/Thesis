@@ -416,6 +416,14 @@ def build_pos_pdf(student_name, sr_code, academic_year, grades_dict, eval_date=N
     cell_style = _cell_style()
     cell_style_center = _cell_style_center()
     header_cell_style = _header_cell_style()
+    hours_header_style = ParagraphStyle(
+        name="HoursHeader",
+        parent=normal,
+        fontName="Times-Bold",
+        fontSize=8,
+        alignment=1,
+        leading=9,
+    )
     # Semester section titles - Times 10 bold (table-area styling)
     section_line1 = ParagraphStyle(
         name="Section1",
@@ -515,7 +523,9 @@ def build_pos_pdf(student_name, sr_code, academic_year, grades_dict, eval_date=N
         title_sem_para = Paragraph("<b>" + title2 + "</b>", ParagraphStyle(
             name="SemTitle", parent=normal, alignment=1, fontName="Times-Bold", fontSize=10,
         ))
-        # Row 0: FIRST YEAR (spans all cols), Row 1: SECOND SEMESTER (spans all cols), then header row, data, total
+        # Row 0: Year (span all), Row 1: Semester (span all), Rows 2-3: two-row header so "No. of hour/s" is only above Lec and Lab
+        # Row 2: Course Code, Course Title, Credit Units (each span down); No. of hour/s (span Lec+Lab); Prereq, Coreq, Grade (each span down)
+        # Row 3: only Lec and Lab (other cells covered by row spans)
         table_data = [
             [title_year_para] + [""] * (len(col_widths) - 1),
             [title_sem_para] + [""] * (len(col_widths) - 1),
@@ -523,12 +533,13 @@ def build_pos_pdf(student_name, sr_code, academic_year, grades_dict, eval_date=N
                 Paragraph("Course Code", header_cell_style),
                 Paragraph("Course Title", header_cell_style),
                 Paragraph("Credit Units", header_cell_style),
-                Paragraph("Lec", header_cell_style),
-                Paragraph("Lab", header_cell_style),
+                Paragraph("No. of hour/s", hours_header_style),
+                "",  # part of No. of hour/s span
                 Paragraph("Prerequisite(s)", header_cell_style),
                 Paragraph("Co-requisite(s)", header_cell_style),
                 Paragraph("Grade", header_cell_style),
             ],
+            ["", "", "", Paragraph("Lec", header_cell_style), Paragraph("Lab", header_cell_style), "", "", ""],
         ]
         # Grade cell: show "5" / "5.00" in red
         def _grade_cell(grade_str):
@@ -579,14 +590,22 @@ def build_pos_pdf(student_name, sr_code, academic_year, grades_dict, eval_date=N
                 ("FONTNAME", (0, 1), (-1, 1), "Times-Bold"),
                 ("TOPPADDING", (0, 1), (-1, 1), 5),
                 ("BOTTOMPADDING", (0, 1), (-1, 1), 5),
-                # Column header row (2): centered, fit to column, no background
-                ("FONTNAME", (0, 2), (-1, 2), "Times-Bold"),
-                ("ALIGN", (0, 2), (-1, 2), "CENTER"),
+                # Two-row header (2-3): Course Code/Title/Units and Prereq/Coreq/Grade span 2 rows; "No. of hour/s" spans Lec+Lab only, with Lec/Lab below
+                ("SPAN", (0, 2), (0, 3)),   # Course Code
+                ("SPAN", (1, 2), (1, 3)),   # Course Title
+                ("SPAN", (2, 2), (2, 3)),   # Credit Units
+                ("SPAN", (3, 2), (4, 2)),   # No. of hour/s above Lec and Lab only
+                ("SPAN", (5, 2), (5, 3)),   # Prerequisite(s)
+                ("SPAN", (6, 2), (6, 3)),   # Co-requisite(s)
+                ("SPAN", (7, 2), (7, 3)),   # Grade
+                ("FONTNAME", (0, 2), (-1, 3), "Times-Bold"),
+                ("ALIGN", (0, 2), (-1, 3), "CENTER"),
+                ("VALIGN", (0, 2), (-1, 3), "MIDDLE"),
                 ("LINEABOVE", (0, 0), (-1, 0), 0.5, colors.black),
                 ("LINEBELOW", (0, 0), (-1, 0), 0.5, colors.black),
                 ("LINEBELOW", (0, 1), (-1, 1), 0.5, colors.black),
                 ("LINEABOVE", (0, 2), (-1, 2), 0.5, colors.black),
-                ("LINEBELOW", (0, 2), (-1, 2), 0.5, colors.black),
+                ("LINEBELOW", (0, 3), (-1, 3), 0.5, colors.black),
                 # All body and total
                 ("FONTNAME", (0, 0), (-1, -1), "Times-Roman"),
                 ("FONTSIZE", (0, 0), (-1, -1), 10),
