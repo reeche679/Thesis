@@ -1282,8 +1282,18 @@
 
                     if (grades[courseCode]) {
                         cell.textContent = grades[courseCode];
+                        const gradeVal = parseFloat(grades[courseCode]);
+                        if (gradeVal === 5.00) {
+                            cell.classList.add('text-danger');
+                            cell.style.fontWeight = '600';
+                        } else {
+                            cell.classList.remove('text-danger');
+                            cell.style.fontWeight = '';
+                        }
                     } else {
                         cell.textContent = '—';
+                        cell.classList.remove('text-danger');
+                        cell.style.fontWeight = '';
                     }
                 }
             }
