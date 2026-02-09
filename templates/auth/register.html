@@ -247,7 +247,7 @@
         const registerForm = document.querySelector('form');
         if (createAccountBtn && registerForm) {
             createAccountBtn.addEventListener('click', function() {
-                const requiredIds = ['first_name', 'middle_name', 'last_name', 'sr_code', 'email', 'password', 'confirm_password'];
+                const requiredIds = ['first_name', 'middle_name', 'last_name', 'sr_code', 'email_local', 'password', 'confirm_password'];
                 for (const id of requiredIds) {
                     const el = document.getElementById(id);
                     if (!el) continue;
@@ -266,11 +266,16 @@
                     return;
                 }
 
-                const emailEl = document.getElementById('email');
-                if (emailEl && !EMAIL_REGEX.test(emailEl.value.trim())) {
-                    emailEl.focus();
-                    alert('Please enter a valid email\nex: 23-00000@g.batstate-u.edu.ph');
-                    return;
+                const emailLocalEl = document.getElementById('email_local');
+                const emailHiddenEl = document.getElementById('email');
+                if (emailLocalEl && emailHiddenEl) {
+                    const local = emailLocalEl.value.trim();
+                    if (!SR_CODE_REGEX.test(local)) {
+                        emailLocalEl.focus();
+                        alert('Please enter a valid SR-Code for email (e.g. 23-00000@g.batstate-u.edu.ph)');
+                        return;
+                    }
+                    emailHiddenEl.value = local + '@g.batstate-u.edu.ph';
                 }
 
                 const passwordEl = document.getElementById('password');
@@ -289,6 +294,28 @@
                 document.getElementById('register-form').submit();
             });
         }
+
+        // Email: show @g.batstate-u.edu.ph inside the same field when user types SR code
+        (function() {
+            const emailLocalEl = document.getElementById('email_local');
+            const emailSuffixEl = document.getElementById('email_suffix');
+            const emailHiddenEl = document.getElementById('email');
+            if (!emailLocalEl || !emailSuffixEl) return;
+            function updateEmailField() {
+                const local = emailLocalEl.value.trim();
+                if (local.length > 0) {
+                    emailSuffixEl.style.display = 'inline';
+                    if (emailHiddenEl) emailHiddenEl.value = local + '@g.batstate-u.edu.ph';
+                } else {
+                    emailSuffixEl.style.display = 'none';
+                    if (emailHiddenEl) emailHiddenEl.value = '';
+                }
+            }
+            emailLocalEl.addEventListener('input', updateEmailField);
+            emailLocalEl.addEventListener('blur', updateEmailField);
+            updateEmailField();
+            document.getElementById('email-input-wrap').addEventListener('click', function() { emailLocalEl.focus(); });
+        })();
 
         // Password visibility toggle (eye icon)
         document.querySelectorAll('.password-toggle-btn').forEach(function(btn) {
@@ -362,10 +389,13 @@
                                    title="Please enter a valid SR-Code (e.g. 23-00000)">
                         </div>
                         <div class="col-md-5">
-                            <label for="email" class="form-label">Email</label>
-                            <input type="text" class="form-control" id="email" name="email" placeholder="23-00000@g.batstate-u.edu.ph" required
-                                   pattern="^\d{2}-\d{5}@g\.batstate-u\.edu\.ph$"
-                                   title="Email must be in format: (e.g. 23-00000@g.batstate-u.edu.ph)">
+                            <label for="email_local" class="form-label">Email</label>
+                            <div class="form-control d-flex align-items-center flex-nowrap pe-2" id="email-input-wrap" style="min-height: 38px;">
+                                <input type="text" class="border-0 bg-transparent flex-grow-1 me-1" id="email_local" placeholder="e.g. 23-00000@g.batstate-u.edu.ph" maxlength="8"
+                                       style="outline: none; min-width: 0;" title="Enter your email address">
+                                <span class="text-muted flex-shrink-0" id="email_suffix" style="display: none;">@g.batstate-u.edu.ph</span>
+                            </div>
+                            <input type="hidden" name="email" id="email">
                         </div>
                         <div class="col-md-6">
                             <label for="password" class="form-label">Password</label>

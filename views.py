@@ -204,7 +204,16 @@ def save_pos_grades(request):
         ay = request.session.get('academic_year') or ''
         sem = request.session.get('semester') or ''
         yl = request.session.get('year_level') or ''
-        POSRecord.objects.create(student=student, generated_at=timezone.now(), academic_year=ay, semester=sem, year_level=yl)
+        # Snapshot grades for this POS so history download uses this version
+        snapshot = {str(k).strip(): str(v).strip() for k, v in grades_dict.items() if k and v}
+        POSRecord.objects.create(
+            student=student,
+            generated_at=timezone.now(),
+            academic_year=ay,
+            semester=sem,
+            year_level=yl,
+            grades_snapshot=snapshot,
+        )
         # Keep only the last N records per user to limit database growth
         _prune_old_pos_records(student)
     return JsonResponse({'ok': True})
@@ -267,8 +276,38 @@ def download_pos_pdf(request):
 
 
 @_require_student
+def download_pos_pdf_record(request, record_id):
+    """Download the POS PDF for a specific history record (uses that record's saved grades snapshot)."""
+    student = get_logged_in_student(request)
+    record = get_object_or_404(POSRecord, pk=record_id, student=student)
+    grades_dict = getattr(record, 'grades_snapshot', None) or {}
+    eval_date = record.generated_at.date()
+    academic_year = record.academic_year or ''
+
+    from pos_pdf import build_pos_pdf
+    logo_path = os.path.abspath(os.path.normpath(os.path.join(str(settings.BASE_DIR), 'static', 'img', 'BSU_Logo.png')))
+    if not os.path.isfile(logo_path):
+        logo_path = None
+    pdf_bytes = build_pos_pdf(
+        student_name=student.full_name or '',
+        sr_code=student.sr_code or '',
+        academic_year=academic_year,
+        grades_dict=grades_dict,
+        eval_date=eval_date,
+        logo_path=logo_path,
+    )
+    date_str = eval_date.strftime('%Y-%m-%d')
+    filename = f"POS_{student.sr_code or 'POS'}_{date_str}.pdf"
+    response = HttpResponse(pdf_bytes, content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response
+
+
+@_require_student
 def pos_history(request):
-    """POS History page - Table of previously generated POS"""
+    """POS History page - Table of previously generated POS. Requires profile photo and academic term."""
+    if not _has_academic_term(request) or not _has_profile_photo(request):
+        return redirect(reverse('pos_home') + '?required=1')
     student = get_logged_in_student(request)
     pos_records = POSRecord.objects.filter(student=student).order_by('-generated_at')
     return render(request, "pos/history.html", {'student': student, 'pos_records': pos_records})

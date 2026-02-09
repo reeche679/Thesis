@@ -209,11 +209,8 @@
 </div>
 
 <div class="pos-card p-4">
-    <div class="d-flex justify-content-between align-items-center mb-3">
+    <div class="mb-3">
         <div class="pos-section-title mb-0">Course List by Semester</div>
-        <button type="button" class="btn btn-outline-danger btn-sm">
-            Apply Existing Grades
-        </button>
     </div>
 
     <!-- FIRST YEAR - FIRST SEMESTER -->
@@ -2170,15 +2167,13 @@
 
     document.getElementById('generatePosBtn').addEventListener('click', function() {
         const grades = collectGrades();
-        const csvRows = ['Course Code,Grade'];
-        Object.keys(grades).sort().forEach(function(code) {
-            csvRows.push('"' + code.replace(/"/g, '""') + '",' + grades[code]);
-        });
-        const blob = new Blob(["\ufeff" + csvRows.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+        const payload = { grades: grades };
+        const jsonStr = JSON.stringify(payload, null, 2);
+        const blob = new Blob([jsonStr], { type: 'application/json;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = 'pos_grades.csv';
+        a.download = 'pos_grades.json';
         a.style.display = 'none';
         document.body.appendChild(a);
         a.click();

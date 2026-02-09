@@ -63,6 +63,7 @@ class POSRecord(models.Model):
     academic_year = models.CharField(max_length=32, blank=True)   # e.g. A.Y. 2025 – 2026
     semester = models.CharField(max_length=32, blank=True)         # e.g. First Semester
     year_level = models.CharField(max_length=32, blank=True)       # e.g. 3rd Year (per generated POS)
+    grades_snapshot = models.JSONField(default=dict)  # {course_code: grade} at time of generation for this POS
 
     class Meta:
         ordering = ['-generated_at']

@@ -20,6 +20,20 @@
         border-radius: 4px;
     }
 </style>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.history-delete-form').forEach(function(form) {
+        form.addEventListener('submit', function(e) {
+            if (form._deleteConfirmed) return;
+            e.preventDefault();
+            if (!confirm('Remove this record from history?')) return;
+            form._deleteConfirmed = true;
+            form.querySelector('button[type="submit"]').disabled = true;
+            form.submit();
+        });
+    });
+});
+</script>
 {% endblock %}
 
 {% block content %}
@@ -55,10 +69,10 @@
                     <td class="text-center {% if forloop.first %}text-success{% else %}text-muted{% endif %}">{% if forloop.first %}Active{% else %}Archived{% endif %}</td>
                     <td class="text-center">
                         <div class="d-flex gap-2 justify-content-center align-items-center">
-                            <button type="button" class="btn btn-outline-secondary btn-sm history-action-btn" title="Download generated POS (coming soon)" aria-label="Download">
+                            <a href="{% url 'download_pos_pdf_record' record_id=record.pk %}" class="btn btn-outline-secondary btn-sm history-action-btn" title="Download this generated POS" aria-label="Download" download>
                                 <i class="bi bi-download"></i>
-                            </button>
-                            <form method="post" action="{% url 'delete_pos_record' record_id=record.pk %}" class="d-inline m-0" onsubmit="return confirm('Remove this record from history?');">
+                            </a>
+                            <form method="post" action="{% url 'delete_pos_record' record_id=record.pk %}" class="d-inline m-0 history-delete-form">
                                 {% csrf_token %}
                                 <button type="submit" class="btn btn-outline-danger btn-sm history-action-btn" title="Remove from history" aria-label="Delete">
                                     <i class="bi bi-trash"></i>

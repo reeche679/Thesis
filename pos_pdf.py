@@ -99,7 +99,7 @@ POS_CURRICULUM = [
         ("CpEE 403", "Elective Course 3", 3, 2, 3, "CpEE 403", ""),
     ]),
     ("FOURTH YEAR", "SECOND SEMESTER", 8, 0, 12, [
-        ("ENGG 117", "OJT/Internship (320 hrs)", 4, "320 hrs", "—", "4th Year Standing", ""),
+        ("ENGG 117", "OJT/Internship (320 hrs)", 4, 4, 0, "4th Year Standing", ""),
         ("CpE 405", "CpE Practice and Design 2", 2, 0, 6, "CpE 404", ""),
         ("CpE 406", "Comprehensive Examination for CpE", 2, 0, 6, "Graduating", ""),
     ]),
@@ -134,6 +134,13 @@ def _header_cell_style():
         leftIndent=0,
         rightIndent=0,
     )
+
+
+def _requisite_display_text(raw_text):
+    """Insert line break before 'Standing' so PDF shows '4th Year' on one line and 'Standing' on the next."""
+    if not raw_text:
+        return raw_text
+    return raw_text.replace(" Year Standing", " Year<br/>Standing")
 
 
 def _cell_style_center():
@@ -467,7 +474,7 @@ def build_pos_pdf(student_name, sr_code, academic_year, grades_dict, eval_date=N
         1.62 * inch,   # date / academic year value
     ]
     info_data = [
-        ["Name:", (student_name or "—"), "Date:", date_str],
+        ["Name:", (student_name or "—").upper(), "Date:", date_str],
         ["SR-code:", (sr_code or "—"), "Academic Year:", (academic_year or "—")],
     ]
     info_tbl = Table(info_data, colWidths=info_cols)
@@ -523,6 +530,20 @@ def build_pos_pdf(student_name, sr_code, academic_year, grades_dict, eval_date=N
                 Paragraph("Grade", header_cell_style),
             ],
         ]
+        # Grade cell: show "5" / "5.00" in red
+        def _grade_cell(grade_str):
+            if not grade_str:
+                return grade_str
+            try:
+                if float(grade_str) == 5.0:
+                    return Paragraph(
+                        '<font color="red">' + grade_str.replace("&", "&amp;") + '</font>',
+                        ParagraphStyle(name="GradeRed", parent=normal, fontName="Times-Roman", fontSize=10, alignment=1),
+                    )
+            except (ValueError, TypeError):
+                pass
+            return grade_str
+
         for code, title, units, lec, lab, prereq, coreq in rows:
             grade = (grades_dict or {}).get(code, "").strip() or ""
             table_data.append([
@@ -531,9 +552,9 @@ def build_pos_pdf(student_name, sr_code, academic_year, grades_dict, eval_date=N
                 str(units),
                 str(lec),
                 str(lab),
-                Paragraph(prereq.replace("&", "&amp;") or " ", cell_style_center),
-                Paragraph(coreq.replace("&", "&amp;") or " ", cell_style_center),
-                grade,
+                Paragraph(_requisite_display_text(prereq).replace("&", "&amp;") or " ", cell_style_center),
+                Paragraph(_requisite_display_text(coreq).replace("&", "&amp;") or " ", cell_style_center),
+                _grade_cell(grade),
             ])
         # Total row: total units, lec total, lab total in the three columns
         table_data.append(["Total", "", str(total_units), str(lec_total), str(lab_total), "", "", ""])
