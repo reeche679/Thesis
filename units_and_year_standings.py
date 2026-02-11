@@ -12,12 +12,12 @@ TERM_SUMMER = 3  # summer / midyear
 
 
 def sem_index(year_level: int, term_in_year: int) -> int:
-    """Convert (year_level, term_in_year) -> global semester index (1..12)."""
+    """Convert (year_level, term_in_year) -> global semester index (1..MAX_SEMESTER)."""
     return (year_level - 1) * 3 + term_in_year
 
 
 def year_and_term_from_sem(sem: int) -> tuple[int, int]:
-    """Convert global semester index (1..12) -> (year_level, term_in_year)."""
+    """Convert global semester index (1..MAX_SEMESTER) -> (year_level, term_in_year)."""
     year_level = (sem - 1) // 3 + 1
     term_in_year = ((sem - 1) % 3) + 1
     return year_level, term_in_year
@@ -32,7 +32,7 @@ MAX_UNITS_BY_YEAR_TERM = {
 
     (2, TERM_1): 27,
     (2, TERM_2): 23,
-    (2, TERM_SUMMER): 0,
+    (2, TERM_SUMMER): 9,
 
     (3, TERM_1): 21,
     (3, TERM_2): 23,
@@ -40,8 +40,19 @@ MAX_UNITS_BY_YEAR_TERM = {
 
     (4, TERM_1): 18,
     (4, TERM_2): 8,
-    (4, TERM_SUMMER): 0,
+    (4, TERM_SUMMER): 9,
+
+    (5, TERM_1): 21,
+    (5, TERM_2): 23,
+    (5, TERM_SUMMER): 9,
+
+    (6, TERM_1): 21,
+    (6, TERM_2): 23,
+    (6, TERM_SUMMER): 9,
 }
+
+# Planning horizon: highest semester index (CP-SAT will use semesters 1..MAX_SEMESTER).
+MAX_SEMESTER = max(sem_index(yl, t) for (yl, t) in MAX_UNITS_BY_YEAR_TERM) if MAX_UNITS_BY_YEAR_TERM else 12
 
 
 def max_units_for(year_level: int, term_in_year: int) -> int:
@@ -50,7 +61,7 @@ def max_units_for(year_level: int, term_in_year: int) -> int:
 
 
 def max_units_for_sem(sem: int) -> int:
-    """Maximum allowed units for a global semester index (1..12)."""
+    """Maximum allowed units for a global semester index (1..MAX_SEMESTER)."""
     year_level, term_in_year = year_and_term_from_sem(sem)
     return max_units_for(year_level, term_in_year)
 
