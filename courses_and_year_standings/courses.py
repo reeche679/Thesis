@@ -23,7 +23,7 @@ courses = {
     "PATHFit 1": {"course_title": "Movement Competency Training", "units": 2, "pre-requisites": [], "co-requisites": [], "orig_sem": 1, "category": "Rigid", "year_level": 1},
     "NSTP 111": {"course_title": "National Service Training Program 1", "units": 3, "pre-requisites": [], "co-requisites": [], "orig_sem": 1, "category": "Rigid", "year_level": 1},
 
-    x# --- FIRST YEAR: 2nd Semester ---
+    # --- FIRST YEAR: 2nd Semester ---
     "GEd 101":  {"course_title": "Understanding the Self", "units": 3, "pre-requisites": [], "co-requisites": [], "orig_sem": 2, "category": "Flexible", "year_level": 1},
     "GEd 102":  {"course_title": "Mathematics in the Modern World", "units": 3, "pre-requisites": [], "co-requisites": [], "orig_sem": 2, "category": "Flexible", "year_level": 1},
     "GEd 106":  {"course_title": "Purposive Communication", "units": 3, "pre-requisites": [], "co-requisites": [], "orig_sem": 2, "category": "Flexible", "year_level": 1},
