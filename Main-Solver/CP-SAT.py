@@ -353,10 +353,18 @@ def solve_and_print(model, semester, passed_courses, failed_courses, current_sem
         )
 
 
+<<<<<<< Updated upstream
 def run_pos_generator():
     # 1. Input & Data Handling
     current_sem, passed_courses, failed_courses = gather_input_and_grades()
 
+=======
+def run_pos_with_state(current_sem, passed_courses, failed_courses):
+    """
+    Core solver pipeline shared by static and dynamic modes.
+    Expects current_sem, passed_courses, failed_courses to be precomputed.
+    """
+>>>>>>> Stashed changes
     # 1b. Probation / failed-units check (per semester)
     probation_msg = check_probation(current_sem, passed_courses, failed_courses)
     if probation_msg is not None:
@@ -395,5 +403,15 @@ def run_pos_generator():
     solve_and_print(model, semester, passed_courses, failed_courses, current_sem)
 
 
+<<<<<<< Updated upstream
+=======
+def run_pos_generator():
+    # 1. Input & Data Handling (static mode)
+    current_sem, passed_courses, failed_courses = gather_input_and_grades()
+    # Delegate to shared pipeline
+    run_pos_with_state(current_sem, passed_courses, failed_courses)
+
+
+>>>>>>> Stashed changes
 if __name__ == "__main__":
     run_pos_generator()
