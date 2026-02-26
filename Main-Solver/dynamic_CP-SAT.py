@@ -90,7 +90,7 @@ def _run_static_model():
         print("CP-SAT.py does not define run_pos_generator; cannot delegate.")
 
 
-def _run_dynamic_model(current_sem: int, passed_courses: list[str], failed_courses: list[str]) -> None:
+def _run_dynamic_model(current_sem: int, passed_courses: list[str], failed_courses: list[str], with_petition: bool) -> None:
     """
     Import and run the shared solver pipeline using a precomputed state
     (current_sem, passed_courses, failed_courses) from dynamic mode.
@@ -103,7 +103,7 @@ def _run_dynamic_model(current_sem: int, passed_courses: list[str], failed_cours
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     if hasattr(module, "run_pos_with_state"):
-        module.run_pos_with_state(current_sem, passed_courses, failed_courses)
+        module.run_pos_with_state(current_sem, passed_courses, failed_courses, with_petition)
     else:
         print("CP-SAT.py does not define run_pos_with_state; cannot delegate dynamic mode.")
 
@@ -281,5 +281,8 @@ if __name__ == "__main__":
     if not attempts_by_sem and not passed_courses and not failed_courses:
         sys.exit(0)
 
-    _run_dynamic_model(current_sem, passed_courses, failed_courses)
+    use_petition_input = input("Use petition mode for bottleneck subjects? (Y/N): ").strip().upper()
+    with_petition = use_petition_input == "Y"
+
+    _run_dynamic_model(current_sem, passed_courses, failed_courses, with_petition)
 

@@ -173,13 +173,13 @@ def create_semester_variables(model, current_sem, passed_courses):
     return semester
 
 
-def add_offering_constraints(model, semester, passed_courses, current_sem):
+def add_offering_constraints(model, semester, passed_courses, current_sem, with_petition: bool):
     """Add offering-window constraints (Rigid/Flexible/Bottleneck)."""
     for c, info in courses.items():
         if c in passed_courses:
             continue
         orig = _first_semester(info) or 1
-        cat = info.get("category", "Flexible")
+        cat = info.get("category", "Rigid")  # Rigid is default
         valid_sems = []
         for s in range(current_sem, u.MAX_SEMESTER + 1):
             sem_type, orig_type = s % 3, orig % 3  # 1:1st, 2:2nd, 0:Summer
@@ -190,8 +190,16 @@ def add_offering_constraints(model, semester, passed_courses, current_sem):
                 or (orig_type == 0 and sem_type == 0)
             ):
                 valid_sems.append(s)
-            elif cat == "Bottleneck" and (sem_type == orig_type or sem_type == 0 or sem_type == 2):
-                valid_sems.append(s)
+            elif cat == "Bottleneck":
+                if not with_petition:
+                    # Without petition: behave like Rigid (only original term type).
+                    if sem_type == orig_type:
+                        valid_sems.append(s)
+                else:
+                    # With petition: can be offered every semester from current_sem onward.
+                    # The objective already prefers earlier semesters, so retakes
+                    # will naturally be scheduled in the very next feasible term.
+                    valid_sems.append(s)
         if valid_sems:
             model.AddAllowedAssignments([semester[c]], [[s] for s in valid_sems])
 
@@ -353,17 +361,11 @@ def solve_and_print(model, semester, passed_courses, failed_courses, current_sem
         )
 
 
-
-def run_pos_generator():
-    # 1. Input & Data Handling
-    current_sem, passed_courses, failed_courses = gather_input_and_grades()
-
-def run_pos_with_state(current_sem, passed_courses, failed_courses):
+def run_pos_with_state(current_sem, passed_courses, failed_courses, with_petition: bool = False):
     """
     Core solver pipeline shared by static and dynamic modes.
     Expects current_sem, passed_courses, failed_courses to be precomputed.
     """
-
     # 1b. Probation / failed-units check (per semester)
     probation_msg = check_probation(current_sem, passed_courses, failed_courses)
     if probation_msg is not None:
@@ -381,7 +383,7 @@ def run_pos_with_state(current_sem, passed_courses, failed_courses):
     semester = create_semester_variables(model, current_sem, passed_courses)
 
     # 4. Constraints
-    add_offering_constraints(model, semester, passed_courses, current_sem)
+    add_offering_constraints(model, semester, passed_courses, current_sem, with_petition)
     add_unit_constraints(model, semester, passed_courses, current_sem)
     add_prereq_year_coreq_constraints(
         model,
@@ -402,12 +404,16 @@ def run_pos_with_state(current_sem, passed_courses, failed_courses):
     solve_and_print(model, semester, passed_courses, failed_courses, current_sem)
 
 
-
 def run_pos_generator():
     # 1. Input & Data Handling (static mode)
     current_sem, passed_courses, failed_courses = gather_input_and_grades()
+
+    # Ask if petition mode should be used for bottleneck subjects
+    use_petition_input = input("Use petition mode for bottleneck subjects? (Y/N): ").strip().upper()
+    with_petition = use_petition_input == "Y"
+
     # Delegate to shared pipeline
-    run_pos_with_state(current_sem, passed_courses, failed_courses)
+    run_pos_with_state(current_sem, passed_courses, failed_courses, with_petition=with_petition)
 
 
 if __name__ == "__main__":
