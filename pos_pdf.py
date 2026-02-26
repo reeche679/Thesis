@@ -103,7 +103,36 @@ POS_CURRICULUM = [
         ("CpE 405", "CpE Practice and Design 2", 2, 0, 6, "CpE 404", ""),
         ("CpE 406", "Comprehensive Examination for CpE", 2, 0, 6, "Graduating", ""),
     ]),
+    # 5th–10th year: empty rows so user can add grades; preview/PDF show these sections
+    ("FIFTH YEAR", "FIRST SEMESTER", 0, 0, 0, []),
+    ("FIFTH YEAR", "SECOND SEMESTER", 0, 0, 0, []),
+    ("FIFTH YEAR", "MIDTERM", 0, 0, 0, []),
+    ("SIXTH YEAR", "FIRST SEMESTER", 0, 0, 0, []),
+    ("SIXTH YEAR", "SECOND SEMESTER", 0, 0, 0, []),
+    ("SIXTH YEAR", "MIDTERM", 0, 0, 0, []),
+    ("SEVENTH YEAR", "FIRST SEMESTER", 0, 0, 0, []),
+    ("SEVENTH YEAR", "SECOND SEMESTER", 0, 0, 0, []),
+    ("SEVENTH YEAR", "MIDTERM", 0, 0, 0, []),
+    ("EIGHTH YEAR", "FIRST SEMESTER", 0, 0, 0, []),
+    ("EIGHTH YEAR", "SECOND SEMESTER", 0, 0, 0, []),
+    ("EIGHTH YEAR", "MIDTERM", 0, 0, 0, []),
+    ("NINTH YEAR", "FIRST SEMESTER", 0, 0, 0, []),
+    ("NINTH YEAR", "SECOND SEMESTER", 0, 0, 0, []),
+    ("NINTH YEAR", "MIDTERM", 0, 0, 0, []),
+    ("TENTH YEAR", "FIRST SEMESTER", 0, 0, 0, []),
+    ("TENTH YEAR", "SECOND SEMESTER", 0, 0, 0, []),
+    ("TENTH YEAR", "MIDTERM", 0, 0, 0, []),
 ]
+
+# Flexible subjects: can be offered in additional semesters. List of (section_index, dept_note).
+# dept_note shown next to course when offered that sem (e.g. "EE Dept").
+# GEdE 101: 2nd Yr 1st or 2nd Yr 2nd (EE Dept); ENGG 105: 4th Yr 1st or 4th Yr 2nd (EE Dept 2nd); ENGG 117: 4th Yr 1st (EE Dept) or 4th Yr 2nd
+FLEXIBLE_SUBJECTS = [
+    ("GEdE 101", "The Entrepreneurial Mind", 3, 3, 0, "", "", [(3, ""), (4, "EE Dept")]),
+    ("ENGG 105", "Technopreneurship", 3, 3, 0, "4th Year Standing", "", [(8, ""), (9, "EE Dept")]),
+    ("ENGG 117", "OJT/Internship (320 hrs)", 4, 4, 0, "4th Year Standing", "", [(8, "EE Dept"), (9, "")]),
+]
+
 
 def _cell_style():
     """Table cell style: Times New Roman, size 10, for course tables."""
@@ -374,10 +403,23 @@ def _page_header_canvas(canvas, logo_path):
     canvas.restoreState()
 
 
-def build_pos_pdf(student_name, sr_code, academic_year, grades_dict, eval_date=None, logo_path=None):
+def _course_lookup_from_curriculum():
+    """Build code -> (title, units, lec, lab, prereq, coreq) from first occurrence in POS_CURRICULUM."""
+    lookup = {}
+    for _section_index, (_t1, _t2, _tu, _lec_t, _lab_t, rows) in enumerate(POS_CURRICULUM):
+        for r in rows:
+            code = r[0]
+            if code not in lookup:
+                lookup[code] = (r[1], r[2], r[3], r[4], r[5] or "", r[6] or "")
+    return lookup
+
+
+def build_pos_pdf(student_name, sr_code, academic_year, grades_by_section=None, grades_dict=None, eval_date=None, logo_path=None):
     """
-    Build POS PDF with structured design: header (with optional BSU logo), student info table, course tables, footer.
-    logo_path: optional path to BSU logo image (e.g. static/img/BSU_Logo.png).
+    Build POS PDF. Use grades_by_section (dict section_index -> {course_code: grade}) so each section table
+    shows that section's grades. Each section lists all courses with a grade in that section (same course
+    can appear in multiple sections, e.g. MATH 102 failed in 1st sem and midterm; user-added courses appear).
+    If grades_by_section is None, falls back to grades_dict for all sections (backward compat).
     """
     if eval_date is None:
         eval_date = date.today()
@@ -492,7 +534,27 @@ def build_pos_pdf(student_name, sr_code, academic_year, grades_dict, eval_date=N
         0.53 * inch,
     ]
 
-    for title1, title2, total_units, lec_total, lab_total, rows in POS_CURRICULUM:
+    course_lookup = _course_lookup_from_curriculum()
+
+    def _grade_cell(grade_str):
+        if not grade_str:
+            return grade_str
+        try:
+            if float(grade_str) == 5.0:
+                return Paragraph(
+                    '<font color="red">' + grade_str.replace("&", "&amp;") + '</font>',
+                    ParagraphStyle(name="GradeRed", parent=normal, fontName="Times-Roman", fontSize=10, alignment=1),
+                )
+        except (ValueError, TypeError):
+            pass
+        return grade_str
+
+    for section_index, (title1, title2, total_units, lec_total, lab_total, rows) in enumerate(POS_CURRICULUM):
+        section_grades = {}
+        if grades_by_section is not None:
+            section_grades = grades_by_section.get(section_index) or grades_by_section.get(str(section_index)) or {}
+        else:
+            section_grades = grades_dict or {}
         title_year_para = Paragraph("<b>" + title1 + "</b>", ParagraphStyle(
             name="YearTitle", parent=normal, alignment=1, fontName="Times-Bold", fontSize=10,
         ))
@@ -515,21 +577,30 @@ def build_pos_pdf(student_name, sr_code, academic_year, grades_dict, eval_date=N
             ],
             ["", "", "", Paragraph("Lec", header_cell_style), Paragraph("Lab", header_cell_style), "", "", ""],
         ]
-        def _grade_cell(grade_str):
-            if not grade_str:
-                return grade_str
-            try:
-                if float(grade_str) == 5.0:
-                    return Paragraph(
-                        '<font color="red">' + grade_str.replace("&", "&amp;") + '</font>',
-                        ParagraphStyle(name="GradeRed", parent=normal, fontName="Times-Roman", fontSize=10, alignment=1),
-                    )
-            except (ValueError, TypeError):
-                pass
-            return grade_str
-
+        curriculum_codes_this_section = {r[0] for r in rows}
+        section_rows = []
+        seen_codes = set()
         for code, title, units, lec, lab, prereq, coreq in rows:
-            grade = (grades_dict or {}).get(code, "").strip() or ""
+            grade = (section_grades or {}).get(code, "").strip() or ""
+            if grade:
+                seen_codes.add(code)
+                section_rows.append((code, title, units, lec, lab, prereq or "", coreq or "", grade))
+        for code, grade in (section_grades or {}).items():
+            if not code or not (grade or "").strip():
+                continue
+            if code in seen_codes:
+                continue
+            seen_codes.add(code)
+            info = course_lookup.get(code)
+            if info:
+                title, units, lec, lab, prereq, coreq = info
+            else:
+                title, units, lec, lab, prereq, coreq = code, 0, 0, 0, "", ""
+            section_rows.append((code, title, units, lec, lab, prereq, coreq, (grade or "").strip()))
+        sum_units = sum(r[2] for r in section_rows)
+        sum_lec = sum(r[3] for r in section_rows)
+        sum_lab = sum(r[4] for r in section_rows)
+        for code, title, units, lec, lab, prereq, coreq, grade in section_rows:
             table_data.append([
                 Paragraph(code.replace("&", "&amp;"), cell_style),
                 Paragraph(title.replace("&", "&amp;"), cell_style),
@@ -540,7 +611,7 @@ def build_pos_pdf(student_name, sr_code, academic_year, grades_dict, eval_date=N
                 Paragraph(_requisite_display_text(coreq).replace("&", "&amp;") or " ", cell_style_center),
                 _grade_cell(grade),
             ])
-        table_data.append(["Total", "", str(total_units), str(lec_total), str(lab_total), "", "", ""])
+        table_data.append(["Total", "", str(sum_units), str(sum_lec), str(sum_lab), "", "", ""])
 
         t = Table(table_data, colWidths=col_widths, repeatRows=0)
         ncols = len(col_widths)

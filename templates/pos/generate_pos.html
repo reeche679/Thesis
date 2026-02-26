@@ -46,6 +46,11 @@
         color: #212529 !important;
     }
 
+    /* Extract loading overlay: circular progress (stroke-dasharray set by JS) */
+    .extract-progress-fill {
+        transition: stroke-dasharray 0.2s ease;
+    }
+
     /* "No. of hour/s" - small so it fits above Lec and Lab only */
     .table thead th.hours-header {
         font-size: 0.7rem;
@@ -117,6 +122,20 @@
         vertical-align: middle;
     }
 
+    /* Fixed-position Validate POS button at bottom-left of the screen */
+    .validate-pos-fixed {
+        position: fixed;
+        left: 1rem;
+        bottom: 1rem;
+        z-index: 1050;
+    }
+    @media (max-width: 576px) {
+        .validate-pos-fixed {
+            left: 0.5rem;
+            bottom: 0.5rem;
+        }
+    }
+
     .generate-photo-box {
         width: 100px;
         height: 100px;
@@ -140,6 +159,44 @@
         color: #666;
         font-size: 0.7rem;
         padding: 4px;
+    }
+    .irregular-picker-table tbody tr.irregular-picker-row {
+        cursor: pointer;
+    }
+    .irregular-picker-table tbody tr.irregular-picker-row:hover {
+        background-color: #e9ecef !important;
+    }
+    .irregular-picker-table tbody tr.irregular-picker-row:hover td {
+        background-color: #e9ecef !important;
+    }
+    .irregular-picker-table tbody tr.irregular-picker-row.selected {
+        background-color: #cfe2ff !important;
+        outline: 2px solid #0d6efd;
+        outline-offset: -2px;
+    }
+    .irregular-picker-table tbody tr.irregular-picker-row.selected td {
+        background-color: #cfe2ff !important;
+    }
+    #irregular-add-modal .modal-dialog {
+        max-width: 90%;
+        width: 900px;
+    }
+    #irregular-add-modal .modal-body {
+        max-height: 70vh;
+        overflow-y: auto;
+    }
+    #irregular-add-modal .irregular-picker-table {
+        font-size: 0.8rem;
+    }
+    #irregular-add-modal .irregular-picker-table th,
+    #irregular-add-modal .irregular-picker-table td {
+        padding: 0.25rem 0.35rem;
+    }
+    #irregular-add-modal .course-title-cell {
+        font-size: 0.8rem !important;
+    }
+    .irregular-my-pos-table .grade-select {
+        max-width: 56px;
     }
 </style>
 {% endblock %}
@@ -205,1915 +262,288 @@
     </div>
 </div>
 
+{{ curriculum_sections|json_script:"curriculum-data" }}
+{{ picker_available_by_section|json_script:"picker-available-by-section" }}
+
+{% if not is_regular %}
+<div class="pos-card p-4 mb-4" id="current-semester-card">
+    <div class="pos-section-title mb-2">Semester to add courses</div>
+    <p class="small text-muted mb-3">Select the semester you want to add courses to and enter grades. Semesters that already have grades appear below as read-only previews.</p>
+    <div class="row">
+        <div class="col-md-5">
+            <label class="form-label small text-uppercase text-muted">Add courses to semester</label>
+            <select class="form-select form-select-sm" id="current-semester-select">
+                {% for sec in curriculum_sections_dropdown %}
+                <option value="{{ forloop.counter0 }}" {% if editable_section_index == forloop.counter0 %}selected{% endif %}>{{ sec.label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<div class="modal fade" id="upload-grades-modal" tabindex="-1" aria-labelledby="upload-grades-modal-label" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="upload-grades-modal-label">Add Existing Grades</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="small text-muted">Upload a PDF or scanned copy of your POS. The system will read year level, semester, course codes, and grades. Only valid course codes and grades (1.00–3.00, 5.00) are accepted. Extracted data will replace your current grades and open in <strong>Preview</strong> (read-only). To edit grades, go to Generate POS from the menu after preview.</p>
+                <div class="mb-3">
+                    <label class="form-label small" for="id_pos_pdf">Select PDF</label>
+                    <input type="file" class="form-control form-control-sm" id="id_pos_pdf" name="pos_pdf" accept=".pdf,application/pdf">
+                </div>
+                <div id="upload-grades-errors" class="alert alert-danger small py-2 d-none" role="alert"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="upload-grades-submit-btn">Upload and Extract</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Full-screen loading overlay during PDF extraction: only Cancel is clickable -->
+<div id="extract-loading-overlay" class="position-fixed top-0 start-0 w-100 h-100 d-none" style="z-index: 9999; background: rgba(0,0,0,0.5); pointer-events: auto;">
+    <div class="d-flex align-items-center justify-content-center h-100">
+        <div class="bg-white rounded shadow-sm p-4 text-center" style="min-width: 200px; pointer-events: auto;">
+            <div class="extract-progress-ring mx-auto mb-2" style="width: 64px; height: 64px;">
+                <svg viewBox="0 0 36 36" class="d-block w-100 h-100">
+                    <path class="extract-progress-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#eee" stroke-width="3"/>
+                    <path class="extract-progress-fill" id="extract-progress-fill" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#0d6efd" stroke-width="3" stroke-dasharray="100, 100" stroke-linecap="round" transform="rotate(-90 18 18)"/>
+                </svg>
+            </div>
+            <div id="extract-progress-pct" class="small fw-semibold mb-1">0%</div>
+            <div class="small text-muted mb-3">Extracting POS Grades...</div>
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="extract-loading-cancel">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="irregular-add-modal" tabindex="-1" aria-labelledby="irregular-add-modal-label" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="irregular-add-modal-label">Add courses</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <p class="small text-muted mb-0">Select Courses to Take.</p>
+                    <div class="form-check form-check-sm">
+                        <input class="form-check-input" type="checkbox" id="irregular-select-all">
+                        <label class="form-check-label small" for="irregular-select-all">Select all</label>
+                    </div>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle table-bordered mb-0 irregular-picker-table" id="irregular-modal-picker-table">
+                        <thead class="table-light">
+                            <tr class="text-center">
+                                <th rowspan="2" style="width:8%">Course Code</th>
+                                <th rowspan="2" style="width:30%">Course Title</th>
+                                <th rowspan="2" style="width:5%">Units</th>
+                                <th colspan="2" class="hours-header" style="width:8%">No. of hour/s</th>
+                                <th rowspan="2" style="width:13%">Pre-requisite(s)</th>
+                                <th rowspan="2" style="width:13%">Co-requisite(s)</th>
+                            </tr>
+                            <tr class="text-center">
+                                <th style="width:4%">Lec</th>
+                                <th style="width:4%">Lab</th>
+                            </tr>
+                        </thead>
+                        <tbody id="irregular-modal-picker-tbody"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="irregular-modal-add-btn">Add selected to my POS</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="pos-card p-4">
-    <div class="mb-3">
+    <div class="mb-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
         <div class="pos-section-title mb-0">Course List by Semester</div>
-    </div>
-
-    <!-- FIRST YEAR - FIRST SEMESTER -->
-    <div class="mb-4">
-        <h6 class="fw-bold mb-2">First Year - First Semester</h6>
-        <div class="table-responsive">
-            <table class="table table-sm align-middle table-bordered mb-0">
-                <thead class="table-light">
-                    <tr class="text-center">
-                        <th rowspan="2" style="width: 8%;">Course Code</th>
-                        <th rowspan="2" style="width: 30%;">Course Title</th>
-                        <th rowspan="2" style="width: 5%;">Units</th>
-                        <th colspan="2" class="hours-header" style="width: 8%;">No. of hour/s</th>
-                        <th rowspan="2" style="width: 13%;">Pre-requisite(s)</th>
-                        <th rowspan="2" style="width: 13%;">Co-requisite(s)</th>
-                        <th rowspan="2" style="width: 10%;">Grade</th>
-                    </tr>
-                    <tr class="text-center">
-                        <th style="width: 4%;">Lec</th>
-                        <th style="width: 4%;">Lab</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td class="text-center">ENGG 101</td>
-                        <td class="course-title-cell">Introduction to Engineering</td>
-                        <td class="text-center">1</td>
-                        <td class="text-center">0</td>
-                        <td class="text-center">3</td>
-                        <td class="small text-muted text-center"></td>
-                        <td class="small text-muted text-center"></td>
-                        <td>
-                            <select class="form-select form-select-sm grade-select">
-                                <option selected></option>
-                                <option>1.00</option>
-                                <option>1.25</option>
-                                <option>1.50</option>
-                                <option>1.75</option>
-                                <option>2.00</option>
-                                <option>2.25</option>
-                                <option>2.50</option>
-                                <option>2.75</option>
-                                <option>3.00</option>
-                                <option>5.00</option>
-                            </select>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="text-center">GEd 108</td>
-                        <td class="course-title-cell">Art Appreciation</td>
-                        <td class="text-center">3</td>
-                        <td class="text-center">3</td>
-                        <td class="text-center">0</td>
-                        <td class="small text-muted text-center"></td>
-                        <td class="small text-muted text-center"></td>
-                        <td>
-                            <select class="form-select form-select-sm grade-select">
-                                <option selected></option>
-                                <option>1.00</option>
-                                <option>1.25</option>
-                                <option>1.50</option>
-                                <option>1.75</option>
-                                <option>2.00</option>
-                                <option>2.25</option>
-                                <option>2.50</option>
-                                <option>2.75</option>
-                                <option>3.00</option>
-                                <option>5.00</option>
-                            </select>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="text-center">GEd 104</td>
-                        <td class="course-title-cell">The Contemporary World</td>
-                        <td class="text-center">3</td>
-                        <td class="text-center">3</td>
-                        <td class="text-center">0</td>
-                        <td class="small text-muted text-center"></td>
-                        <td class="small text-muted text-center"></td>
-                        <td>
-                            <select class="form-select form-select-sm grade-select">
-                                <option selected></option>
-                                <option>1.00</option>
-                                <option>1.25</option>
-                                <option>1.50</option>
-                                <option>1.75</option>
-                                <option>2.00</option>
-                                <option>2.25</option>
-                                <option>2.50</option>
-                                <option>2.75</option>
-                                <option>3.00</option>
-                                <option>5.00</option>
-                            </select>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="text-center">CpE 101</td>
-                        <td class="course-title-cell">Computer Programming</td>
-                        <td class="text-center">1</td>
-                        <td class="text-center">0</td>
-                        <td class="text-center">3</td>
-                        <td class="small text-muted text-center"></td>
-                        <td class="small text-muted text-center"></td>
-                        <td>
-                            <select class="form-select form-select-sm grade-select">
-                                <option selected></option>
-                                <option>1.00</option>
-                                <option>1.25</option>
-                                <option>1.50</option>
-                                <option>1.75</option>
-                                <option>2.00</option>
-                                <option>2.25</option>
-                                <option>2.50</option>
-                                <option>2.75</option>
-                                <option>3.00</option>
-                                <option>5.00</option>
-                            </select>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="text-center">GEd 105</td>
-                        <td class="course-title-cell">Readings in Philippines History</td>
-                        <td class="text-center">3</td>
-                        <td class="text-center">3</td>
-                        <td class="text-center">0</td>
-                        <td class="small text-muted text-center"></td>
-                        <td class="small text-muted text-center"></td>
-                        <td>
-                            <select class="form-select form-select-sm grade-select">
-                                <option selected></option>
-                                <option>1.00</option>
-                                <option>1.25</option>
-                                <option>1.50</option>
-                                <option>1.75</option>
-                                <option>2.00</option>
-                                <option>2.25</option>
-                                <option>2.50</option>
-                                <option>2.75</option>
-                                <option>3.00</option>
-                                <option>5.00</option>
-                            </select>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="text-center">MATH 101</td>
-                        <td class="course-title-cell">Differential Calculus</td>
-                        <td class="text-center">4</td>
-                        <td class="text-center">4</td>
-                        <td class="text-center">0</td>
-                        <td class="small text-muted text-center"></td>
-                        <td class="small text-muted text-center"></td>
-                        <td>
-                            <select class="form-select form-select-sm grade-select">
-                                <option selected></option>
-                                <option>1.00</option>
-                                <option>1.25</option>
-                                <option>1.50</option>
-                                <option>1.75</option>
-                                <option>2.00</option>
-                                <option>2.25</option>
-                                <option>2.50</option>
-                                <option>2.75</option>
-                                <option>3.00</option>
-                                <option>5.00</option>
-                            </select>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="text-center">CHEM 101</td>
-                        <td class="course-title-cell">Chemistry for Engineers</td>
-                        <td class="text-center">4</td>
-                        <td class="text-center">3</td>
-                        <td class="text-center">3</td>
-                        <td class="small text-muted text-center"></td>
-                        <td class="small text-muted text-center"></td>
-                        <td>
-                            <select class="form-select form-select-sm grade-select">
-                                <option selected></option>
-                                <option>1.00</option>
-                                <option>1.25</option>
-                                <option>1.50</option>
-                                <option>1.75</option>
-                                <option>2.00</option>
-                                <option>2.25</option>
-                                <option>2.50</option>
-                                <option>2.75</option>
-                                <option>3.00</option>
-                                <option>5.00</option>
-                            </select>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="text-center">PATHFit 1</td>
-                        <td class="course-title-cell">Movement Competency Training</td>
-                        <td class="text-center">2</td>
-                        <td class="text-center">2</td>
-                        <td class="text-center">0</td>
-                        <td class="small text-muted text-center"></td>
-                        <td class="small text-muted text-center"></td>
-                        <td>
-                            <select class="form-select form-select-sm grade-select">
-                                <option selected></option>
-                                <option>1.00</option>
-                                <option>1.25</option>
-                                <option>1.50</option>
-                                <option>1.75</option>
-                                <option>2.00</option>
-                                <option>2.25</option>
-                                <option>2.50</option>
-                                <option>2.75</option>
-                                <option>3.00</option>
-                                <option>5.00</option>
-                            </select>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="text-center">NSTP 111</td>
-                        <td class="course-title-cell">National Service Training Program 1</td>
-                        <td class="text-center">3</td>
-                        <td class="text-center">3</td>
-                        <td class="text-center">0</td>
-                        <td class="small text-muted text-center"></td>
-                        <td class="small text-muted text-center"></td>
-                        <td>
-                            <select class="form-select form-select-sm grade-select">
-                                <option selected></option>
-                                <option>1.00</option>
-                                <option>1.25</option>
-                                <option>1.50</option>
-                                <option>1.75</option>
-                                <option>2.00</option>
-                                <option>2.25</option>
-                                <option>2.50</option>
-                                <option>2.75</option>
-                                <option>3.00</option>
-                                <option>5.00</option>
-                            </select>
-                        </td>
-                    </tr>
-                </tbody>
-                <tfoot>
-                    <tr>
-                        <th colspan="2" class="text-end">Total Units</th>
-                        <th class="text-center">24</th>
-                        <th colspan="5"></th>
-                    </tr>
-                </tfoot>
-            </table>
-        </div>
-    </div>
-
-    <!-- FIRST YEAR - SECOND SEMESTER -->
-    <div class="mb-4">
-        <h6 class="fw-bold mb-2">First Year - Second Semester</h6>
-        <div class="table-responsive">
-            <table class="table table-sm align-middle table-bordered mb-0">
-                <thead class="table-light">
-                    <tr class="text-center">
-                        <th rowspan="2" style="width: 8%;">Course Code</th>
-                        <th rowspan="2" style="width: 30%;">Course Title</th>
-                        <th rowspan="2" style="width: 5%;">Units</th>
-                        <th colspan="2" class="hours-header" style="width: 8%;">No. of hour/s</th>
-                        <th rowspan="2" style="width: 13%;">Pre-requisite(s)</th>
-                        <th rowspan="2" style="width: 13%;">Co-requisite(s)</th>
-                        <th rowspan="2" style="width: 10%;">Grade</th>
-                    </tr>
-                    <tr class="text-center">
-                        <th style="width: 4%;">Lec</th>
-                        <th style="width: 4%;">Lab</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td class="text-center">ENGG 102</td>
-                        <td class="course-title-cell">Engineering Drawing</td>
-                        <td class="text-center">1</td>
-                        <td class="text-center">0</td>
-                        <td class="text-center">3</td>
-                        <td class="small text-muted text-center"></td>
-                        <td class="small text-muted text-center"></td>
-                        <td>
-                            <select class="form-select form-select-sm grade-select">
-                                <option selected></option>
-                                <option>1.00</option>
-                                <option>1.25</option>
-                                <option>1.50</option>
-                                <option>1.75</option>
-                                <option>2.00</option>
-                                <option>2.25</option>
-                                <option>2.50</option>
-                                <option>2.75</option>
-                                <option>3.00</option>
-                                <option>5.00</option>
-                            </select>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="text-center">GEd 101</td>
-                        <td class="course-title-cell">Understanding the Self</td>
-                        <td class="text-center">3</td>
-                        <td class="text-center">3</td>
-                        <td class="text-center">0</td>
-                        <td class="small text-muted text-center"></td>
-                        <td class="small text-muted text-center"></td>
-                        <td>
-                            <select class="form-select form-select-sm grade-select">
-                                <option selected></option>
-                                <option>1.00</option>
-                                <option>1.25</option>
-                                <option>1.50</option>
-                                <option>1.75</option>
-                                <option>2.00</option>
-                                <option>2.25</option>
-                                <option>2.50</option>
-                                <option>2.75</option>
-                                <option>3.00</option>
-                                <option>5.00</option>
-                            </select>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="text-center">GEd 102</td>
-                        <td class="course-title-cell">Mathematics in the Modern World</td>
-                        <td class="text-center">3</td>
-                        <td class="text-center">3</td>
-                        <td class="text-center">0</td>
-                        <td class="small text-muted text-center"></td>
-                        <td class="small text-muted text-center"></td>
-                        <td>
-                            <select class="form-select form-select-sm grade-select">
-                                <option selected></option>
-                                <option>1.00</option>
-                                <option>1.25</option>
-                                <option>1.50</option>
-                                <option>1.75</option>
-                                <option>2.00</option>
-                                <option>2.25</option>
-                                <option>2.50</option>
-                                <option>2.75</option>
-                                <option>3.00</option>
-                                <option>5.00</option>
-                            </select>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="text-center">GEd 106</td>
-                        <td class="course-title-cell">Purposive Communication</td>
-                        <td class="text-center">3</td>
-                        <td class="text-center">3</td>
-                        <td class="text-center">0</td>
-                        <td class="small text-muted text-center"></td>
-                        <td class="small text-muted text-center"></td>
-                        <td>
-                            <select class="form-select form-select-sm grade-select">
-                                <option selected></option>
-                                <option>1.00</option>
-                                <option>1.25</option>
-                                <option>1.50</option>
-                                <option>1.75</option>
-                                <option>2.00</option>
-                                <option>2.25</option>
-                                <option>2.50</option>
-                                <option>2.75</option>
-                                <option>3.00</option>
-                                <option>5.00</option>
-                            </select>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="text-center">GEd 109</td>
-                        <td class="course-title-cell">Science, Technology and Society</td>
-                        <td class="text-center">3</td>
-                        <td class="text-center">3</td>
-                        <td class="text-center">0</td>
-                        <td class="small text-muted text-center"></td>
-                        <td class="small text-muted text-center"></td>
-                        <td>
-                            <select class="form-select form-select-sm grade-select">
-                                <option selected></option>
-                                <option>1.00</option>
-                                <option>1.25</option>
-                                <option>1.50</option>
-                                <option>1.75</option>
-                                <option>2.00</option>
-                                <option>2.25</option>
-                                <option>2.50</option>
-                                <option>2.75</option>
-                                <option>3.00</option>
-                                <option>5.00</option>
-                            </select>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="text-center">MATH 102</td>
-                        <td class="course-title-cell">Integral Calculus</td>
-                        <td class="text-center">4</td>
-                        <td class="text-center">4</td>
-                        <td class="text-center">0</td>
-                        <td class="small text-muted text-center">MATH 101</td>
-                        <td class="small text-muted text-center"></td>
-                        <td>
-                            <select class="form-select form-select-sm grade-select">
-                                <option selected></option>
-                                <option>1.00</option>
-                                <option>1.25</option>
-                                <option>1.50</option>
-                                <option>1.75</option>
-                                <option>2.00</option>
-                                <option>2.25</option>
-                                <option>2.50</option>
-                                <option>2.75</option>
-                                <option>3.00</option>
-                                <option>5.00</option>
-                            </select>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="text-center">PHYS 102</td>
-                        <td class="course-title-cell">Physics for Engineers 1</td>
-                        <td class="text-center">4</td>
-                        <td class="text-center">3</td>
-                        <td class="text-center">3</td>
-                        <td class="small text-muted text-center">MATH 101</td>
-                        <td class="small text-muted text-center">MATH 102</td>
-                        <td>
-                            <select class="form-select form-select-sm grade-select">
-                                <option selected></option>
-                                <option>1.00</option>
-                                <option>1.25</option>
-                                <option>1.50</option>
-                                <option>1.75</option>
-                                <option>2.00</option>
-                                <option>2.25</option>
-                                <option>2.50</option>
-                                <option>2.75</option>
-                                <option>3.00</option>
-                                <option>5.00</option>
-                            </select>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="text-center">PATHFit 2</td>
-                        <td class="course-title-cell">Exercise-based Fitness Activities</td>
-                        <td class="text-center">2</td>
-                        <td class="text-center">2</td>
-                        <td class="text-center">0</td>
-                        <td class="small text-muted text-center">PATHFit 1</td>
-                        <td class="small text-muted text-center"></td>
-                        <td>
-                            <select class="form-select form-select-sm grade-select">
-                                <option selected></option>
-                                <option>1.00</option>
-                                <option>1.25</option>
-                                <option>1.50</option>
-                                <option>1.75</option>
-                                <option>2.00</option>
-                                <option>2.25</option>
-                                <option>2.50</option>
-                                <option>2.75</option>
-                                <option>3.00</option>
-                                <option>5.00</option>
-                            </select>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="text-center">NSTP 121</td>
-                        <td class="course-title-cell">National Service Training Program 2</td>
-                        <td class="text-center">3</td>
-                        <td class="text-center">3</td>
-                        <td class="text-center">0</td>
-                        <td class="small text-muted text-center">NSTP 111</td>
-                        <td class="small text-muted text-center"></td>
-                        <td>
-                            <select class="form-select form-select-sm grade-select">
-                                <option selected></option>
-                                <option>1.00</option>
-                                <option>1.25</option>
-                                <option>1.50</option>
-                                <option>1.75</option>
-                                <option>2.00</option>
-                                <option>2.25</option>
-                                <option>2.50</option>
-                                <option>2.75</option>
-                                <option>3.00</option>
-                                <option>5.00</option>
-                            </select>
-                        </td>
-                    </tr>
-                </tbody>
-                <tfoot>
-                    <tr>
-                        <th colspan="2" class="text-end">Total Units</th>
-                        <th class="text-center">26</th>
-                        <th colspan="5"></th>
-                    </tr>
-                </tfoot>
-            </table>
-        </div>
-    </div>
-
-    <!-- FIRST YEAR - MIDTERM -->
-    <div class="mb-4">
-        <h6 class="fw-bold mb-2">First Year - Midterm</h6>
-        <div class="table-responsive">
-            <table class="table table-sm align-middle table-bordered mb-0">
-                <thead class="table-light">
-                    <tr class="text-center">
-                        <th rowspan="2" style="width: 8%;">Course Code</th>
-                        <th rowspan="2" style="width: 30%;">Course Title</th>
-                        <th rowspan="2" style="width: 5%;">Units</th>
-                        <th colspan="2" class="hours-header" style="width: 8%;">No. of hour/s</th>
-                        <th rowspan="2" style="width: 13%;">Pre-requisite(s)</th>
-                        <th rowspan="2" style="width: 13%;">Co-requisite(s)</th>
-                        <th rowspan="2" style="width: 10%;">Grade</th>
-                    </tr>
-                    <tr class="text-center">
-                        <th style="width: 4%;">Lec</th>
-                        <th style="width: 4%;">Lab</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td class="text-center">GEd 103</td>
-                        <td class="course-title-cell">Life and Works of Rizal</td>
-                        <td class="text-center">3</td>
-                        <td class="text-center">3</td>
-                        <td class="text-center">0</td>
-                        <td class="small text-muted text-center"></td>
-                        <td class="small text-muted text-center"></td>
-                        <td>
-                            <select class="form-select form-select-sm grade-select">
-                                <option selected></option>
-                                <option>1.00</option>
-                                <option>1.25</option>
-                                <option>1.50</option>
-                                <option>1.75</option>
-                                <option>2.00</option>
-                                <option>2.25</option>
-                                <option>2.50</option>
-                                <option>2.75</option>
-                                <option>3.00</option>
-                                <option>5.00</option>
-                            </select>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="text-center">GEd 107</td>
-                        <td class="course-title-cell">Ethics</td>
-                        <td class="text-center">3</td>
-                        <td class="text-center">3</td>
-                        <td class="text-center">0</td>
-                        <td class="small text-muted text-center"></td>
-                        <td class="small text-muted text-center"></td>
-                        <td>
-                            <select class="form-select form-select-sm grade-select">
-                                <option selected></option>
-                                <option>1.00</option>
-                                <option>1.25</option>
-                                <option>1.50</option>
-                                <option>1.75</option>
-                                <option>2.00</option>
-                                <option>2.25</option>
-                                <option>2.50</option>
-                                <option>2.75</option>
-                                <option>3.00</option>
-                                <option>5.00</option>
-                            </select>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="text-center">PHYS 103</td>
-                        <td class="course-title-cell">Physics for Engineers 2</td>
-                        <td class="text-center">3</td>
-                        <td class="text-center">3</td>
-                        <td class="text-center">0</td>
-                        <td class="small text-muted text-center">PHYS 102; MATH 102</td>
-                        <td class="small text-muted text-center"></td>
-                        <td>
-                            <select class="form-select form-select-sm grade-select">
-                                <option selected></option>
-                                <option>1.00</option>
-                                <option>1.25</option>
-                                <option>1.50</option>
-                                <option>1.75</option>
-                                <option>2.00</option>
-                                <option>2.25</option>
-                                <option>2.50</option>
-                                <option>2.75</option>
-                                <option>3.00</option>
-                                <option>5.00</option>
-                            </select>
-                        </td>
-                    </tr>
-                </tbody>
-                <tfoot>
-                    <tr>
-                        <th colspan="2" class="text-end">Total Units</th>
-                        <th class="text-center">9</th>
-                        <th colspan="5"></th>
-                    </tr>
-                </tfoot>
-            </table>
-        </div>
-    </div>
-
-    <!-- SECOND YEAR - FIRST SEMESTER -->
-    <div class="mb-4">
-        <h6 class="fw-bold mb-2">Second Year - First Semester</h6>
-        <div class="table-responsive">
-            <table class="table table-sm align-middle table-bordered mb-0">
-                <thead class="table-light">
-                    <tr class="text-center">
-                        <th rowspan="2" style="width: 8%;">Course Code</th>
-                        <th rowspan="2" style="width: 30%;">Course Title</th>
-                        <th rowspan="2" style="width: 5%;">Units</th>
-                        <th colspan="2" class="hours-header" style="width: 8%;">No. of hour/s</th>
-                        <th rowspan="2" style="width: 13%;">Pre-requisite(s)</th>
-                        <th rowspan="2" style="width: 13%;">Co-requisite(s)</th>
-                        <th rowspan="2" style="width: 10%;">Grade</th>
-                    </tr>
-                    <tr class="text-center">
-                        <th style="width: 4%;">Lec</th>
-                        <th style="width: 4%;">Lab</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td class="text-center">CpE 201</td>
-                        <td class="course-title-cell">CpE Discipline, Professional Practice and laws</td>
-                        <td class="text-center">3</td>
-                        <td class="text-center">3</td>
-                        <td class="text-center">0</td>
-                        <td class="small text-muted text-center"></td>
-                        <td class="small text-muted text-center"></td>
-                        <td>
-                            <select class="form-select form-select-sm grade-select">
-                                <option selected></option>
-                                <option>1.00</option>
-                                <option>1.25</option>
-                                <option>1.50</option>
-                                <option>1.75</option>
-                                <option>2.00</option>
-                                <option>2.25</option>
-                                <option>2.50</option>
-                                <option>2.75</option>
-                                <option>3.00</option>
-                                <option>5.00</option>
-                            </select>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="text-center">CpE 202</td>
-                        <td class="course-title-cell">Discrete Mathematics</td>
-                        <td class="text-center">3</td>
-                        <td class="text-center">3</td>
-                        <td class="text-center">0</td>
-                        <td class="small text-muted text-center">MATH 101</td>
-                        <td class="small text-muted text-center"></td>
-                        <td>
-                            <select class="form-select form-select-sm grade-select">
-                                <option selected></option>
-                                <option>1.00</option>
-                                <option>1.25</option>
-                                <option>1.50</option>
-                                <option>1.75</option>
-                                <option>2.00</option>
-                                <option>2.25</option>
-                                <option>2.50</option>
-                                <option>2.75</option>
-                                <option>3.00</option>
-                                <option>5.00</option>
-                            </select>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="text-center">CpE 203</td>
-                        <td class="course-title-cell">Programming Logic and Design</td>
-                        <td class="text-center">2</td>
-                        <td class="text-center">2</td>
-                        <td class="text-center">0</td>
-                        <td class="small text-muted text-center"></td>
-                        <td class="small text-muted text-center"></td>
-                        <td>
-                            <select class="form-select form-select-sm grade-select">
-                                <option selected></option>
-                                <option>1.00</option>
-                                <option>1.25</option>
-                                <option>1.50</option>
-                                <option>1.75</option>
-                                <option>2.00</option>
-                                <option>2.25</option>
-                                <option>2.50</option>
-                                <option>2.75</option>
-                                <option>3.00</option>
-                                <option>5.00</option>
-                            </select>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="text-center">GEdE 101</td>
-                        <td class="course-title-cell">The Entrepreneurial Mind</td>
-                        <td class="text-center">3</td>
-                        <td class="text-center">3</td>
-                        <td class="text-center">0</td>
-                        <td class="small text-muted text-center"></td>
-                        <td class="small text-muted text-center"></td>
-                        <td>
-                            <select class="form-select form-select-sm grade-select">
-                                <option selected></option>
-                                <option>1.00</option>
-                                <option>1.25</option>
-                                <option>1.50</option>
-                                <option>1.75</option>
-                                <option>2.00</option>
-                                <option>2.25</option>
-                                <option>2.50</option>
-                                <option>2.75</option>
-                                <option>3.00</option>
-                                <option>5.00</option>
-                            </select>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="text-center">EE 212</td>
-                        <td class="course-title-cell">Fundamentals of Electrical Circuits</td>
-                        <td class="text-center">4</td>
-                        <td class="text-center">4</td>
-                        <td class="text-center">0</td>
-                        <td class="small text-muted text-center">PHY 103</td>
-                        <td class="small text-muted text-center"></td>
-                        <td>
-                            <select class="form-select form-select-sm grade-select">
-                                <option selected></option>
-                                <option>1.00</option>
-                                <option>1.25</option>
-                                <option>1.50</option>
-                                <option>1.75</option>
-                                <option>2.00</option>
-                                <option>2.25</option>
-                                <option>2.50</option>
-                                <option>2.75</option>
-                                <option>3.00</option>
-                                <option>5.00</option>
-                            </select>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="text-center">ENGG 103</td>
-                        <td class="course-title-cell">Computer-Aided Design</td>
-                        <td class="text-center">1</td>
-                        <td class="text-center">0</td>
-                        <td class="text-center">3</td>
-                        <td class="small text-muted text-center">ENGG 102</td>
-                        <td class="small text-muted text-center"></td>
-                        <td>
-                            <select class="form-select form-select-sm grade-select">
-                                <option selected></option>
-                                <option>1.00</option>
-                                <option>1.25</option>
-                                <option>1.50</option>
-                                <option>1.75</option>
-                                <option>2.00</option>
-                                <option>2.25</option>
-                                <option>2.50</option>
-                                <option>2.75</option>
-                                <option>3.00</option>
-                                <option>5.00</option>
-                            </select>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="text-center">ENGG 104</td>
-                        <td class="course-title-cell">Engineering Economics</td>
-                        <td class="text-center">3</td>
-                        <td class="text-center">3</td>
-                        <td class="text-center">0</td>
-                        <td class="small text-muted text-center">MATH 102</td>
-                        <td class="small text-muted text-center"></td>
-                        <td>
-                            <select class="form-select form-select-sm grade-select">
-                                <option selected></option>
-                                <option>1.00</option>
-                                <option>1.25</option>
-                                <option>1.50</option>
-                                <option>1.75</option>
-                                <option>2.00</option>
-                                <option>2.25</option>
-                                <option>2.50</option>
-                                <option>2.75</option>
-                                <option>3.00</option>
-                                <option>5.00</option>
-                            </select>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="text-center">AI 101</td>
-                        <td class="course-title-cell">Linear Algebra for AI</td>
-                        <td class="text-center">3</td>
-                        <td class="text-center">3</td>
-                        <td class="text-center">0</td>
-                        <td class="small text-muted text-center"></td>
-                        <td class="small text-muted text-center"></td>
-                        <td>
-                            <select class="form-select form-select-sm grade-select">
-                                <option selected></option>
-                                <option>1.00</option>
-                                <option>1.25</option>
-                                <option>1.50</option>
-                                <option>1.75</option>
-                                <option>2.00</option>
-                                <option>2.25</option>
-                                <option>2.50</option>
-                                <option>2.75</option>
-                                <option>3.00</option>
-                                <option>5.00</option>
-                            </select>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="text-center">MATH 103</td>
-                        <td class="course-title-cell">Differential Equations</td>
-                        <td class="text-center">3</td>
-                        <td class="text-center">3</td>
-                        <td class="text-center">0</td>
-                        <td class="small text-muted text-center">MATH 102</td>
-                        <td class="small text-muted text-center"></td>
-                        <td>
-                            <select class="form-select form-select-sm grade-select">
-                                <option selected></option>
-                                <option>1.00</option>
-                                <option>1.25</option>
-                                <option>1.50</option>
-                                <option>1.75</option>
-                                <option>2.00</option>
-                                <option>2.25</option>
-                                <option>2.50</option>
-                                <option>2.75</option>
-                                <option>3.00</option>
-                                <option>5.00</option>
-                            </select>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="text-center">PATHFit 3</td>
-                        <td class="course-title-cell">Choice of dance, sports, Martial Arts, Group exercise, Outdoor and Adventure Activities 1</td>
-                        <td class="text-center">2</td>
-                        <td class="text-center">2</td>
-                        <td class="text-center">0</td>
-                        <td class="small text-muted text-center">PATHFit 1 & 2</td>
-                        <td class="small text-muted text-center"></td>
-                        <td>
-                            <select class="form-select form-select-sm grade-select">
-                                <option selected></option>
-                                <option>1.00</option>
-                                <option>1.25</option>
-                                <option>1.50</option>
-                                <option>1.75</option>
-                                <option>2.00</option>
-                                <option>2.25</option>
-                                <option>2.50</option>
-                                <option>2.75</option>
-                                <option>3.00</option>
-                                <option>5.00</option>
-                            </select>
-                        </td>
-                    </tr>
-                </tbody>
-                <tfoot>
-                    <tr>
-                        <th colspan="2" class="text-end">Total Units</th>
-                        <th class="text-center">27</th>
-                        <th colspan="5"></th>
-                    </tr>
-                </tfoot>
-            </table>
-        </div>
-    </div>
-
-    <!-- SECOND YEAR - SECOND SEMESTER -->
-    <div class="mb-4">
-        <h6 class="fw-bold mb-2">Second Year - Second Semester</h6>
-        <div class="table-responsive">
-            <table class="table table-sm align-middle table-bordered mb-0">
-                <thead class="table-light">
-                    <tr class="text-center">
-                        <th rowspan="2" style="width: 8%;">Course Code</th>
-                        <th rowspan="2" style="width: 30%;">Course Title</th>
-                        <th rowspan="2" style="width: 5%;">Units</th>
-                        <th colspan="2" class="hours-header" style="width: 8%;">No. of hour/s</th>
-                        <th rowspan="2" style="width: 13%;">Pre-requisite(s)</th>
-                        <th rowspan="2" style="width: 13%;">Co-requisite(s)</th>
-                        <th rowspan="2" style="width: 10%;">Grade</th>
-                    </tr>
-                    <tr class="text-center">
-                        <th style="width: 4%;">Lec</th>
-                        <th style="width: 4%;">Lab</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td class="text-center">CpE 204</td>
-                        <td class="course-title-cell">Advance Engineering Mathematics for CpE</td>
-                        <td class="text-center">3</td>
-                        <td class="text-center">3</td>
-                        <td class="text-center">0</td>
-                        <td class="small text-muted text-center">2nd Year Standing</td>
-                        <td class="small text-muted text-center"></td>
-                        <td>
-                            <select class="form-select form-select-sm grade-select">
-                                <option selected></option>
-                                <option>1.00</option>
-                                <option>1.25</option>
-                                <option>1.50</option>
-                                <option>1.75</option>
-                                <option>2.00</option>
-                                <option>2.25</option>
-                                <option>2.50</option>
-                                <option>2.75</option>
-                                <option>3.00</option>
-                                <option>5.00</option>
-                            </select>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="text-center">CpE 205</td>
-                        <td class="course-title-cell">Object-Oriented Programming</td>
-                        <td class="text-center">2</td>
-                        <td class="text-center">2</td>
-                        <td class="text-center">0</td>
-                        <td class="small text-muted text-center">CpE 203</td>
-                        <td class="small text-muted text-center"></td>
-                        <td>
-                            <select class="form-select form-select-sm grade-select">
-                                <option selected></option>
-                                <option>1.00</option>
-                                <option>1.25</option>
-                                <option>1.50</option>
-                                <option>1.75</option>
-                                <option>2.00</option>
-                                <option>2.25</option>
-                                <option>2.50</option>
-                                <option>2.75</option>
-                                <option>3.00</option>
-                                <option>5.00</option>
-                            </select>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="text-center">CpEE 401</td>
-                        <td class="elective-course-cell">Elective Course 1</td>
-                        <td class="text-center">3</td>
-                        <td class="text-center">3</td>
-                        <td class="text-center">0</td>
-                        <td class="small text-muted text-center">2nd Year Standing</td>
-                        <td class="small text-muted text-center"></td>
-                        <td>
-                            <select class="form-select form-select-sm grade-select">
-                                <option selected></option>
-                                <option>1.00</option>
-                                <option>1.25</option>
-                                <option>1.50</option>
-                                <option>1.75</option>
-                                <option>2.00</option>
-                                <option>2.25</option>
-                                <option>2.50</option>
-                                <option>2.75</option>
-                                <option>3.00</option>
-                                <option>5.00</option>
-                            </select>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="text-center">ECE 405</td>
-                        <td class="course-title-cell">Electronic Circuits: Devices and Analysis</td>
-                        <td class="text-center">4</td>
-                        <td class="text-center">4</td>
-                        <td class="text-center">0</td>
-                        <td class="small text-muted text-center">EE 212</td>
-                        <td class="small text-muted text-center"></td>
-                        <td>
-                            <select class="form-select form-select-sm grade-select">
-                                <option selected></option>
-                                <option>1.00</option>
-                                <option>1.25</option>
-                                <option>1.50</option>
-                                <option>1.75</option>
-                                <option>2.00</option>
-                                <option>2.25</option>
-                                <option>2.50</option>
-                                <option>2.75</option>
-                                <option>3.00</option>
-                                <option>5.00</option>
-                            </select>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="text-center">ENGG 114</td>
-                        <td class="course-title-cell">Basic Occupational Safety and Health</td>
-                        <td class="text-center">3</td>
-                        <td class="text-center">3</td>
-                        <td class="text-center">0</td>
-                        <td class="small text-muted text-center"></td>
-                        <td class="small text-muted text-center"></td>
-                        <td>
-                            <select class="form-select form-select-sm grade-select">
-                                <option selected></option>
-                                <option>1.00</option>
-                                <option>1.25</option>
-                                <option>1.50</option>
-                                <option>1.75</option>
-                                <option>2.00</option>
-                                <option>2.25</option>
-                                <option>2.50</option>
-                                <option>2.75</option>
-                                <option>3.00</option>
-                                <option>5.00</option>
-                            </select>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="text-center">MATH 104</td>
-                        <td class="course-title-cell">Numerical Methods</td>
-                        <td class="text-center">3</td>
-                        <td class="text-center">3</td>
-                        <td class="text-center">0</td>
-                        <td class="small text-muted text-center">Math 103</td>
-                        <td class="small text-muted text-center"></td>
-                        <td>
-                            <select class="form-select form-select-sm grade-select">
-                                <option selected></option>
-                                <option>1.00</option>
-                                <option>1.25</option>
-                                <option>1.50</option>
-                                <option>1.75</option>
-                                <option>2.00</option>
-                                <option>2.25</option>
-                                <option>2.50</option>
-                                <option>2.75</option>
-                                <option>3.00</option>
-                                <option>5.00</option>
-                            </select>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="text-center">AI 102</td>
-                        <td class="course-title-cell">Probability and Statistics for AI</td>
-                        <td class="text-center">3</td>
-                        <td class="text-center">3</td>
-                        <td class="text-center">0</td>
-                        <td class="small text-muted text-center">MATH 102</td>
-                        <td class="small text-muted text-center"></td>
-                        <td>
-                            <select class="form-select form-select-sm grade-select">
-                                <option selected></option>
-                                <option>1.00</option>
-                                <option>1.25</option>
-                                <option>1.50</option>
-                                <option>1.75</option>
-                                <option>2.00</option>
-                                <option>2.25</option>
-                                <option>2.50</option>
-                                <option>2.75</option>
-                                <option>3.00</option>
-                                <option>5.00</option>
-                            </select>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="text-center">PATHFit 4</td>
-                        <td class="course-title-cell">Choice of Dance, Sports, Martial Arts, Group Exercise, Outdoor, and Adventure Activities 2</td>
-                        <td class="text-center">2</td>
-                        <td class="text-center">2</td>
-                        <td class="text-center">0</td>
-                        <td class="small text-muted text-center">PATHFit 1 & 2</td>
-                        <td class="small text-muted text-center"></td>
-                        <td>
-                            <select class="form-select form-select-sm grade-select">
-                                <option selected></option>
-                                <option>1.00</option>
-                                <option>1.25</option>
-                                <option>1.50</option>
-                                <option>1.75</option>
-                                <option>2.00</option>
-                                <option>2.25</option>
-                                <option>2.50</option>
-                                <option>2.75</option>
-                                <option>3.00</option>
-                                <option>5.00</option>
-                            </select>
-                        </td>
-                    </tr>
-                </tbody>
-                <tfoot>
-                    <tr>
-                        <th colspan="2" class="text-end">Total Units</th>
-                        <th class="text-center">23</th>
-                        <th colspan="5"></th>
-                    </tr>
-                </tfoot>
-            </table>
-        </div>
-    </div>
-
-    <!-- THIRD YEAR - FIRST SEMESTER -->
-    <div class="mb-4">
-        <h6 class="fw-bold mb-2">Third Year - First Semester</h6>
-        <div class="table-responsive">
-            <table class="table table-sm align-middle table-bordered mb-0">
-                <thead class="table-light">
-                    <tr class="text-center">
-                        <th rowspan="2" style="width: 8%;">Course Code</th>
-                        <th rowspan="2" style="width: 30%;">Course Title</th>
-                        <th rowspan="2" style="width: 5%;">Units</th>
-                        <th colspan="2" class="hours-header" style="width: 8%;">No. of hour/s</th>
-                        <th rowspan="2" style="width: 13%;">Pre-requisite(s)</th>
-                        <th rowspan="2" style="width: 13%;">Co-requisite(s)</th>
-                        <th rowspan="2" style="width: 10%;">Grade</th>
-                    </tr>
-                    <tr class="text-center">
-                        <th style="width: 4%;">Lec</th>
-                        <th style="width: 4%;">Lab</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td class="text-center">CpE 302</td>
-                        <td class="course-title-cell">Logic Circuits and Design</td>
-                        <td class="text-center">4</td>
-                        <td class="text-center">4</td>
-                        <td class="text-center">0</td>
-                        <td class="small text-muted text-center">ECE 405</td>
-                        <td class="small text-muted text-center"></td>
-                        <td>
-                            <select class="form-select form-select-sm grade-select">
-                                <option selected></option>
-                                <option>1.00</option>
-                                <option>1.25</option>
-                                <option>1.50</option>
-                                <option>1.75</option>
-                                <option>2.00</option>
-                                <option>2.25</option>
-                                <option>2.50</option>
-                                <option>2.75</option>
-                                <option>3.00</option>
-                                <option>5.00</option>
-                            </select>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="text-center">CpE 303</td>
-                        <td class="course-title-cell">Data Structures and Algorithms</td>
-                        <td class="text-center">2</td>
-                        <td class="text-center">2</td>
-                        <td class="text-center">0</td>
-                        <td class="small text-muted text-center">CpE 205</td>
-                        <td class="small text-muted text-center"></td>
-                        <td>
-                            <select class="form-select form-select-sm grade-select">
-                                <option selected></option>
-                                <option>1.00</option>
-                                <option>1.25</option>
-                                <option>1.50</option>
-                                <option>1.75</option>
-                                <option>2.00</option>
-                                <option>2.25</option>
-                                <option>2.50</option>
-                                <option>2.75</option>
-                                <option>3.00</option>
-                                <option>5.00</option>
-                            </select>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="text-center">CpE 304</td>
-                        <td class="course-title-cell">Introduction to Networks, Data and Digital Communications</td>
-                        <td class="text-center">3</td>
-                        <td class="text-center">3</td>
-                        <td class="text-center">0</td>
-                        <td class="small text-muted text-center">ECE 405</td>
-                        <td class="small text-muted text-center">CpE 302</td>
-                        <td>
-                            <select class="form-select form-select-sm grade-select">
-                                <option selected></option>
-                                <option>1.00</option>
-                                <option>1.25</option>
-                                <option>1.50</option>
-                                <option>1.75</option>
-                                <option>2.00</option>
-                                <option>2.25</option>
-                                <option>2.50</option>
-                                <option>2.75</option>
-                                <option>3.00</option>
-                                <option>5.00</option>
-                            </select>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="text-center">CpE 305</td>
-                        <td class="course-title-cell">Fundamentals of Mixed Signals and Sensors</td>
-                        <td class="text-center">3</td>
-                        <td class="text-center">3</td>
-                        <td class="text-center">0</td>
-                        <td class="small text-muted text-center">ECE 405</td>
-                        <td class="small text-muted text-center"></td>
-                        <td>
-                            <select class="form-select form-select-sm grade-select">
-                                <option selected></option>
-                                <option>1.00</option>
-                                <option>1.25</option>
-                                <option>1.50</option>
-                                <option>1.75</option>
-                                <option>2.00</option>
-                                <option>2.25</option>
-                                <option>2.50</option>
-                                <option>2.75</option>
-                                <option>3.00</option>
-                                <option>5.00</option>
-                            </select>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="text-center">CpE 306</td>
-                        <td class="course-title-cell">Feedback and Control Systems</td>
-                        <td class="text-center">3</td>
-                        <td class="text-center">3</td>
-                        <td class="text-center">0</td>
-                        <td class="small text-muted text-center">CpE 206; EE 212</td>
-                        <td class="small text-muted text-center"></td>
-                        <td>
-                            <select class="form-select form-select-sm grade-select">
-                                <option selected></option>
-                                <option>1.00</option>
-                                <option>1.25</option>
-                                <option>1.50</option>
-                                <option>1.75</option>
-                                <option>2.00</option>
-                                <option>2.25</option>
-                                <option>2.50</option>
-                                <option>2.75</option>
-                                <option>3.00</option>
-                                <option>5.00</option>
-                            </select>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="text-center">ENGG 116</td>
-                        <td class="course-title-cell">Methods of Research</td>
-                        <td class="text-center">3</td>
-                        <td class="text-center">3</td>
-                        <td class="text-center">0</td>
-                        <td class="small text-muted text-center">AI 102, 3rd Year Standing</td>
-                        <td class="small text-muted text-center"></td>
-                        <td>
-                            <select class="form-select form-select-sm grade-select">
-                                <option selected></option>
-                                <option>1.00</option>
-                                <option>1.25</option>
-                                <option>1.50</option>
-                                <option>1.75</option>
-                                <option>2.00</option>
-                                <option>2.25</option>
-                                <option>2.50</option>
-                                <option>2.75</option>
-                                <option>3.00</option>
-                                <option>5.00</option>
-                            </select>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="text-center">CpEE 402</td>
-                        <td class="elective-course-cell">Elective Course 2</td>
-                        <td class="text-center">3</td>
-                        <td class="text-center">3</td>
-                        <td class="text-center">0</td>
-                        <td class="small text-muted text-center">CpEE 401</td>
-                        <td class="small text-muted text-center"></td>
-                        <td>
-                            <select class="form-select form-select-sm grade-select">
-                                <option selected></option>
-                                <option>1.00</option>
-                                <option>1.25</option>
-                                <option>1.50</option>
-                                <option>1.75</option>
-                                <option>2.00</option>
-                                <option>2.25</option>
-                                <option>2.50</option>
-                                <option>2.75</option>
-                                <option>3.00</option>
-                                <option>5.00</option>
-                            </select>
-                        </td>
-                    </tr>
-                </tbody>
-                <tfoot>
-                    <tr>
-                        <th colspan="2" class="text-end">Total Units</th>
-                        <th class="text-center">21</th>
-                        <th colspan="5"></th>
-                    </tr>
-                </tfoot>
-            </table>
-        </div>
-    </div>
-
-    <!-- THIRD YEAR - SECOND SEMESTER -->
-    <div class="mb-4">
-        <h6 class="fw-bold mb-2">Third Year - Second Semester</h6>
-        <div class="table-responsive">
-            <table class="table table-sm align-middle table-bordered mb-0">
-                <thead class="table-light">
-                    <tr class="text-center">
-                        <th rowspan="2" style="width: 8%;">Course Code</th>
-                        <th rowspan="2" style="width: 30%;">Course Title</th>
-                        <th rowspan="2" style="width: 5%;">Units</th>
-                        <th colspan="2" class="hours-header" style="width: 8%;">No. of hour/s</th>
-                        <th rowspan="2" style="width: 13%;">Pre-requisite(s)</th>
-                        <th rowspan="2" style="width: 13%;">Co-requisite(s)</th>
-                        <th rowspan="2" style="width: 10%;">Grade</th>
-                    </tr>
-                    <tr class="text-center">
-                        <th style="width: 4%;">Lec</th>
-                        <th style="width: 4%;">Lab</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td class="text-center">CpE 308</td>
-                        <td class="course-title-cell">Microprocessors</td>
-                        <td class="text-center">4</td>
-                        <td class="text-center">4</td>
-                        <td class="text-center">0</td>
-                        <td class="small text-muted text-center">CpE 302</td>
-                        <td class="small text-muted text-center"></td>
-                        <td>
-                            <select class="form-select form-select-sm grade-select">
-                                <option selected></option>
-                                <option>1.00</option>
-                                <option>1.25</option>
-                                <option>1.50</option>
-                                <option>1.75</option>
-                                <option>2.00</option>
-                                <option>2.25</option>
-                                <option>2.50</option>
-                                <option>2.75</option>
-                                <option>3.00</option>
-                                <option>5.00</option>
-                            </select>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="text-center">CpE 309</td>
-                        <td class="course-title-cell">Software Design</td>
-                        <td class="text-center">4</td>
-                        <td class="text-center">4</td>
-                        <td class="text-center">0</td>
-                        <td class="small text-muted text-center">CpE 303</td>
-                        <td class="small text-muted text-center"></td>
-                        <td>
-                            <select class="form-select form-select-sm grade-select">
-                                <option selected></option>
-                                <option>1.00</option>
-                                <option>1.25</option>
-                                <option>1.50</option>
-                                <option>1.75</option>
-                                <option>2.00</option>
-                                <option>2.25</option>
-                                <option>2.50</option>
-                                <option>2.75</option>
-                                <option>3.00</option>
-                                <option>5.00</option>
-                            </select>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="text-center">CpE 310</td>
-                        <td class="course-title-cell">Digital Signal Processing</td>
-                        <td class="text-center">4</td>
-                        <td class="text-center">4</td>
-                        <td class="text-center">0</td>
-                        <td class="small text-muted text-center">CpE 305; CpE 306</td>
-                        <td class="small text-muted text-center"></td>
-                        <td>
-                            <select class="form-select form-select-sm grade-select">
-                                <option selected></option>
-                                <option>1.00</option>
-                                <option>1.25</option>
-                                <option>1.50</option>
-                                <option>1.75</option>
-                                <option>2.00</option>
-                                <option>2.25</option>
-                                <option>2.50</option>
-                                <option>2.75</option>
-                                <option>3.00</option>
-                                <option>5.00</option>
-                            </select>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="text-center">CpE 311</td>
-                        <td class="course-title-cell">Computer Architecture and Organization</td>
-                        <td class="text-center">4</td>
-                        <td class="text-center">4</td>
-                        <td class="text-center">0</td>
-                        <td class="small text-muted text-center"></td>
-                        <td class="small text-muted text-center">CpE 308</td>
-                        <td>
-                            <select class="form-select form-select-sm grade-select">
-                                <option selected></option>
-                                <option>1.00</option>
-                                <option>1.25</option>
-                                <option>1.50</option>
-                                <option>1.75</option>
-                                <option>2.00</option>
-                                <option>2.25</option>
-                                <option>2.50</option>
-                                <option>2.75</option>
-                                <option>3.00</option>
-                                <option>5.00</option>
-                            </select>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="text-center">CpE 312</td>
-                        <td class="course-title-cell">Connecting Networks and Security</td>
-                        <td class="text-center">4</td>
-                        <td class="text-center">4</td>
-                        <td class="text-center">0</td>
-                        <td class="small text-muted text-center">CpE 304</td>
-                        <td class="small text-muted text-center"></td>
-                        <td>
-                            <select class="form-select form-select-sm grade-select">
-                                <option selected></option>
-                                <option>1.00</option>
-                                <option>1.25</option>
-                                <option>1.50</option>
-                                <option>1.75</option>
-                                <option>2.00</option>
-                                <option>2.25</option>
-                                <option>2.50</option>
-                                <option>2.75</option>
-                                <option>3.00</option>
-                                <option>5.00</option>
-                            </select>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="text-center">AI 103</td>
-                        <td class="course-title-cell">Machine Learning and Neural Networks</td>
-                        <td class="text-center">3</td>
-                        <td class="text-center">3</td>
-                        <td class="text-center">0</td>
-                        <td class="small text-muted text-center">AI 101, AI 102, CpE 101</td>
-                        <td class="small text-muted text-center"></td>
-                        <td>
-                            <select class="form-select form-select-sm grade-select">
-                                <option selected></option>
-                                <option>1.00</option>
-                                <option>1.25</option>
-                                <option>1.50</option>
-                                <option>1.75</option>
-                                <option>2.00</option>
-                                <option>2.25</option>
-                                <option>2.50</option>
-                                <option>2.75</option>
-                                <option>3.00</option>
-                                <option>5.00</option>
-                            </select>
-                        </td>
-                    </tr>
-                </tbody>
-                <tfoot>
-                    <tr>
-                        <th colspan="2" class="text-end">Total Units</th>
-                        <th class="text-center">23</th>
-                        <th colspan="5"></th>
-                    </tr>
-                </tfoot>
-            </table>
-        </div>
-    </div>
-
-    <!-- THIRD YEAR - MIDTERM -->
-    <div class="mb-4">
-        <h6 class="fw-bold mb-2">Third Year - Midterm</h6>
-        <div class="table-responsive">
-            <table class="table table-sm align-middle table-bordered mb-0">
-                <thead class="table-light">
-                    <tr class="text-center">
-                        <th rowspan="2" style="width: 8%;">Course Code</th>
-                        <th rowspan="2" style="width: 30%;">Course Title</th>
-                        <th rowspan="2" style="width: 5%;">Units</th>
-                        <th colspan="2" class="hours-header" style="width: 8%;">No. of hour/s</th>
-                        <th rowspan="2" style="width: 13%;">Pre-requisite(s)</th>
-                        <th rowspan="2" style="width: 13%;">Co-requisite(s)</th>
-                        <th rowspan="2" style="width: 10%;">Grade</th>
-                    </tr>
-                    <tr class="text-center">
-                        <th style="width: 4%;">Lec</th>
-                        <th style="width: 4%;">Lab</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td class="text-center">CpE 313</td>
-                        <td class="course-title-cell">Introduction to HDL</td>
-                        <td class="text-center">1</td>
-                        <td class="text-center">0</td>
-                        <td class="text-center">3</td>
-                        <td class="small text-muted text-center">CpE 203, CpE 302</td>
-                        <td class="small text-muted text-center"></td>
-                        <td>
-                            <select class="form-select form-select-sm grade-select">
-                                <option selected></option>
-                                <option>1.00</option>
-                                <option>1.25</option>
-                                <option>1.50</option>
-                                <option>1.75</option>
-                                <option>2.00</option>
-                                <option>2.25</option>
-                                <option>2.50</option>
-                                <option>2.75</option>
-                                <option>3.00</option>
-                                <option>5.00</option>
-                            </select>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="text-center">CpE 314</td>
-                        <td class="course-title-cell">Emerging Technologies in CpE</td>
-                        <td class="text-center">3</td>
-                        <td class="text-center">3</td>
-                        <td class="text-center">0</td>
-                        <td class="small text-muted text-center">3rd Year Standing</td>
-                        <td class="small text-muted text-center"></td>
-                        <td>
-                            <select class="form-select form-select-sm grade-select">
-                                <option selected></option>
-                                <option>1.00</option>
-                                <option>1.25</option>
-                                <option>1.50</option>
-                                <option>1.75</option>
-                                <option>2.00</option>
-                                <option>2.25</option>
-                                <option>2.50</option>
-                                <option>2.75</option>
-                                <option>3.00</option>
-                                <option>5.00</option>
-                            </select>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="text-center">CpE 315</td>
-                        <td class="course-title-cell">Computer Engineering Drafting and Design</td>
-                        <td class="text-center">1</td>
-                        <td class="text-center">0</td>
-                        <td class="text-center">3</td>
-                        <td class="small text-muted text-center">ECE 405</td>
-                        <td class="small text-muted text-center"></td>
-                        <td>
-                            <select class="form-select form-select-sm grade-select">
-                                <option selected></option>
-                                <option>1.00</option>
-                                <option>1.25</option>
-                                <option>1.50</option>
-                                <option>1.75</option>
-                                <option>2.00</option>
-                                <option>2.25</option>
-                                <option>2.50</option>
-                                <option>2.75</option>
-                                <option>3.00</option>
-                                <option>5.00</option>
-                            </select>
-                        </td>
-                    </tr>
-                </tbody>
-                <tfoot>
-                    <tr>
-                        <th colspan="2" class="text-end">Total Units</th>
-                        <th class="text-center">5</th>
-                        <th colspan="5"></th>
-                    </tr>
-                </tfoot>
-            </table>
-        </div>
-    </div>
-
-    <!-- FOURTH YEAR - FIRST SEMESTER -->
-    <div class="mb-4">
-        <h6 class="fw-bold mb-2">Fourth Year - First Semester</h6>
-        <div class="table-responsive">
-            <table class="table table-sm align-middle table-bordered mb-0">
-                <thead class="table-light">
-                    <tr class="text-center">
-                        <th rowspan="2" style="width: 8%;">Course Code</th>
-                        <th rowspan="2" style="width: 30%;">Course Title</th>
-                        <th rowspan="2" style="width: 5%;">Units</th>
-                        <th colspan="2" class="hours-header" style="width: 8%;">No. of hour/s</th>
-                        <th rowspan="2" style="width: 13%;">Pre-requisite(s)</th>
-                        <th rowspan="2" style="width: 13%;">Co-requisite(s)</th>
-                        <th rowspan="2" style="width: 10%;">Grade</th>
-                    </tr>
-                    <tr class="text-center">
-                        <th style="width: 4%;">Lec</th>
-                        <th style="width: 4%;">Lab</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td class="text-center">CpE 401</td>
-                        <td class="course-title-cell">Operating Systems</td>
-                        <td class="text-center">3</td>
-                        <td class="text-center">3</td>
-                        <td class="text-center">0</td>
-                        <td class="small text-muted text-center">CpE 303</td>
-                        <td class="small text-muted text-center"></td>
-                        <td>
-                            <select class="form-select form-select-sm grade-select">
-                                <option selected></option>
-                                <option>1.00</option>
-                                <option>1.25</option>
-                                <option>1.50</option>
-                                <option>1.75</option>
-                                <option>2.00</option>
-                                <option>2.25</option>
-                                <option>2.50</option>
-                                <option>2.75</option>
-                                <option>3.00</option>
-                                <option>5.00</option>
-                            </select>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="text-center">CpE 402</td>
-                        <td class="course-title-cell">Embedded Systems</td>
-                        <td class="text-center">4</td>
-                        <td class="text-center">4</td>
-                        <td class="text-center">0</td>
-                        <td class="small text-muted text-center">CpE 308</td>
-                        <td class="small text-muted text-center"></td>
-                        <td>
-                            <select class="form-select form-select-sm grade-select">
-                                <option selected></option>
-                                <option>1.00</option>
-                                <option>1.25</option>
-                                <option>1.50</option>
-                                <option>1.75</option>
-                                <option>2.00</option>
-                                <option>2.25</option>
-                                <option>2.50</option>
-                                <option>2.75</option>
-                                <option>3.00</option>
-                                <option>5.00</option>
-                            </select>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="text-center">CpE 403</td>
-                        <td class="course-title-cell">Seminars and Fieldtrips</td>
-                        <td class="text-center">2</td>
-                        <td class="text-center">2</td>
-                        <td class="text-center">0</td>
-                        <td class="small text-muted text-center">4th Year Standing</td>
-                        <td class="small text-muted text-center"></td>
-                        <td>
-                            <select class="form-select form-select-sm grade-select">
-                                <option selected></option>
-                                <option>1.00</option>
-                                <option>1.25</option>
-                                <option>1.50</option>
-                                <option>1.75</option>
-                                <option>2.00</option>
-                                <option>2.25</option>
-                                <option>2.50</option>
-                                <option>2.75</option>
-                                <option>3.00</option>
-                                <option>5.00</option>
-                            </select>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="text-center">CpE 404</td>
-                        <td class="course-title-cell">CpE Practice and Design 1</td>
-                        <td class="text-center">1</td>
-                        <td class="text-center">0</td>
-                        <td class="text-center">3</td>
-                        <td class="small text-muted text-center">ENGG 116, CpE 308</td>
-                        <td class="small text-muted text-center"></td>
-                        <td>
-                            <select class="form-select form-select-sm grade-select">
-                                <option selected></option>
-                                <option>1.00</option>
-                                <option>1.25</option>
-                                <option>1.50</option>
-                                <option>1.75</option>
-                                <option>2.00</option>
-                                <option>2.25</option>
-                                <option>2.50</option>
-                                <option>2.75</option>
-                                <option>3.00</option>
-                                <option>5.00</option>
-                            </select>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="text-center">ENGG 106</td>
-                        <td class="course-title-cell">Engineering Management</td>
-                        <td class="text-center">2</td>
-                        <td class="text-center">2</td>
-                        <td class="text-center">0</td>
-                        <td class="small text-muted text-center">4th Year Standing</td>
-                        <td class="small text-muted text-center"></td>
-                        <td>
-                            <select class="form-select form-select-sm grade-select">
-                                <option selected></option>
-                                <option>1.00</option>
-                                <option>1.25</option>
-                                <option>1.50</option>
-                                <option>1.75</option>
-                                <option>2.00</option>
-                                <option>2.25</option>
-                                <option>2.50</option>
-                                <option>2.75</option>
-                                <option>3.00</option>
-                                <option>5.00</option>
-                            </select>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="text-center">ENGG 105</td>
-                        <td class="course-title-cell">Technopreneurship</td>
-                        <td class="text-center">3</td>
-                        <td class="text-center">3</td>
-                        <td class="text-center">0</td>
-                        <td class="small text-muted text-center">4th Year Standing</td>
-                        <td class="small text-muted text-center"></td>
-                        <td>
-                            <select class="form-select form-select-sm grade-select">
-                                <option selected></option>
-                                <option>1.00</option>
-                                <option>1.25</option>
-                                <option>1.50</option>
-                                <option>1.75</option>
-                                <option>2.00</option>
-                                <option>2.25</option>
-                                <option>2.50</option>
-                                <option>2.75</option>
-                                <option>3.00</option>
-                                <option>5.00</option>
-                            </select>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="text-center">CpEE 403</td>
-                        <td class="elective-course-cell">Elective Course 3</td>
-                        <td class="text-center">3</td>
-                        <td class="text-center">3</td>
-                        <td class="text-center">0</td>
-                        <td class="small text-muted text-center">CpEE 402</td>
-                        <td class="small text-muted text-center"></td>
-                        <td>
-                            <select class="form-select form-select-sm grade-select">
-                                <option selected></option>
-                                <option>1.00</option>
-                                <option>1.25</option>
-                                <option>1.50</option>
-                                <option>1.75</option>
-                                <option>2.00</option>
-                                <option>2.25</option>
-                                <option>2.50</option>
-                                <option>2.75</option>
-                                <option>3.00</option>
-                                <option>5.00</option>
-                            </select>
-                        </td>
-                    </tr>
-                </tbody>
-                <tfoot>
-                    <tr>
-                        <th colspan="2" class="text-end">Total Units</th>
-                        <th class="text-center">18</th>
-                        <th colspan="5"></th>
-                    </tr>
-                </tfoot>
-            </table>
-        </div>
-    </div>
-
-    <!-- FOURTH YEAR - SECOND SEMESTER -->
-    <div class="mb-4">
-        <h6 class="fw-bold mb-2">Fourth Year - Second Semester</h6>
-        <div class="table-responsive">
-            <table class="table table-sm align-middle table-bordered mb-0">
-                <thead class="table-light">
-                    <tr class="text-center">
-                        <th rowspan="2" style="width: 8%;">Course Code</th>
-                        <th rowspan="2" style="width: 30%;">Course Title</th>
-                        <th rowspan="2" style="width: 5%;">Units</th>
-                        <th colspan="2" class="hours-header" style="width: 8%;">No. of hour/s</th>
-                        <th rowspan="2" style="width: 13%;">Pre-requisite(s)</th>
-                        <th rowspan="2" style="width: 13%;">Co-requisite(s)</th>
-                        <th rowspan="2" style="width: 10%;">Grade</th>
-                    </tr>
-                    <tr class="text-center">
-                        <th style="width: 4%;">Lec</th>
-                        <th style="width: 4%;">Lab</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td class="text-center">ENGG 117</td>
-                        <td class="course-title-cell">OJT/Internship (320 hrs)</td>
-                        <td class="text-center">4</td>
-                        <td class="text-center">4</td>
-                        <td class="text-center">0</td>
-                        <td class="small text-muted text-center">4th Year Standing</td>
-                        <td class="small text-muted text-center"></td>
-                        <td>
-                            <select class="form-select form-select-sm grade-select">
-                                <option selected></option>
-                                <option>1.00</option>
-                                <option>1.25</option>
-                                <option>1.50</option>
-                                <option>1.75</option>
-                                <option>2.00</option>
-                                <option>2.25</option>
-                                <option>2.50</option>
-                                <option>2.75</option>
-                                <option>3.00</option>
-                                <option>5.00</option>
-                            </select>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="text-center">CpE 405</td>
-                        <td class="course-title-cell">CpE Practice and Design 2</td>
-                        <td class="text-center">2</td>
-                        <td class="text-center">2</td>
-                        <td class="text-center">0</td>
-                        <td class="small text-muted text-center">CpE 404</td>
-                        <td class="small text-muted text-center"></td>
-                        <td>
-                            <select class="form-select form-select-sm grade-select">
-                                <option selected></option>
-                                <option>1.00</option>
-                                <option>1.25</option>
-                                <option>1.50</option>
-                                <option>1.75</option>
-                                <option>2.00</option>
-                                <option>2.25</option>
-                                <option>2.50</option>
-                                <option>2.75</option>
-                                <option>3.00</option>
-                                <option>5.00</option>
-                            </select>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td class="text-center">CpE 406</td>
-                        <td class="course-title-cell">Comprehensive Examination for CpE</td>
-                        <td class="text-center">2</td>
-                        <td class="text-center">2</td>
-                        <td class="text-center">0</td>
-                        <td class="small text-muted text-center">Graduating</td>
-                        <td class="small text-muted text-center"></td>
-                        <td>
-                            <select class="form-select form-select-sm grade-select">
-                                <option selected></option>
-                                <option>1.00</option>
-                                <option>1.25</option>
-                                <option>1.50</option>
-                                <option>1.75</option>
-                                <option>2.00</option>
-                                <option>2.25</option>
-                                <option>2.50</option>
-                                <option>2.75</option>
-                                <option>3.00</option>
-                                <option>5.00</option>
-                            </select>
-                        </td>
-                    </tr>
-                </tbody>
-                <tfoot>
-                    <tr>
-                        <th colspan="2" class="text-end">Total Units</th>
-                        <th class="text-center">8</th>
-                        <th colspan="5"></th>
-                    </tr>
-                </tfoot>
-            </table>
-        </div>
-    </div>
-
-    <div class="mt-4 d-flex justify-content-end gap-2">
-        <button type="button" class="btn btn-outline-secondary" id="clearGradesBtn">
-            Clear Grades
+        <button type="button" class="btn btn-sm btn-outline-secondary" id="addExistingGradesBtn" title="Upload PDF or scanned POS to extract grades">
+            Add Existing Grades
         </button>
-        <button type="button" class="btn btn-danger" id="generatePosBtn">
-            Generate POS
-        </button>
+    </div>
+
+    {% if is_regular %}
+    <p class="small text-muted mb-2">
+        Enter grades for each semester from 1st Year First Semester up to your selected current semester (Regular path).
+        All curriculum courses up to that semester are listed automatically.
+    </p>
+    <div class="row mb-3">
+        <div class="col-md-5">
+            <label class="form-label small text-uppercase text-muted">Current semester (Regular path)</label>
+            <select class="form-select form-select-sm" id="regular-current-semester">
+                {% for value, label in current_semester_choices_regular %}
+                <option value="{{ value }}" {% if current_semester_index == value %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </div>
+    {% elif preview_sections %}
+    <div class="mb-4">
+        <p class="small text-muted mb-2">Semesters that already have grades (read-only preview).</p>
+        {% for item in preview_sections %}
+        <div class="mb-4">
+            <h6 class="fw-bold mb-2">{{ item.section.label }}</h6>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle table-bordered mb-0">
+                    <thead class="table-light">
+                        <tr class="text-center">
+                            <th rowspan="2" style="width: 8%;">Course Code</th>
+                            <th rowspan="2" style="width: 30%;">Course Title</th>
+                            <th rowspan="2" style="width: 5%;">Units</th>
+                            <th colspan="2" class="hours-header" style="width: 8%;">No. of hour/s</th>
+                            <th rowspan="2" style="width: 13%;">Pre-requisite(s)</th>
+                            <th rowspan="2" style="width: 13%;">Co-requisite(s)</th>
+                            <th rowspan="2" style="width: 10%;">Grade</th>
+                        </tr>
+                        <tr class="text-center">
+                            <th style="width: 4%;">Lec</th>
+                            <th style="width: 4%;">Lab</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for cg in item.courses_with_grades %}
+                        <tr>
+                            <td class="text-center">{{ cg.course.code }}</td>
+                            <td class="course-title-cell">{{ cg.course.title }}</td>
+                            <td class="text-center">{{ cg.course.units }}</td>
+                            <td class="text-center">{{ cg.course.lec }}</td>
+                            <td class="text-center">{{ cg.course.lab }}</td>
+                            <td class="small text-muted text-center">{{ cg.course.prereq|default:"" }}</td>
+                            <td class="small text-muted text-center">{{ cg.course.coreq|default:"" }}</td>
+                            <td class="text-center fw-semibold">{{ cg.grade|default:"—" }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <th colspan="2" class="text-end table-light">Total Units</th>
+                            <th class="text-center table-light">{{ item.total_units|default:0 }}</th>
+                            <th colspan="5" class="table-light"></th>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    <hr class="my-4">
+    {% if not is_regular %}
+    {% if selected_section_has_grades and display_sections %}
+    <p class="small text-muted mb-2">The semester you selected already has grades (see preview above). Add courses for the semester below and enter grades.</p>
+    {% elif display_sections %}
+    <p class="small text-muted mb-2">Add courses (failed or not yet taken from this and previous semesters) and enter grades for the semester below.</p>
+    {% endif %}
+    {% endif %}
+    {% endif %}
+
+    {% if not is_regular and not preview_sections and display_sections %}
+    <p class="small text-muted mb-2">Add courses (failed or not yet taken from this and previous semesters) and enter your grades for the selected semester below.</p>
+    {% endif %}
+
+    {% if not is_regular and preview_sections and not display_sections %}
+    <p class="small text-muted mb-2">All semesters above have grades. You can generate your POS or go to Preview to view it.</p>
+    {% endif %}
+
+{% for item in display_sections %}
+    <div class="mb-4 main-sem" id="main-sem-{{ item.section_index }}" data-section-index="{{ item.section_index }}"{% if is_regular and not item.courses_with_grades %} style="display:none;"{% endif %}>
+        <div class="d-flex justify-content-center align-items-center mb-2">
+            <h6 class="fw-bold mb-0">{{ item.section.label }}</h6>
+        </div>
+        {% if not is_regular %}
+        <button type="button" class="btn btn-sm btn-outline-primary mb-2" data-section-index="{{ item.section_index }}">+ Add courses</button>
+        {% endif %}
+        <div class="table-responsive">
+            <table class="table table-sm align-middle table-bordered mb-0">
+                <thead class="table-light">
+                    <tr class="text-center">
+                        <th rowspan="2" style="width: 8%;">Course Code</th>
+                        <th rowspan="2" style="width: 30%;">Course Title</th>
+                        <th rowspan="2" style="width: 5%;">Units</th>
+                        <th colspan="2" class="hours-header" style="width: 8%;">No. of hour/s</th>
+                        <th rowspan="2" style="width: 13%;">Pre-requisite(s)</th>
+                        <th rowspan="2" style="width: 13%;">Co-requisite(s)</th>
+                        <th rowspan="2" style="width: 10%;">Grade</th>
+                    </tr>
+                    <tr class="text-center">
+                        <th style="width: 4%;">Lec</th>
+                        <th style="width: 4%;">Lab</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for cg in item.courses_with_grades %}
+                    <tr data-course-code="{{ cg.course.code }}" data-units="{{ cg.course.units }}">
+                        <td class="text-center">{{ cg.course.code }}</td>
+                        <td class="course-title-cell">{{ cg.course.title }}</td>
+                        <td class="text-center">{{ cg.course.units }}</td>
+                        <td class="text-center">{{ cg.course.lec }}</td>
+                        <td class="text-center">{{ cg.course.lab }}</td>
+                        <td class="small text-muted text-center">{{ cg.course.prereq|default:"" }}</td>
+                        <td class="small text-muted text-center">{{ cg.course.coreq|default:"" }}</td>
+                        <td>
+                            <select class="form-select form-select-sm grade-select" data-course-code="{{ cg.course.code }}">
+                                <option value="" {% if not cg.grade %}selected{% endif %}></option>
+                                <option value="1.00" {% if cg.grade == '1.00' %}selected{% endif %}>1.00</option>
+                                <option value="1.25" {% if cg.grade == '1.25' %}selected{% endif %}>1.25</option>
+                                <option value="1.50" {% if cg.grade == '1.50' %}selected{% endif %}>1.50</option>
+                                <option value="1.75" {% if cg.grade == '1.75' %}selected{% endif %}>1.75</option>
+                                <option value="2.00" {% if cg.grade == '2.00' %}selected{% endif %}>2.00</option>
+                                <option value="2.25" {% if cg.grade == '2.25' %}selected{% endif %}>2.25</option>
+                                <option value="2.50" {% if cg.grade == '2.50' %}selected{% endif %}>2.50</option>
+                                <option value="2.75" {% if cg.grade == '2.75' %}selected{% endif %}>2.75</option>
+                                <option value="3.00" {% if cg.grade == '3.00' %}selected{% endif %}>3.00</option>
+                                <option value="5.00" {% if cg.grade == '5.00' %}selected{% endif %}>5.00</option>
+                            </select>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot class="table-light">
+                    <tr>
+                        <th colspan="2" class="text-end">Total Units</th>
+                        <th class="text-center" id="total-units-sem-{{ item.section_index }}">{{ item.total_units|default:0 }}</th>
+                        <th colspan="5"></th>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+{% endfor %}
+
+
+
+    <div class="mt-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div>
+            <button type="button" class="btn btn-outline-secondary validate-pos-fixed" id="validatePosBtn">Validate POS</button>
+        </div>
+        <div class="d-flex gap-2">
+            <button type="button" class="btn btn-outline-secondary" id="clearGradesBtn">
+                Clear Grades
+            </button>
+            <button type="button" class="btn btn-danger" id="generatePosBtn">
+                Generate POS
+            </button>
+        </div>
     </div>
 </div>
 {% endblock %}
 
 {% block extra_scripts %}
-{{ saved_grades|json_script:"pos-saved-grades" }}
+{{ saved_only|json_script:"pos-saved-grades" }}
 <script>
+    var GRADE_OPTIONS = ['', '1.00', '1.25', '1.50', '1.75', '2.00', '2.25', '2.50', '2.75', '3.00', '5.00'];
+    var IS_REGULAR = {{ is_regular|yesno:"true,false" }};
+
     function getCookie(name) {
         var match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
         return match ? match[2] : null;
@@ -2129,9 +559,61 @@
         return grades;
     }
 
-    function saveGradesToServer(grades, recordGenerated, done) {
+    function getServerGradesForMerge() {
+        try {
+            var el = document.getElementById('pos-saved-grades');
+            if (el && el.textContent) return JSON.parse(el.textContent);
+        } catch (e) {}
+        return {};
+    }
+
+    function collectGradesBySection() {
+        var mainSection = document.querySelector('[id^="main-sem-"]');
+        if (!mainSection) return {};
+        var sectionIndex = mainSection.getAttribute('data-section-index');
+        if (sectionIndex === null) return {};
+        var sectionGrades = {};
+        mainSection.querySelectorAll('.grade-select').forEach(function(select) {
+            var code = select.getAttribute('data-course-code');
+            var value = select.value;
+            if (code && value) sectionGrades[code] = value;
+        });
+        var out = {};
+        out[sectionIndex] = sectionGrades;
+        return out;
+    }
+
+    function collectGradesFromAllSections() {
+        var out = {};
+        document.querySelectorAll('[id^="main-sem-"]').forEach(function(mainDiv) {
+            var sectionIndex = mainDiv.getAttribute('data-section-index');
+            if (sectionIndex === null) return;
+            var sectionGrades = {};
+            mainDiv.querySelectorAll('.grade-select').forEach(function(select) {
+                var code = select.getAttribute('data-course-code');
+                var value = select.value;
+                if (code && value) sectionGrades[code] = value;
+            });
+            out[sectionIndex] = sectionGrades;
+        });
+        return out;
+    }
+
+    function mergedGradesForSave() {
+        var base = getServerGradesForMerge();
+        if (typeof base !== 'object' || base === null) base = {};
+        var fromForm = IS_REGULAR ? collectGradesFromAllSections() : collectGradesBySection();
+        for (var sec in fromForm) {
+            if (!base[sec]) base[sec] = {};
+            for (var c in fromForm[sec]) base[sec][c] = fromForm[sec][c];
+        }
+        return base;
+    }
+
+    function saveGradesToServer(gradesBySection, recordGenerated, done) {
         if (typeof recordGenerated === 'function') { done = recordGenerated; recordGenerated = false; }
-        var payload = recordGenerated ? { grades: grades, generated: true } : grades;
+        var payload = { grades_by_section: gradesBySection };
+        if (recordGenerated) payload.generated = true;
         fetch("{% url 'save_pos_grades' %}", {
             method: 'POST',
             headers: {
@@ -2145,10 +627,10 @@
 
     var saveToServerTimer = null;
     function saveGradesToStorage() {
-        const grades = collectGrades();
-        localStorage.setItem('posGrades', JSON.stringify(grades));
+        var gradesBySection = mergedGradesForSave();
+        localStorage.setItem('posGrades', JSON.stringify(gradesBySection));
         clearTimeout(saveToServerTimer);
-        saveToServerTimer = setTimeout(function() { saveGradesToServer(grades); }, 500);
+        saveToServerTimer = setTimeout(function() { saveGradesToServer(gradesBySection); }, 500);
     }
 
     document.addEventListener('DOMContentLoaded', function() {
@@ -2164,47 +646,643 @@
             }
         });
 
-        var serverGrades = {};
+        var bySection = {};
         try {
             var el = document.getElementById('pos-saved-grades');
-            if (el && el.textContent) { serverGrades = JSON.parse(el.textContent); }
+            if (el && el.textContent) { bySection = JSON.parse(el.textContent); }
         } catch (e) {}
-        gradeSelects.forEach(function(select) {
-            const courseCode = select.getAttribute('data-course-code');
-            if (courseCode && serverGrades[courseCode]) {
-                select.value = serverGrades[courseCode];
-            }
+        document.querySelectorAll('[id^="main-sem-"]').forEach(function(mainSection) {
+            var sectionIndex = mainSection.getAttribute('data-section-index');
+            var sectionGrades = (sectionIndex !== null) ? (bySection[sectionIndex] || bySection[String(sectionIndex)] || {}) : {};
+            mainSection.querySelectorAll('.grade-select').forEach(function(select) {
+                var courseCode = select.getAttribute('data-course-code');
+                if (courseCode && sectionGrades[courseCode]) select.value = sectionGrades[courseCode];
+            });
         });
 
         gradeSelects.forEach(function(select) {
             select.addEventListener('change', saveGradesToStorage);
         });
+
+        // Regular path: allow changing "current semester" (reload with ?section=N)
+        if (IS_REGULAR) {
+            var regSelect = document.getElementById('regular-current-semester');
+            if (regSelect) {
+                regSelect.addEventListener('change', function() {
+                    var v = this.value;
+                    var url = new URL(window.location.href);
+                    if (v !== '') {
+                        url.searchParams.set('section', v);
+                    } else {
+                        url.searchParams.delete('section');
+                    }
+                    window.location.href = url.toString();
+                });
+            }
+        }
     });
 
     document.getElementById('clearGradesBtn').addEventListener('click', function() {
-        const gradeSelects = document.querySelectorAll('.grade-select');
-        gradeSelects.forEach(function(select) { select.selectedIndex = 0; });
-        localStorage.removeItem('posGrades');
-        saveGradesToServer({}, function() {});
+        var gradesToKeep = getServerGradesForMerge();
+        if (typeof gradesToKeep !== 'object' || gradesToKeep === null) gradesToKeep = {};
+        var sections = document.querySelectorAll('[id^="main-sem-"]');
+        sections.forEach(function(mainSection) {
+            var sectionIndex = mainSection.getAttribute('data-section-index');
+            if (sectionIndex === null) return;
+            mainSection.querySelectorAll('.grade-select').forEach(function(select) {
+                select.selectedIndex = 0;
+            });
+            gradesToKeep[sectionIndex] = {};
+        });
+        localStorage.setItem('posGrades', JSON.stringify(gradesToKeep));
+        saveGradesToServer(gradesToKeep, function() {});
     });
 
+    document.getElementById('addExistingGradesBtn').addEventListener('click', function() {
+        var modal = document.getElementById('upload-grades-modal');
+        document.getElementById('id_pos_pdf').value = '';
+        document.getElementById('upload-grades-errors').classList.add('d-none');
+        if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+            new bootstrap.Modal(modal).show();
+        } else {
+            modal.classList.add('show');
+            modal.style.display = 'block';
+        }
+    });
+
+    (function() {
+        var overlay = document.getElementById('extract-loading-overlay');
+        var progressFill = document.getElementById('extract-progress-fill');
+        var progressPct = document.getElementById('extract-progress-pct');
+        var cancelBtn = document.getElementById('extract-loading-cancel');
+        var progressInterval = null;
+        var extractAbortController = null;
+        var displayedProgress = 0;  // what we show (animates 1, 2, 3, ...)
+        var targetProgress = 0;     // latest value from server
+
+        function setProgress(pct) {
+            pct = Math.min(100, Math.max(0, pct));
+            var dash = (pct / 100) * 100;
+            if (progressFill) progressFill.setAttribute('stroke-dasharray', dash + ', 100');
+            if (progressPct) progressPct.textContent = Math.round(pct) + '%';
+        }
+
+        function setTarget(pct) {
+            targetProgress = Math.min(100, Math.max(targetProgress, Math.max(0, pct)));
+        }
+
+        function startProgressAnimation() {
+            displayedProgress = 0;
+            targetProgress = 0;
+            setProgress(0);
+            if (progressInterval) clearInterval(progressInterval);
+            progressInterval = setInterval(function() {
+                if (displayedProgress < targetProgress) {
+                    displayedProgress += 1;
+                    setProgress(displayedProgress);
+                }
+                if (displayedProgress >= 100) clearInterval(progressInterval);
+            }, 250);
+        }
+
+        function hideOverlay() {
+            if (progressInterval) { clearInterval(progressInterval); progressInterval = null; }
+            if (overlay) overlay.classList.add('d-none');
+            displayedProgress = 0;
+            targetProgress = 0;
+            setProgress(0);
+        }
+
+        document.getElementById('upload-grades-submit-btn').addEventListener('click', function() {
+            var input = document.getElementById('id_pos_pdf');
+            var errEl = document.getElementById('upload-grades-errors');
+            errEl.classList.add('d-none');
+            if (!input.files || !input.files.length) {
+                errEl.textContent = 'Please select a PDF file.';
+                errEl.classList.remove('d-none');
+                return;
+            }
+            var formData = new FormData();
+            formData.append('pos_pdf', input.files[0]);
+            formData.append('csrfmiddlewaretoken', getCookie('csrftoken'));
+            var btn = document.getElementById('upload-grades-submit-btn');
+            btn.disabled = true;
+            input.disabled = true;
+            overlay.classList.remove('d-none');
+            startProgressAnimation();
+            extractAbortController = new AbortController();
+            fetch("{% url 'upload_pos_grades' %}", {
+                method: 'POST',
+                body: formData,
+                credentials: 'same-origin',
+                headers: { 'X-CSRFToken': getCookie('csrftoken') },
+                signal: extractAbortController.signal
+            }).then(function(r) {
+                if (!r.ok) return r.json().then(function(d) { throw d; });
+                return r.body.getReader();
+            }).then(function(reader) {
+                var decoder = new TextDecoder();
+                var buffer = '';
+                function read() {
+                    return reader.read().then(function(result) {
+                        if (result.done) {
+                            if (buffer.trim()) {
+                                var line = buffer.trim();
+                                var pct = parseInt(line, 10);
+                                if (!isNaN(pct)) setTarget(pct);
+                                else try {
+                                    var data = JSON.parse(line);
+                                    handleResult(data);
+                                } catch (err) {}
+                            }
+                            return;
+                        }
+                        buffer += decoder.decode(result.value, { stream: true });
+                        var lines = buffer.split('\n');
+                        buffer = lines.pop() || '';
+                        for (var i = 0; i < lines.length; i++) {
+                            var line = lines[i].trim();
+                            if (!line) continue;
+                            var pct = parseInt(line, 10);
+                            if (!isNaN(pct)) setTarget(pct);
+                            else try {
+                                var data = JSON.parse(line);
+                                handleResult(data);
+                                return;
+                            } catch (err) {}
+                        }
+                        return read();
+                    });
+                }
+                function handleResult(data) {
+                    setTarget(100);
+                    if (data.ok && data.redirect) {
+                        var modal = document.getElementById('upload-grades-modal');
+                        if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+                            var m = bootstrap.Modal.getInstance(modal);
+                            if (m) m.hide();
+                        }
+                        // Wait until the visual progress reaches 100% before redirecting
+                        var redirectUrl = data.redirect;
+                        var waitId = setInterval(function() {
+                            if (displayedProgress >= 100) {
+                                clearInterval(waitId);
+                                btn.disabled = false;
+                                input.disabled = false;
+                                window.location.href = redirectUrl;
+                            }
+                        }, 100);
+                    } else {
+                        hideOverlay();
+                        btn.disabled = false;
+                        input.disabled = false;
+                        errEl.innerHTML = (data.errors && data.errors.length) ? data.errors.join('<br>') : (data.error || 'Upload failed.');
+                        errEl.classList.remove('d-none');
+                    }
+                }
+                return read();
+            }).catch(function(e) {
+                hideOverlay();
+                btn.disabled = false;
+                input.disabled = false;
+                if (e && e.name === 'AbortError') return;
+                var msg = (e && e.errors && e.errors.length) ? e.errors.join('<br>') : (e && e.message) || 'Upload failed. Please try again.';
+                errEl.innerHTML = msg;
+                errEl.classList.remove('d-none');
+            });
+        });
+
+        cancelBtn.addEventListener('click', function() {
+            if (extractAbortController) extractAbortController.abort();
+            hideOverlay();
+            var btn = document.getElementById('upload-grades-submit-btn');
+            var input = document.getElementById('id_pos_pdf');
+            if (btn) btn.disabled = false;
+            if (input) input.disabled = false;
+        });
+    })();
+
+    var validatePosBtn = document.getElementById('validatePosBtn');
+    if (validatePosBtn) {
+        validatePosBtn.addEventListener('click', function() {
+            var gradesBySection = mergedGradesForSave();
+            fetch("{% url 'validate_pos' %}", {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCookie('csrftoken')
+                },
+                body: JSON.stringify({ grades_by_section: gradesBySection }),
+                credentials: 'same-origin'
+            }).then(function(r) { return r.json(); }).then(function(data) {
+                if (data.ok) {
+                    alert(data.message || 'POS is valid.');
+                } else {
+                    var msg = (data.errors && data.errors.length) ? data.errors.join('\n') : (data.message || 'Validation failed.');
+                    alert(msg);
+                }
+            }).catch(function() { alert('Validation request failed.'); });
+        });
+    }
+
+    function validateCurrentSectionForGenerate() {
+        var mainSection = document.querySelector('[id^="main-sem-"]');
+        if (!mainSection) return { ok: true };
+        var tbody = mainSection.querySelector('tbody');
+        if (!tbody) return { ok: true };
+        var rows = tbody.querySelectorAll('tr[data-course-code][data-units]');
+        var totalUnits = 0;
+        var failedUnits = 0;
+        for (var i = 0; i < rows.length; i++) {
+            var row = rows[i];
+            var units = parseInt(row.getAttribute('data-units'), 10) || 0;
+            var sel = row.querySelector('.grade-select');
+            var grade = sel ? (sel.value || '').trim() : '';
+            if (!grade) {
+                return { ok: false, message: 'Please fill all grades before generating POS.' };
+            }
+            totalUnits += units;
+            if (grade === '5' || grade === '5.00') failedUnits += units;
+        }
+        if (totalUnits <= 0) return { ok: true };
+        var ratio = failedUnits / totalUnits;
+        if (ratio >= 0.75) {
+            return { ok: false, message: '75% - 100% units failed. Can no longer generate POS.' };
+        }
+        if (ratio >= 0.50) {
+            return { ok: false, message: "Can't generate POS. 50% of units failed. Please proceed to the department for manual evaluation." };
+        }
+        return { ok: true };
+    }
+
+    function validateAllSectionsForGenerate() {
+        var sections = document.querySelectorAll('[id^="main-sem-"]');
+        for (var s = 0; s < sections.length; s++) {
+            var mainSection = sections[s];
+            var tbody = mainSection.querySelector('tbody');
+            if (!tbody) continue;
+            var rows = tbody.querySelectorAll('tr[data-course-code][data-units]');
+            var totalUnits = 0, failedUnits = 0;
+            for (var i = 0; i < rows.length; i++) {
+                var row = rows[i];
+                var units = parseInt(row.getAttribute('data-units'), 10) || 0;
+                var sel = row.querySelector('.grade-select');
+                var grade = sel ? (sel.value || '').trim() : '';
+                if (!grade) {
+                    var label = mainSection.querySelector('h6');
+                    return { ok: false, message: 'Please fill all grades for every semester. Missing grade in: ' + (label ? label.textContent : 'section') };
+                }
+                totalUnits += units;
+                if (grade === '5' || grade === '5.00') failedUnits += units;
+            }
+            if (totalUnits > 0) {
+                var ratio = failedUnits / totalUnits;
+                if (ratio >= 0.75) return { ok: false, message: '75% - 100% units failed in a semester. Can no longer generate POS.' };
+                if (ratio >= 0.50) return { ok: false, message: "50% or more of units failed in a semester. Please proceed to the department for manual evaluation." };
+            }
+        }
+        return { ok: true };
+    }
+
     document.getElementById('generatePosBtn').addEventListener('click', function() {
-        const grades = collectGrades();
-        const payload = { grades: grades };
-        const jsonStr = JSON.stringify(payload, null, 2);
-        const blob = new Blob([jsonStr], { type: 'application/json;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
+        var validation = IS_REGULAR ? validateAllSectionsForGenerate() : validateCurrentSectionForGenerate();
+        if (!validation.ok) {
+            alert(validation.message);
+            return;
+        }
+        var gradesBySection = mergedGradesForSave();
+        var payload = { grades_by_section: gradesBySection };
+        var jsonStr = JSON.stringify(payload, null, 2);
+        var blob = new Blob([jsonStr], { type: 'application/json;charset=utf-8;' });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
         a.href = url;
         a.download = 'pos_grades.json';
         a.style.display = 'none';
         document.body.appendChild(a);
         a.click();
         setTimeout(function() { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
-        localStorage.setItem('posGrades', JSON.stringify(grades));
-        saveGradesToServer(grades, true, function() {
-            setTimeout(function() { window.location.href = "{% url 'pos_preview' %}"; }, 300);
+        localStorage.setItem('posGrades', JSON.stringify(gradesBySection));
+        saveGradesToServer(gradesBySection, true, function(data) {
+            if (data && data.ok) {
+                var previewUrl = "{% url 'pos_preview' %}?t=" + Date.now();
+                setTimeout(function() { window.location.href = previewUrl; }, 300);
+            } else {
+                alert('Failed to save grades. Please try again.');
+            }
         });
     });
+
+    (function() {
+        var curriculum = [];
+        var pickerAvailableBySection = {};
+        var el = document.getElementById('curriculum-data');
+        if (el && el.textContent) {
+            try { curriculum = JSON.parse(el.textContent); } catch (e) {}
+        }
+        el = document.getElementById('picker-available-by-section');
+        if (el && el.textContent) {
+            try { pickerAvailableBySection = JSON.parse(el.textContent); } catch (e) {}
+        }
+
+        function buildGradeSelect(courseCode, savedGrade) {
+            var sel = document.createElement('select');
+            sel.className = 'form-select form-select-sm grade-select';
+            sel.setAttribute('data-course-code', courseCode);
+            GRADE_OPTIONS.forEach(function(opt) {
+                var o = document.createElement('option');
+                o.textContent = opt || '';
+                if (opt === savedGrade || (!opt && !savedGrade)) o.selected = true;
+                sel.appendChild(o);
+            });
+            sel.addEventListener('change', saveGradesToStorage);
+            return sel;
+        }
+
+        var modalPickerTbody = document.getElementById('irregular-modal-picker-tbody');
+        var irregularModal = document.getElementById('irregular-add-modal');
+        var selectAllCheckbox = document.getElementById('irregular-select-all');
+        var currentSectionIndex = -1;
+        var modalSelectedCodes = new Set();
+
+        function updateSelectAllState() {
+            if (!selectAllCheckbox) return;
+            var rows = modalPickerTbody.querySelectorAll('.irregular-picker-row');
+            if (!rows.length) {
+                selectAllCheckbox.checked = false;
+                selectAllCheckbox.indeterminate = false;
+                return;
+            }
+            var selectedCount = 0;
+            rows.forEach(function(r) {
+                if (r.classList.contains('selected')) selectedCount++;
+            });
+            if (selectedCount === 0) {
+                selectAllCheckbox.checked = false;
+                selectAllCheckbox.indeterminate = false;
+            } else if (selectedCount === rows.length) {
+                selectAllCheckbox.checked = true;
+                selectAllCheckbox.indeterminate = false;
+            } else {
+                selectAllCheckbox.checked = false;
+                selectAllCheckbox.indeterminate = true;
+            }
+        }
+
+        function getServerGrades() {
+            var g = {};
+            try {
+                var el = document.getElementById('pos-saved-grades');
+                if (el && el.textContent) g = JSON.parse(el.textContent);
+            } catch (e) {}
+            return g;
+        }
+
+        function getCurrentGradesForSection(sectionIndex) {
+            var bySection = getServerGrades();
+            var sectionGrades = bySection[sectionIndex] || bySection[String(sectionIndex)] || {};
+            var merged = {};
+            for (var k in sectionGrades) merged[k] = sectionGrades[k];
+            var mainDiv = document.querySelector('#main-sem-' + sectionIndex);
+            if (mainDiv) {
+                mainDiv.querySelectorAll('.grade-select').forEach(function(sel) {
+                    var code = sel.getAttribute('data-course-code');
+                    if (code) merged[code] = (sel.value || '').trim();
+                });
+            }
+            return merged;
+        }
+
+        function shouldShowInPicker(courseCode, currentGrades) {
+            var grade = (currentGrades[courseCode] || '').toString().trim();
+            if (!grade) return true;
+            if (grade === '5' || grade === '5.0' || grade === '5.00') return true;
+            return false;
+        }
+
+        function openModalForSection(idx) {
+            var sec = curriculum[idx];
+            if (!sec) return;
+            currentSectionIndex = idx;
+            document.getElementById('irregular-add-modal-label').textContent = 'Add courses – ' + sec.label;
+            modalSelectedCodes.clear();
+            modalPickerTbody.innerHTML = '';
+            if (selectAllCheckbox) {
+                selectAllCheckbox.checked = false;
+                selectAllCheckbox.indeterminate = false;
+            }
+            var coursesToShow;
+            if (IS_REGULAR) {
+                // Regular path: show only this semester's curriculum courses,
+                // just like when clicking the Edit button for that semester.
+                coursesToShow = sec.courses.slice();
+            } else {
+                // Irregular path: use dynamic picker that includes this and previous
+                // semesters (failed or not yet taken), plus flexible subjects.
+                coursesToShow = (pickerAvailableBySection[idx] || pickerAvailableBySection[String(idx)]) || null;
+                if (!coursesToShow) {
+                    var currentGrades = getCurrentGradesForSection(idx);
+                    coursesToShow = sec.courses.filter(function(c) { return shouldShowInPicker(c.code, currentGrades); });
+                }
+            }
+            coursesToShow.forEach(function(c) {
+                var tr = document.createElement('tr');
+                tr.className = 'irregular-picker-row';
+                tr.setAttribute('data-course-code', c.code);
+                tr.innerHTML = '<td class="text-center">' + c.code + '</td><td class="course-title-cell">' + c.title + '</td>' +
+                    '<td class="text-center">' + c.units + '</td><td class="text-center">' + c.lec + '</td><td class="text-center">' + c.lab + '</td>' +
+                    '<td class="small text-muted text-center">' + (c.prereq || '') + '</td><td class="small text-muted text-center">' + (c.coreq || '') + '</td>';
+                tr.addEventListener('click', function() {
+                    if (modalSelectedCodes.has(c.code)) {
+                        modalSelectedCodes.delete(c.code);
+                        tr.classList.remove('selected');
+                    } else {
+                        modalSelectedCodes.add(c.code);
+                        tr.classList.add('selected');
+                    }
+                    updateSelectAllState();
+                });
+                modalPickerTbody.appendChild(tr);
+            });
+            updateSelectAllState();
+            var bsModal = typeof bootstrap !== 'undefined' && bootstrap.Modal ? new bootstrap.Modal(irregularModal) : null;
+            if (bsModal) bsModal.show(); else irregularModal.classList.add('show'); irregularModal.style.display = 'block';
+        }
+        // Expose to other handlers (e.g., regular path controls)
+        window.openModalForSection = openModalForSection;
+
+        var addCoursesButtonSource = null;
+
+        function clearSectionAndGrades(sectionIndex) {
+            var mainDiv = document.getElementById('main-sem-' + sectionIndex);
+            if (mainDiv) {
+                var tbody = mainDiv.querySelector('tbody');
+                if (tbody) {
+                    tbody.innerHTML = '';
+                }
+                var totalEl = document.getElementById('total-units-sem-' + sectionIndex);
+                if (totalEl) totalEl.textContent = '0';
+                if (IS_REGULAR) {
+                    mainDiv.style.display = 'none';
+                    // Restore top-level +Add courses for first semester if we cleared it
+                    if (sectionIndex === 0) {
+                        var startContainer = document.getElementById('regular-start-container');
+                        if (startContainer) startContainer.style.display = '';
+                    }
+                }
+            }
+            var grades = getServerGradesForMerge();
+            if (typeof grades !== 'object' || grades === null) grades = {};
+            delete grades[sectionIndex];
+            delete grades[String(sectionIndex)];
+            localStorage.setItem('posGrades', JSON.stringify(grades));
+            saveGradesToServer(grades, function() {});
+        }
+
+        // Handle bottom Undo buttons in Regular path
+        document.body.addEventListener('click', function(e) {
+            var undoBtn = e.target.closest('button.regular-undo-btn');
+            if (!undoBtn || !IS_REGULAR) return;
+            var idx = parseInt(undoBtn.getAttribute('data-section-index') || '0', 10);
+            clearSectionAndGrades(idx);
+        });
+
+        // Any "+ Add courses" button with data-section-index opens picker for that section.
+        // NOTE: Regular path next-semester buttons have their own click handler with validation,
+        // so we skip them here to avoid opening the picker when grades are incomplete.
+        document.body.addEventListener('click', function(e) {
+            var btn = e.target.closest('button[data-section-index]');
+            if (!btn) return;
+            // Skip undo buttons (handled above)
+            if (btn.classList.contains('regular-undo-btn')) return;
+            // In Regular path, skip next-semester buttons here; they are handled in the IS_REGULAR block above
+            if (IS_REGULAR && btn.classList.contains('regular-add-next-btn')) return;
+            // Extra safety: when central first "+ Add courses" is clicked, hide its container immediately
+            if (IS_REGULAR && btn.id === 'regular-start-add-btn') {
+                var startContainer = document.getElementById('regular-start-container');
+                if (startContainer) startContainer.style.display = 'none';
+            }
+            var idx = parseInt(btn.getAttribute('data-section-index'), 10);
+            if (curriculum[idx]) {
+                addCoursesButtonSource = 'main';
+                currentSectionIndex = idx;
+                openModalForSection(idx);
+            }
+        });
+
+        function findCourseInCurriculum(code) {
+            for (var i = 0; i < curriculum.length; i++) {
+                var sec = curriculum[i];
+                if (sec && sec.courses) {
+                    var c = sec.courses.find(function(x) { return x.code === code; });
+                    if (c) return c;
+                }
+            }
+            return null;
+        }
+
+        function updateSectionTotalUnits(sectionIndex) {
+            var mainDiv = document.getElementById('main-sem-' + sectionIndex);
+            if (!mainDiv) return;
+            var tbody = mainDiv.querySelector('tbody');
+            var totalEl = document.getElementById('total-units-sem-' + sectionIndex);
+            if (!tbody || !totalEl) return;
+            var total = 0;
+            tbody.querySelectorAll('tr[data-course-code][data-units]').forEach(function(row) {
+                total += parseInt(row.getAttribute('data-units'), 10) || 0;
+            });
+            totalEl.textContent = total;
+        }
+
+        document.getElementById('irregular-modal-add-btn').addEventListener('click', function() {
+            if (currentSectionIndex < 0) return;
+            var sec = curriculum[currentSectionIndex];
+            var tbody = (addCoursesButtonSource === 'irregular')
+                ? document.querySelector('#irregular-sec-' + currentSectionIndex + ' tbody')
+                : document.querySelector('#main-sem-' + currentSectionIndex + ' tbody');
+            if (!sec || !tbody) return;
+            var bySection = getServerGrades();
+            var sectionGrades = bySection[currentSectionIndex] || bySection[String(currentSectionIndex)] || {};
+            var addedRows = [];
+            modalSelectedCodes.forEach(function(code) {
+                var c = findCourseInCurriculum(code);
+                if (!c) return;
+                if (tbody.querySelector('tr[data-course-code="' + code + '"]')) return;
+                var row = document.createElement('tr');
+                row.setAttribute('data-course-code', code);
+                row.setAttribute('data-units', String(c.units != null ? c.units : 0));
+                row.classList.add('just-added');
+                var tdGrade = document.createElement('td');
+                var gradeSel = buildGradeSelect(code, sectionGrades[code]);
+                gradeSel.disabled = true;
+                gradeSel.title = 'Choose grade after adding';
+                tdGrade.appendChild(gradeSel);
+                row.innerHTML = '<td class="text-center">' + c.code + '</td><td class="course-title-cell">' + c.title + '</td>' +
+                    '<td class="text-center">' + c.units + '</td><td class="text-center">' + c.lec + '</td><td class="text-center">' + c.lab + '</td>' +
+                    '<td class="small text-muted text-center">' + (c.prereq || '') + '</td><td class="small text-muted text-center">' + (c.coreq || '') + '</td>';
+                row.appendChild(tdGrade);
+                tbody.appendChild(row);
+                addedRows.push(row);
+            });
+            updateSectionTotalUnits(currentSectionIndex);
+            modalSelectedCodes.clear();
+            modalPickerTbody.querySelectorAll('.irregular-picker-row.selected').forEach(function(r) { r.classList.remove('selected'); });
+            updateSelectAllState();
+            function enableGradeDropdowns() {
+                addedRows.forEach(function(row) {
+                    row.classList.remove('just-added');
+                    var sel = row.querySelector('.grade-select');
+                    if (sel) { sel.disabled = false; sel.removeAttribute('title'); }
+                });
+            }
+            if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+                var m = bootstrap.Modal.getInstance(irregularModal);
+                if (m) {
+                    irregularModal.addEventListener('hidden.bs.modal', function onHidden() {
+                        irregularModal.removeEventListener('hidden.bs.modal', onHidden);
+                        enableGradeDropdowns();
+                    }, { once: true });
+                    m.hide();
+                } else {
+                    irregularModal.classList.remove('show');
+                    irregularModal.style.display = 'none';
+                    enableGradeDropdowns();
+                }
+            } else {
+                irregularModal.classList.remove('show');
+                irregularModal.style.display = 'none';
+                enableGradeDropdowns();
+            }
+        });
+
+        if (selectAllCheckbox) {
+            selectAllCheckbox.addEventListener('change', function() {
+                var rows = modalPickerTbody.querySelectorAll('.irregular-picker-row');
+                modalSelectedCodes.clear();
+                if (this.checked) {
+                    rows.forEach(function(r) {
+                        var code = r.getAttribute('data-course-code');
+                        if (!code) return;
+                        modalSelectedCodes.add(code);
+                        r.classList.add('selected');
+                    });
+                } else {
+                    rows.forEach(function(r) {
+                        r.classList.remove('selected');
+                    });
+                }
+                updateSelectAllState();
+            });
+        }
+
+        var currentSemSelect = document.getElementById('current-semester-select');
+        if (currentSemSelect) {
+            currentSemSelect.addEventListener('change', function() {
+                var section = this.value;
+                var url = window.location.pathname + (section !== '' ? '?section=' + encodeURIComponent(section) : '');
+                window.location.href = url;
+            });
+        }
+    })();
 </script>
 {% endblock %}

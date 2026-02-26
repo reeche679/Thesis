@@ -120,6 +120,44 @@
         position: relative;
         z-index: 1;
     }
+
+    /* Path toggle: Regular / Irregular as square check-style buttons (radio behavior) */
+    .path-toggle-group {
+        display: flex;
+        gap: 0.5rem;
+    }
+    .path-toggle {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        cursor: pointer;
+        user-select: none;
+    }
+    .path-toggle input[type="radio"] {
+        position: absolute;
+        opacity: 0;
+        pointer-events: none;
+    }
+    .path-toggle-box {
+        padding: 0.25rem 0.75rem;
+        border-radius: 0.25rem;
+        border: 1px solid #ced4da;
+        font-size: 0.85rem;
+        min-width: 90px;
+        text-align: center;
+        background-color: #ffffff;
+        color: #495057;
+        transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+    .path-toggle input[type="radio"]:checked + .path-toggle-box {
+        background-color: #0d6efd;
+        border-color: #0d6efd;
+        color: #ffffff;
+        box-shadow: 0 0 0 0.1rem rgba(13, 110, 253, 0.25);
+    }
+    .path-toggle-box:hover {
+        border-color: #0d6efd;
+    }
 </style>
 {% endblock %}
 
@@ -174,9 +212,9 @@
         <div class="home-term-content">
             <div class="pos-section-title mb-3">Current Academic Term</div>
 
-            {% if not has_complete_info %}
+            {% if required_term %}
             <div class="alert alert-warning small mb-3" role="alert">
-                Complete your information before proceeding. Upload your <strong>photo</strong> above and select Academic Year, Semester, and Year Level below, then click <strong>Continue</strong> to start generating.
+                Complete your information before proceeding. Upload your <strong>photo</strong> above and select <strong>Academic Year</strong>{% if not has_generated_pos %} and <strong>path (Regular/Irregular)</strong>{% endif %}. Then you can use <strong>Generate POS</strong> below.
             </div>
             {% endif %}
 
@@ -192,34 +230,36 @@
                     </select>
                 </div>
 
+                {% if not has_generated_pos %}
                 <div class="mb-3">
-                    <label class="text-muted small text-uppercase" for="id_semester">SEMESTER</label>
-                    <select name="semester" id="id_semester" class="form-select form-select-sm" style="max-width: 240px;">
-                        <option value="">-- Select --</option>
-                        {% for value, label in semester_choices %}
-                        <option value="{{ value }}" {% if session_semester == value %}selected{% endif %}>{{ label }}</option>
+                    <label class="text-muted small text-uppercase d-block mb-2">PATH</label>
+                    <div class="path-toggle-group">
+                        <label class="path-toggle">
+                            <input type="radio" name="pos_path" value="regular" {% if session_pos_path == 'regular' %}checked{% endif %}>
+                            <span class="path-toggle-box">Regular</span>
+                        </label>
+                        <label class="path-toggle">
+                            <input type="radio" name="pos_path" value="irregular" {% if session_pos_path == 'irregular' %}checked{% endif %}>
+                            <span class="path-toggle-box">Irregular</span>
+                        </label>
+                    </div>
+                </div>
+                <div class="mb-3" id="regular-current-semester-group" style="{% if session_pos_path != 'regular' %}display:none;{% endif %}">
+                    <label class="text-muted small text-uppercase d-block mb-1" for="id_current_semester_regular">
+                        Current semester (Regular path)
+                    </label>
+                    <select name="current_semester_index" id="id_current_semester_regular" class="form-select form-select-sm" style="max-width: 260px;">
+                        <option value="">-- Select current semester --</option>
+                        {% for value, label in current_semester_choices %}
+                        <option value="{{ value }}" {% if session_current_semester_index == value %}selected{% endif %}>{{ label }}</option>
                         {% endfor %}
                     </select>
+                    <div class="form-text small text-muted">
+                        Required for Regular path: all curriculum courses from 1st Year First Semester up to the selected semester will be listed automatically.
+                    </div>
                 </div>
-
-                <div class="mb-3">
-                    <label class="text-muted small text-uppercase" for="id_year_level">YEAR LEVEL</label>
-                    <select name="year_level" id="id_year_level" class="form-select form-select-sm" style="max-width: 240px;">
-                        <option value="">-- Select --</option>
-                        {% for value, label in year_level_choices %}
-                        <option value="{{ value }}" {% if session_year_level == value %}selected{% endif %}>{{ label }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-
-            {% if has_academic_term %}
-            <button type="submit" class="btn btn-outline-primary btn-sm mb-3">Update term</button>
-            {% else %}
-            <button type="submit" class="btn btn-primary btn-sm mb-3">Continue</button>
-            {% endif %}
+                {% endif %}
             </form>
-
-            {% if has_complete_info %}
 
             <hr>
 
@@ -235,11 +275,6 @@
                     Preview Latest POS
                 </a>
             </div>
-        {% else %}
-        <p class="small text-muted mb-0">
-            Upload your photo above and select Academic Year, Semester, and Year Level, then click <strong>Continue</strong> to enable Generate POS and Preview.
-        </p>
-        {% endif %}
         </div>
     </div>
 </div>
@@ -250,12 +285,32 @@
     document.addEventListener('DOMContentLoaded', function() {
         var btn = document.getElementById('home-email-toggle');
         var emailEl = document.getElementById('home-email-value');
+        var termForm = document.getElementById('academic-term-form');
         if (btn && emailEl) {
             btn.addEventListener('click', function() {
                 var hidden = emailEl.style.display === 'none';
                 emailEl.style.display = hidden ? 'inline' : 'none';
                 btn.setAttribute('aria-label', hidden ? 'Hide email' : 'Show or hide email');
                 btn.setAttribute('title', hidden ? 'Hide email' : 'Show email');
+            });
+        }
+        // Auto-submit academic term form when Academic Year, Path, or Regular current semester changes
+        if (termForm) {
+            var autoFields = termForm.querySelectorAll('#id_academic_year, input[name="pos_path"], #id_current_semester_regular');
+            autoFields.forEach(function(el) {
+                el.addEventListener('change', function() {
+                    // Show/hide Regular current semester select depending on chosen path
+                    var regularGroup = document.getElementById('regular-current-semester-group');
+                    var pathInputs = termForm.querySelectorAll('input[name="pos_path"]');
+                    var selectedPath = null;
+                    pathInputs.forEach(function(pi) {
+                        if (pi.checked) selectedPath = pi.value;
+                    });
+                    if (regularGroup) {
+                        regularGroup.style.display = (selectedPath === 'regular') ? '' : 'none';
+                    }
+                    termForm.submit();
+                });
             });
         }
     });

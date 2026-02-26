@@ -46,14 +46,15 @@ class Student(models.Model):
 
 
 class StudentGrade(models.Model):
-    """Stores a grade for one course for one student. Per-user, persists across logins."""
+    """Stores a grade for one course for one student in a specific semester (section). Same course can have different grades in different semesters (e.g. failed then passed)."""
     student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name='grades')
     course_code = models.CharField(max_length=32)  # e.g. ENGG 101, GEd 108
     grade = models.CharField(max_length=16)        # e.g. 1.00, 2.50, 5.00
+    section_index = models.IntegerField(default=0)  # curriculum section 0-9; same course can appear in multiple sections
 
     class Meta:
-        unique_together = [['student', 'course_code']]
-        ordering = ['course_code']
+        unique_together = [['student', 'course_code', 'section_index']]
+        ordering = ['section_index', 'course_code']
 
 
 class POSRecord(models.Model):
