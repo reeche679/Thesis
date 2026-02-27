@@ -253,16 +253,34 @@
 
 {% if not is_regular %}
 <div class="pos-card p-4 mb-4" id="current-semester-card">
-    <div class="pos-section-title mb-2">Semester to add courses</div>
-    <p class="small text-muted mb-3">Select the semester you want to add courses to and enter grades. Semesters that already have grades appear below as read-only previews.</p>
-    <div class="row">
-        <div class="col-md-5">
-            <label class="form-label small text-uppercase text-muted">Add courses to semester</label>
-            <select class="form-select form-select-sm" id="current-semester-select">
+    <div class="pos-section-title mb-2">Irregular Path</div>
+    <p class="small text-muted mb-3">Set your current semester and when you became irregular. Curriculum courses up to that semester are listed automatically; semesters after that show an add-course picker.</p>
+    <div class="row g-3 align-items-end">
+        <div class="col-md-4">
+            <label class="form-label small text-uppercase text-muted" for="irreg-current-sem">Your Current Semester</label>
+            <select class="form-select form-select-sm" id="irreg-current-sem">
                 {% for sec in curriculum_sections_dropdown %}
-                <option value="{{ forloop.counter0 }}" {% if editable_section_index == forloop.counter0 %}selected{% endif %}>{{ sec.label }}</option>
+                <option value="{{ forloop.counter0 }}" {% if irreg_current_sem == forloop.counter0 %}selected{% endif %}>{{ sec.label }}</option>
                 {% endfor %}
             </select>
+        </div>
+        <div class="col-md-4">
+            <label class="form-label small text-uppercase text-muted" for="irreg-start-sem">When you became irregular</label>
+            <select class="form-select form-select-sm" id="irreg-start-sem">
+                {% for sec in curriculum_sections_dropdown %}
+                <option value="{{ forloop.counter0 }}" {% if irreg_start_index == forloop.counter0 %}selected{% endif %}>{{ sec.label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label small text-uppercase text-muted" for="irreg-with-petition">With Petition?</label>
+            <select class="form-select form-select-sm" id="irreg-with-petition">
+                <option value="no" {% if irreg_with_petition != 'yes' %}selected{% endif %}>No</option>
+                <option value="yes" {% if irreg_with_petition == 'yes' %}selected{% endif %}>Yes</option>
+            </select>
+        </div>
+        <div class="col-md-2">
+            <button type="button" class="btn btn-sm btn-primary w-100" id="irreg-ok-btn">OK</button>
         </div>
     </div>
 </div>
@@ -351,6 +369,46 @@
     </div>
 </div>
 
+<!-- Edit semester modal (irregular path) -->
+<div class="modal fade" id="irreg-edit-modal" tabindex="-1" aria-labelledby="irreg-edit-modal-label" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="irreg-edit-modal-label">Edit semester</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle table-bordered mb-0">
+                        <thead class="table-light">
+                            <tr class="text-center">
+                                <th rowspan="2" style="width:8%">Course Code</th>
+                                <th rowspan="2" style="width:28%">Course Title</th>
+                                <th rowspan="2" style="width:5%">Units</th>
+                                <th colspan="2" class="hours-header" style="width:8%">No. of hour/s</th>
+                                <th rowspan="2" style="width:12%">Pre-requisite(s)</th>
+                                <th rowspan="2" style="width:12%">Co-requisite(s)</th>
+                                <th rowspan="2" style="width:10%">Grade</th>
+                                <th rowspan="2" style="width:5%"></th>
+                            </tr>
+                            <tr class="text-center">
+                                <th style="width:4%">Lec</th>
+                                <th style="width:4%">Lab</th>
+                            </tr>
+                        </thead>
+                        <tbody id="irreg-edit-tbody"></tbody>
+                    </table>
+                </div>
+                <button type="button" class="btn btn-sm btn-outline-primary mt-2" id="irreg-edit-add-course-btn">+ Add course</button>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="irreg-edit-save-btn">Save changes</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="pos-card p-4">
     <div class="mb-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
         <div class="pos-section-title mb-0">Course List by Semester</div>
@@ -361,95 +419,30 @@
 
     {% if is_regular %}
     <div class="mb-3">
-        <div class="small text-uppercase text-muted mb-1">Course list</div>
-        <div class="small text-uppercase text-muted mb-1">CURRENT SEMESTER (REGULAR PATH)</div>
-        <div class="fw-semibold mb-2">
-            {% for value, label in current_semester_choices_regular %}
-            {% if value == current_semester_index %}{{ label }}{% endif %}
-            {% endfor %}
-        </div>
-        <label class="form-label small text-uppercase text-muted" for="regular-current-semester">Course list by semester</label>
-        <select class="form-select form-select-sm" id="regular-current-semester" style="max-width: 280px;">
-            <option value="">— Select current semester (optional) —</option>
+        <div class="small text-uppercase text-muted mb-1">(Regular Path)</div>
+        <select class="form-select form-select-sm" id="regular-current-semester" style="max-width: 320px;">
+            <option value="">— Select current semester —</option>
             {% for value, label in current_semester_choices_regular %}
             <option value="{{ value }}" {% if current_semester_index == value %}selected{% endif %}>{{ label }}</option>
             {% endfor %}
         </select>
-        <div class="form-text small text-muted">Optional: choose up to which semester to list courses. If unset, 1st Year First Semester is used.</div>
+        <div class="form-text small text-muted">Choose the last semester you have finished. All curriculum courses from 1st Year First Semester up to your selected semester will be listed below.</div>
     </div>
-    {% elif preview_sections %}
-    <div class="mb-4">
-        <p class="small text-muted mb-2">Semesters that already have grades (read-only preview).</p>
-        {% for item in preview_sections %}
-        <div class="mb-4">
-            <h6 class="fw-bold mb-2">{{ item.section.label }}</h6>
-            <div class="table-responsive">
-                <table class="table table-sm align-middle table-bordered mb-0">
-                    <thead class="table-light">
-                        <tr class="text-center">
-                            <th rowspan="2" style="width: 8%;">Course Code</th>
-                            <th rowspan="2" style="width: 30%;">Course Title</th>
-                            <th rowspan="2" style="width: 5%;">Units</th>
-                            <th colspan="2" class="hours-header" style="width: 8%;">No. of hour/s</th>
-                            <th rowspan="2" style="width: 13%;">Pre-requisite(s)</th>
-                            <th rowspan="2" style="width: 13%;">Co-requisite(s)</th>
-                            <th rowspan="2" style="width: 10%;">Grade</th>
-                        </tr>
-                        <tr class="text-center">
-                            <th style="width: 4%;">Lec</th>
-                            <th style="width: 4%;">Lab</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for cg in item.courses_with_grades %}
-                        <tr>
-                            <td class="text-center">{{ cg.course.code }}</td>
-                            <td class="course-title-cell">{{ cg.course.title }}</td>
-                            <td class="text-center">{{ cg.course.units }}</td>
-                            <td class="text-center">{{ cg.course.lec }}</td>
-                            <td class="text-center">{{ cg.course.lab }}</td>
-                            <td class="small text-muted text-center">{{ cg.course.prereq|default:"" }}</td>
-                            <td class="small text-muted text-center">{{ cg.course.coreq|default:"" }}</td>
-                            <td class="text-center fw-semibold">{{ cg.grade|default:"—" }}</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                    <tfoot>
-                        <tr>
-                            <th colspan="2" class="text-end table-light">Total Units</th>
-                            <th class="text-center table-light">{{ item.total_units|default:0 }}</th>
-                            <th colspan="5" class="table-light"></th>
-                        </tr>
-                    </tfoot>
-                </table>
-            </div>
-        </div>
-        {% endfor %}
-    </div>
-    <hr class="my-4">
-    {% if not is_regular %}
-    {% if selected_section_has_grades and display_sections %}
-    <p class="small text-muted mb-2">The semester you selected already has grades (see preview above). Add courses for the semester below and enter grades.</p>
-    {% elif display_sections %}
-    <p class="small text-muted mb-2">Add courses (failed or not yet taken from this and previous semesters) and enter grades for the semester below.</p>
-    {% endif %}
-    {% endif %}
-    {% endif %}
-
-    {% if not is_regular and not preview_sections and display_sections %}
-    <p class="small text-muted mb-2">Add courses (failed or not yet taken from this and previous semesters) and enter your grades for the selected semester below.</p>
-    {% endif %}
-
-    {% if not is_regular and preview_sections and not display_sections %}
-    <p class="small text-muted mb-2">All semesters above have grades. You can generate your POS or go to Preview to view it.</p>
     {% endif %}
 
 {% for item in display_sections %}
     <div class="mb-4 main-sem" id="main-sem-{{ item.section_index }}" data-section-index="{{ item.section_index }}"{% if is_regular and not item.courses_with_grades %} style="display:none;"{% endif %}>
-        <div class="d-flex justify-content-center align-items-center mb-2">
-            <h6 class="fw-bold mb-0">{{ item.section.label }}</h6>
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <div class="flex-grow-1 text-center">
+                <h6 class="fw-bold mb-0">{{ item.section.label }}</h6>
+            </div>
+            {% if not is_regular %}
+            <button type="button" class="btn btn-sm btn-outline-secondary irreg-edit-section-btn" data-section-index="{{ item.section_index }}" title="Edit this semester" style="display:none;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            </button>
+            {% endif %}
         </div>
-        {% if not is_regular %}
+        {% if not is_regular and not item.is_curriculum_locked %}
         <button type="button" class="btn btn-sm btn-outline-primary mb-2" data-section-index="{{ item.section_index }}">+ Add courses</button>
         {% endif %}
         <div class="table-responsive">
@@ -501,7 +494,16 @@
                     <tr>
                         <th colspan="2" class="text-end">Total Units</th>
                         <th class="text-center" id="total-units-sem-{{ item.section_index }}">{{ item.total_units|default:0 }}</th>
+                        {% if not is_regular %}
+                        <th colspan="4"></th>
+                        <th class="text-center">
+                            <button type="button" class="btn btn-sm btn-outline-success irreg-check-section-btn p-1" data-section-index="{{ item.section_index }}" title="Save &amp; lock this semester">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                            </button>
+                        </th>
+                        {% else %}
                         <th colspan="5"></th>
+                        {% endif %}
                     </tr>
                 </tfoot>
             </table>
@@ -511,11 +513,11 @@
 
 
 
-    <div class="mt-4 d-flex justify-content-end align-items-center flex-wrap gap-2">
+    <div class="mt-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <button type="button" class="btn btn-outline-secondary" id="validatePosBtn">
+            Validate POS
+        </button>
         <div class="d-flex gap-2">
-            <button type="button" class="btn btn-outline-secondary" id="validatePosBtn">
-                Validate POS
-            </button>
             <button type="button" class="btn btn-outline-secondary" id="clearGradesBtn">
                 Clear Grades
             </button>
@@ -591,7 +593,7 @@
     function mergedGradesForSave() {
         var base = getServerGradesForMerge();
         if (typeof base !== 'object' || base === null) base = {};
-        var fromForm = IS_REGULAR ? collectGradesFromAllSections() : collectGradesBySection();
+        var fromForm = collectGradesFromAllSections();
         for (var sec in fromForm) {
             if (!base[sec]) base[sec] = {};
             for (var c in fromForm[sec]) base[sec][c] = fromForm[sec][c];
@@ -1264,12 +1266,204 @@
             });
         }
 
-        var currentSemSelect = document.getElementById('current-semester-select');
-        if (currentSemSelect) {
-            currentSemSelect.addEventListener('change', function() {
-                var section = this.value;
-                var url = window.location.pathname + (section !== '' ? '?section=' + encodeURIComponent(section) : '');
-                window.location.href = url;
+        var irregOkBtn = document.getElementById('irreg-ok-btn');
+        if (irregOkBtn) {
+            irregOkBtn.addEventListener('click', function() {
+                var currentSem = document.getElementById('irreg-current-sem').value;
+                var startSem = document.getElementById('irreg-start-sem').value;
+                var petition = document.getElementById('irreg-with-petition').value;
+                var params = [];
+                if (currentSem !== '') params.push('current_sem=' + encodeURIComponent(currentSem));
+                if (startSem !== '') params.push('irreg_start=' + encodeURIComponent(startSem));
+                if (petition) params.push('with_petition=' + encodeURIComponent(petition));
+                window.location.href = window.location.pathname + (params.length ? '?' + params.join('&') : '');
+            });
+        }
+
+        // --- Irregular check (save & lock) button ---
+        function lockSectionToPreview(sectionDiv) {
+            var si = sectionDiv.getAttribute('data-section-index');
+            sectionDiv.querySelectorAll('.grade-select').forEach(function(sel) {
+                var td = sel.closest('td');
+                var val = sel.value || '—';
+                td.innerHTML = '<span class="fw-semibold">' + val + '</span>';
+            });
+            var addBtn = sectionDiv.querySelector('.btn-outline-primary[data-section-index]');
+            if (addBtn) addBtn.style.display = 'none';
+            var checkBtn = sectionDiv.querySelector('.irreg-check-section-btn');
+            if (checkBtn) checkBtn.style.display = 'none';
+            var editBtn = sectionDiv.querySelector('.irreg-edit-section-btn');
+            if (editBtn) editBtn.style.display = '';
+        }
+
+        document.body.addEventListener('click', function(e) {
+            var btn = e.target.closest('.irreg-check-section-btn');
+            if (!btn) return;
+            var si = btn.getAttribute('data-section-index');
+            var sectionDiv = document.getElementById('main-sem-' + si);
+            if (!sectionDiv) return;
+            var gradesBySection = mergedGradesForSave();
+            saveGradesToServer(gradesBySection, false, function(data) {
+                if (data && data.ok) {
+                    lockSectionToPreview(sectionDiv);
+                } else {
+                    alert('Failed to save. Please try again.');
+                }
+            });
+        });
+
+        // --- Irregular edit button: open modal ---
+        var editModalEl = document.getElementById('irreg-edit-modal');
+        var editModal = editModalEl ? new bootstrap.Modal(editModalEl) : null;
+        var editTbody = document.getElementById('irreg-edit-tbody');
+        var editSectionIndex = null;
+
+        function gradeOptionsHtml(selected) {
+            var opts = '';
+            GRADE_OPTIONS.forEach(function(g) {
+                var sel = (g === selected) ? ' selected' : '';
+                var label = g || '';
+                opts += '<option value="' + g + '"' + sel + '>' + label + '</option>';
+            });
+            return opts;
+        }
+
+        function addEditRow(code, title, units, lec, lab, prereq, coreq, grade) {
+            var tr = document.createElement('tr');
+            tr.setAttribute('data-course-code', code);
+            tr.innerHTML =
+                '<td class="text-center">' + code + '</td>' +
+                '<td>' + title + '</td>' +
+                '<td class="text-center">' + units + '</td>' +
+                '<td class="text-center">' + lec + '</td>' +
+                '<td class="text-center">' + lab + '</td>' +
+                '<td class="small text-muted text-center">' + (prereq || '') + '</td>' +
+                '<td class="small text-muted text-center">' + (coreq || '') + '</td>' +
+                '<td><select class="form-select form-select-sm edit-grade-select" data-course-code="' + code + '">' + gradeOptionsHtml(grade || '') + '</select></td>' +
+                '<td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger edit-remove-row" title="Remove">&times;</button></td>';
+            editTbody.appendChild(tr);
+        }
+
+        document.body.addEventListener('click', function(e) {
+            var btn = e.target.closest('.irreg-edit-section-btn');
+            if (!btn || !editModal) return;
+            editSectionIndex = btn.getAttribute('data-section-index');
+            var sectionDiv = document.getElementById('main-sem-' + editSectionIndex);
+            if (!sectionDiv) return;
+            var label = sectionDiv.querySelector('h6');
+            document.getElementById('irreg-edit-modal-label').textContent = 'Edit – ' + (label ? label.textContent : 'Semester');
+            editTbody.innerHTML = '';
+            sectionDiv.querySelectorAll('tbody tr[data-course-code]').forEach(function(row) {
+                var code = row.getAttribute('data-course-code');
+                var cells = row.querySelectorAll('td');
+                var title = cells[1] ? cells[1].textContent.trim() : '';
+                var units = cells[2] ? cells[2].textContent.trim() : '0';
+                var lec = cells[3] ? cells[3].textContent.trim() : '0';
+                var lab = cells[4] ? cells[4].textContent.trim() : '0';
+                var prereq = cells[5] ? cells[5].textContent.trim() : '';
+                var coreq = cells[6] ? cells[6].textContent.trim() : '';
+                var gradeEl = row.querySelector('.grade-select, .edit-grade-select');
+                var gradeSpan = cells[7] ? cells[7].querySelector('span') : null;
+                var grade = gradeEl ? gradeEl.value : (gradeSpan ? gradeSpan.textContent.trim() : '');
+                if (grade === '—') grade = '';
+                addEditRow(code, title, units, lec, lab, prereq, coreq, grade);
+            });
+            editModal.show();
+        });
+
+        if (editTbody) {
+            editTbody.addEventListener('click', function(e) {
+                if (e.target.closest('.edit-remove-row')) {
+                    e.target.closest('tr').remove();
+                }
+            });
+        }
+
+        var editAddBtn = document.getElementById('irreg-edit-add-course-btn');
+        if (editAddBtn) {
+            editAddBtn.addEventListener('click', function() {
+                if (editSectionIndex === null) return;
+                editModal.hide();
+                currentSectionIndex = parseInt(editSectionIndex, 10);
+                addCoursesButtonSource = 'edit-modal';
+                openModalForSection(currentSectionIndex);
+            });
+        }
+
+        var editSaveBtn = document.getElementById('irreg-edit-save-btn');
+        if (editSaveBtn) {
+            editSaveBtn.addEventListener('click', function() {
+                if (editSectionIndex === null) return;
+                var sectionDiv = document.getElementById('main-sem-' + editSectionIndex);
+                if (!sectionDiv) return;
+                var tbody = sectionDiv.querySelector('tbody');
+                tbody.innerHTML = '';
+                editTbody.querySelectorAll('tr[data-course-code]').forEach(function(eRow) {
+                    var code = eRow.getAttribute('data-course-code');
+                    var cells = eRow.querySelectorAll('td');
+                    var title = cells[1] ? cells[1].textContent.trim() : '';
+                    var units = cells[2] ? cells[2].textContent.trim() : '0';
+                    var lec = cells[3] ? cells[3].textContent.trim() : '0';
+                    var lab = cells[4] ? cells[4].textContent.trim() : '0';
+                    var prereq = cells[5] ? cells[5].textContent.trim() : '';
+                    var coreq = cells[6] ? cells[6].textContent.trim() : '';
+                    var gradeSel = eRow.querySelector('.edit-grade-select');
+                    var grade = gradeSel ? gradeSel.value : '';
+                    var tr = document.createElement('tr');
+                    tr.setAttribute('data-course-code', code);
+                    tr.setAttribute('data-units', units);
+                    tr.innerHTML =
+                        '<td class="text-center">' + code + '</td>' +
+                        '<td class="course-title-cell">' + title + '</td>' +
+                        '<td class="text-center">' + units + '</td>' +
+                        '<td class="text-center">' + lec + '</td>' +
+                        '<td class="text-center">' + lab + '</td>' +
+                        '<td class="small text-muted text-center">' + prereq + '</td>' +
+                        '<td class="small text-muted text-center">' + coreq + '</td>' +
+                        '<td><select class="form-select form-select-sm grade-select" data-course-code="' + code + '">' + gradeOptionsHtml(grade) + '</select></td>';
+                    tbody.appendChild(tr);
+                });
+                tbody.querySelectorAll('.grade-select').forEach(function(sel) {
+                    sel.addEventListener('change', saveGradesToStorage);
+                });
+                var editBtn = sectionDiv.querySelector('.irreg-edit-section-btn');
+                if (editBtn) editBtn.style.display = '';
+                var checkBtn = sectionDiv.querySelector('.irreg-check-section-btn');
+                if (checkBtn) checkBtn.style.display = '';
+                saveGradesToStorage();
+                editModal.hide();
+            });
+        }
+
+        // When the irregular-add-modal finishes adding courses and the source was edit-modal, re-open edit modal
+        var origAddConfirm = document.getElementById('irregular-modal-add-btn');
+        if (origAddConfirm) {
+            origAddConfirm.addEventListener('click', function() {
+                if (addCoursesButtonSource === 'edit-modal') {
+                    setTimeout(function() {
+                        if (editModal && editSectionIndex !== null) {
+                            var sectionDiv = document.getElementById('main-sem-' + editSectionIndex);
+                            if (sectionDiv) {
+                                editTbody.innerHTML = '';
+                                sectionDiv.querySelectorAll('tbody tr[data-course-code]').forEach(function(row) {
+                                    var code = row.getAttribute('data-course-code');
+                                    var cells = row.querySelectorAll('td');
+                                    var title = cells[1] ? cells[1].textContent.trim() : '';
+                                    var units = cells[2] ? cells[2].textContent.trim() : '0';
+                                    var lec = cells[3] ? cells[3].textContent.trim() : '0';
+                                    var lab = cells[4] ? cells[4].textContent.trim() : '0';
+                                    var prereq = cells[5] ? cells[5].textContent.trim() : '';
+                                    var coreq = cells[6] ? cells[6].textContent.trim() : '';
+                                    var gradeSel = row.querySelector('.grade-select');
+                                    var grade = gradeSel ? gradeSel.value : '';
+                                    addEditRow(code, title, units, lec, lab, prereq, coreq, grade);
+                                });
+                                editModal.show();
+                            }
+                        }
+                        addCoursesButtonSource = null;
+                    }, 400);
+                }
             });
         }
     })();
