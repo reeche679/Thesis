@@ -38,6 +38,8 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'accounts',
+    'pos',
+    
 ]
 
 MIDDLEWARE = [
@@ -62,7 +64,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
-                'views.academic_term_context',
+                'pos.context_processors.academic_term_context',
             ],
         },
     },

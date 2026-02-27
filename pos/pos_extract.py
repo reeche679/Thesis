@@ -60,7 +60,7 @@ def _code_at_line_start(line, valid_codes_norm_map):
 
 def _get_valid_course_codes():
     """Set of all valid course codes from curriculum and flexible subjects."""
-    from pos_pdf import POS_CURRICULUM, FLEXIBLE_SUBJECTS
+    from .pos_pdf import POS_CURRICULUM, FLEXIBLE_SUBJECTS
     codes = set()
     for _t1, _t2, _tu, _lec, _lab, rows in POS_CURRICULUM:
         for r in rows:
@@ -72,7 +72,7 @@ def _get_valid_course_codes():
 
 def _year_sem_to_index():
     """Build (year, sem) -> section_index from POS_CURRICULUM titles."""
-    from pos_pdf import POS_CURRICULUM
+    from .pos_pdf import POS_CURRICULUM
     # Normalize "FIRST YEAR" -> "1st Year", "FIRST SEMESTER" -> "First Semester"
     ord_to_abbr = {"FIRST": "1st", "SECOND": "2nd", "THIRD": "3rd", "FOURTH": "4th", "FIFTH": "5th",
                    "SIXTH": "6th", "SEVENTH": "7th", "EIGHTH": "8th", "NINTH": "9th", "TENTH": "10th"}

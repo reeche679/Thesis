@@ -104,16 +104,6 @@ def _has_profile_photo(request):
     return bool(student and student.profile_photo)
 
 
-def academic_term_context(request):
-    """Context processor: expose has_academic_term and has_complete_info (term + photo) for nav."""
-    has_ay = _has_academic_term(request)
-    has_photo = _has_profile_photo(request)
-    return {
-        'has_academic_term': has_ay,
-        'has_complete_info': has_ay and has_photo,
-    }
-
-
 def pos_main(request):
     """Main Window - Landing page with Create Account/Login buttons"""
     return render(request, "pos/main.html")
@@ -186,7 +176,7 @@ def set_academic_term(request):
 
 def _curriculum_for_irregular():
     """Build curriculum sections list for irregular POS picker (year, semester, section_label, courses)."""
-    from pos_pdf import POS_CURRICULUM
+    from .pos_pdf import POS_CURRICULUM
     sections = []
     for title1, title2, _tu, _lec, _lab, rows in POS_CURRICULUM:
         section_label = "{} - {}".format(
@@ -280,7 +270,7 @@ def _is_passing_grade(grade):
 
 def _flexible_courses_for_section(section_index):
     """Return list of course dicts for flexible subjects offered in this section (with EE Dept note if applicable)."""
-    from pos_pdf import FLEXIBLE_SUBJECTS
+    from .pos_pdf import FLEXIBLE_SUBJECTS
     out = []
     for row in FLEXIBLE_SUBJECTS:
         code, title, units, lec, lab, prereq, coreq = row[0], row[1], row[2], row[3], row[4], row[5], row[6]
@@ -328,7 +318,7 @@ def _picker_available_for_next_section(next_section_index, curriculum_sections, 
 
 def _course_lookup_from_curriculum():
     """Build code -> (title, units, lec, lab, prereq, coreq) from first occurrence in POS_CURRICULUM."""
-    from pos_pdf import POS_CURRICULUM
+    from .pos_pdf import POS_CURRICULUM
     lookup = {}
     for _section_index, (_t1, _t2, _tu, _lec_t, _lab_t, rows) in enumerate(POS_CURRICULUM):
         for r in rows:
@@ -340,7 +330,7 @@ def _course_lookup_from_curriculum():
 
 def _preview_sections_from_curriculum(grades_by_section):
     """Build sections for POS preview from grades_by_section. Each section shows all courses with a grade in that section (same course can appear in multiple sections, e.g. MATH 102 failed in 1st sem and midterm). User-added courses (e.g. MATH 102 in midterm) replace curriculum-only slots in display."""
-    from pos_pdf import POS_CURRICULUM
+    from .pos_pdf import POS_CURRICULUM
     course_lookup = _course_lookup_from_curriculum()
     sections = []
     for section_index, (title1, title2, total_units, _lec_t, _lab_t, rows) in enumerate(POS_CURRICULUM):
@@ -640,7 +630,7 @@ def upload_pos_grades(request):
 
     def run_extraction():
         try:
-            from pos_extract import extract_pos_from_pdf
+            from .pos_extract import extract_pos_from_pdf
             g, e = extract_pos_from_pdf(io.BytesIO(raw), progress_list=progress_list)
             result_holder['grades'] = g
             result_holder['errors'] = e
@@ -697,7 +687,7 @@ def validate_pos(request):
         grades_by_section = {}
     errors = []
     course_lookup = _course_lookup_from_curriculum()
-    from pos_pdf import POS_CURRICULUM
+    from .pos_pdf import POS_CURRICULUM
     for section_key, section_grades in grades_by_section.items():
         if not isinstance(section_grades, dict):
             continue
@@ -774,7 +764,7 @@ def download_pos_pdf(request):
     grades_by_section = _saved_grades_by_section(student)
     academic_year = request.session.get('academic_year', '') or student.academic_year or ''
 
-    from pos_pdf import build_pos_pdf
+    from .pos_pdf import build_pos_pdf
     logo_path = os.path.abspath(os.path.normpath(os.path.join(str(settings.BASE_DIR), 'static', 'img', 'BSU_Logo.png')))
     if not os.path.isfile(logo_path):
         logo_path = None
@@ -804,7 +794,7 @@ def download_pos_pdf_record(request, record_id):
     eval_date = record.generated_at.date()
     academic_year = record.academic_year or ''
 
-    from pos_pdf import build_pos_pdf
+    from .pos_pdf import build_pos_pdf
     logo_path = os.path.abspath(os.path.normpath(os.path.join(str(settings.BASE_DIR), 'static', 'img', 'BSU_Logo.png')))
     if not os.path.isfile(logo_path):
         logo_path = None
