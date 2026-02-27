@@ -220,6 +220,7 @@
 
             <form method="post" action="{% url 'set_academic_term' %}" id="academic-term-form">
                 {% csrf_token %}
+                <input type="hidden" name="next" value="{% url 'pos_generate' %}">
                 <div class="mb-3">
                     <label class="text-muted small text-uppercase" for="id_academic_year">ACADEMIC YEAR</label>
                     <select name="academic_year" id="id_academic_year" class="form-select form-select-sm" style="max-width: 240px;">
@@ -244,20 +245,6 @@
                         </label>
                     </div>
                 </div>
-                <div class="mb-3" id="regular-current-semester-group" style="{% if session_pos_path != 'regular' %}display:none;{% endif %}">
-                    <label class="text-muted small text-uppercase d-block mb-1" for="id_current_semester_regular">
-                        Current semester (Regular path)
-                    </label>
-                    <select name="current_semester_index" id="id_current_semester_regular" class="form-select form-select-sm" style="max-width: 260px;">
-                        <option value="">-- Select current semester --</option>
-                        {% for value, label in current_semester_choices %}
-                        <option value="{{ value }}" {% if session_current_semester_index == value %}selected{% endif %}>{{ label }}</option>
-                        {% endfor %}
-                    </select>
-                    <div class="form-text small text-muted">
-                        Required for Regular path: all curriculum courses from 1st Year First Semester up to the selected semester will be listed automatically.
-                    </div>
-                </div>
                 {% endif %}
             </form>
 
@@ -268,9 +255,9 @@
             </p>
 
             <div class="d-flex gap-2">
-                <a href="{% url 'pos_generate' %}" class="btn btn-danger">
+                <button type="submit" form="academic-term-form" class="btn btn-danger">
                     Generate POS
-                </a>
+                </button>
                 <a href="{% url 'pos_preview' %}" class="btn btn-outline-secondary">
                     Preview Latest POS
                 </a>
@@ -285,32 +272,12 @@
     document.addEventListener('DOMContentLoaded', function() {
         var btn = document.getElementById('home-email-toggle');
         var emailEl = document.getElementById('home-email-value');
-        var termForm = document.getElementById('academic-term-form');
         if (btn && emailEl) {
             btn.addEventListener('click', function() {
                 var hidden = emailEl.style.display === 'none';
                 emailEl.style.display = hidden ? 'inline' : 'none';
                 btn.setAttribute('aria-label', hidden ? 'Hide email' : 'Show or hide email');
                 btn.setAttribute('title', hidden ? 'Hide email' : 'Show email');
-            });
-        }
-        // Auto-submit academic term form when Academic Year, Path, or Regular current semester changes
-        if (termForm) {
-            var autoFields = termForm.querySelectorAll('#id_academic_year, input[name="pos_path"], #id_current_semester_regular');
-            autoFields.forEach(function(el) {
-                el.addEventListener('change', function() {
-                    // Show/hide Regular current semester select depending on chosen path
-                    var regularGroup = document.getElementById('regular-current-semester-group');
-                    var pathInputs = termForm.querySelectorAll('input[name="pos_path"]');
-                    var selectedPath = null;
-                    pathInputs.forEach(function(pi) {
-                        if (pi.checked) selectedPath = pi.value;
-                    });
-                    if (regularGroup) {
-                        regularGroup.style.display = (selectedPath === 'regular') ? '' : 'none';
-                    }
-                    termForm.submit();
-                });
             });
         }
     });

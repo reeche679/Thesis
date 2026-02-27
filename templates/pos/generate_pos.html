@@ -122,20 +122,6 @@
         vertical-align: middle;
     }
 
-    /* Fixed-position Validate POS button at bottom-left of the screen */
-    .validate-pos-fixed {
-        position: fixed;
-        left: 1rem;
-        bottom: 1rem;
-        z-index: 1050;
-    }
-    @media (max-width: 576px) {
-        .validate-pos-fixed {
-            left: 0.5rem;
-            bottom: 0.5rem;
-        }
-    }
-
     .generate-photo-box {
         width: 100px;
         height: 100px;
@@ -374,19 +360,22 @@
     </div>
 
     {% if is_regular %}
-    <p class="small text-muted mb-2">
-        Enter grades for each semester from 1st Year First Semester up to your selected current semester (Regular path).
-        All curriculum courses up to that semester are listed automatically.
-    </p>
-    <div class="row mb-3">
-        <div class="col-md-5">
-            <label class="form-label small text-uppercase text-muted">Current semester (Regular path)</label>
-            <select class="form-select form-select-sm" id="regular-current-semester">
-                {% for value, label in current_semester_choices_regular %}
-                <option value="{{ value }}" {% if current_semester_index == value %}selected{% endif %}>{{ label }}</option>
-                {% endfor %}
-            </select>
+    <div class="mb-3">
+        <div class="small text-uppercase text-muted mb-1">Course list</div>
+        <div class="small text-uppercase text-muted mb-1">CURRENT SEMESTER (REGULAR PATH)</div>
+        <div class="fw-semibold mb-2">
+            {% for value, label in current_semester_choices_regular %}
+            {% if value == current_semester_index %}{{ label }}{% endif %}
+            {% endfor %}
         </div>
+        <label class="form-label small text-uppercase text-muted" for="regular-current-semester">Course list by semester</label>
+        <select class="form-select form-select-sm" id="regular-current-semester" style="max-width: 280px;">
+            <option value="">— Select current semester (optional) —</option>
+            {% for value, label in current_semester_choices_regular %}
+            <option value="{{ value }}" {% if current_semester_index == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+        <div class="form-text small text-muted">Optional: choose up to which semester to list courses. If unset, 1st Year First Semester is used.</div>
     </div>
     {% elif preview_sections %}
     <div class="mb-4">
@@ -522,11 +511,11 @@
 
 
 
-    <div class="mt-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <div>
-            <button type="button" class="btn btn-outline-secondary validate-pos-fixed" id="validatePosBtn">Validate POS</button>
-        </div>
+    <div class="mt-4 d-flex justify-content-end align-items-center flex-wrap gap-2">
         <div class="d-flex gap-2">
+            <button type="button" class="btn btn-outline-secondary" id="validatePosBtn">
+                Validate POS
+            </button>
             <button type="button" class="btn btn-outline-secondary" id="clearGradesBtn">
                 Clear Grades
             </button>
