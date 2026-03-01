@@ -191,6 +191,8 @@
     .irregular-my-pos-table .grade-select {
         max-width: 56px;
     }
+    .irreg-edit-section-btn.irreg-edit-visible { display: inline-block !important; }
+    .irreg-edit-section-btn.irreg-edit-hidden { display: none !important; }
 </style>
 {% endblock %}
 
@@ -456,7 +458,7 @@
             <h6 class="fw-bold mb-0 flex-grow-1 text-center mb-0">{{ item.section.label }}</h6>
             <div class="d-flex align-items-center justify-content-end" style="min-width: 120px;">
                 {% if not is_regular %}
-                <button type="button" class="btn btn-sm btn-outline-secondary irreg-edit-section-btn" data-section-index="{{ item.section_index }}" title="Edit this semester" style="display:{% if has_generated_pos and item.is_curriculum_locked %}inline-block{% else %}none{% endif %};">
+                <button type="button" class="btn btn-sm btn-outline-secondary irreg-edit-section-btn {% if has_generated_pos and item.is_curriculum_locked %}irreg-edit-visible{% else %}irreg-edit-hidden{% endif %}" data-section-index="{{ item.section_index }}" title="Edit this semester">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                 </button>
                 {% endif %}
@@ -536,7 +538,7 @@
 
 
 
-    <div class="mt-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <div class="mt-4 d-flex justify-content-between align-items-center flex-wrap gap-2" id="pos-action-buttons" {% if not is_regular and not irreg_configured %}style="display:none;"{% endif %}>
         <button type="button" class="btn btn-outline-secondary" id="validatePosBtn">
             Validate POS
         </button>
@@ -554,10 +556,16 @@
 
 {% block extra_scripts %}
 {{ saved_only|json_script:"pos-saved-grades" }}
+{{ pos_config|json_script:"pos-config" }}
 <script>
     var GRADE_OPTIONS = ['', '1.00', '1.25', '1.50', '1.75', '2.00', '2.25', '2.50', '2.75', '3.00', '5.00'];
-    var IS_REGULAR = {{ is_regular|yesno:"true,false" }};
-    var HAS_GENERATED_POS = {{ has_generated_pos|yesno:"true,false" }};
+    var posConfig = (function() {
+        var el = document.getElementById('pos-config');
+        return el && el.textContent ? JSON.parse(el.textContent) : { is_regular: false, has_generated_pos: false, irreg_configured: false };
+    })();
+    var IS_REGULAR = !!posConfig.is_regular;
+    var HAS_GENERATED_POS = !!posConfig.has_generated_pos;
+    var IRREG_CONFIGURED = IS_REGULAR || posConfig.irreg_configured === true;
 
     function getCookie(name) {
         var match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
@@ -968,6 +976,15 @@
     }
 
     document.getElementById('generatePosBtn').addEventListener('click', function() {
+        if (!IS_REGULAR && !IRREG_CONFIGURED) {
+            alert('Please select your current semester and when you became irregular above, then click OK to proceed.');
+            return;
+        }
+        var sections = document.querySelectorAll('[id^="main-sem-"]');
+        if (!IS_REGULAR && sections.length === 0) {
+            alert('Please select your current semester and when you became irregular above, then click OK to proceed.');
+            return;
+        }
         var validation = validateAllSectionsForGenerate();
         if (!validation.ok) {
             alert(validation.message);
@@ -1373,7 +1390,7 @@
             var checkBtn = sectionDiv.querySelector('.irreg-check-section-btn');
             if (checkBtn) checkBtn.style.display = 'none';
             var editBtn = sectionDiv.querySelector('.irreg-edit-section-btn');
-            if (editBtn) editBtn.style.display = '';
+            if (editBtn) { editBtn.classList.remove('irreg-edit-hidden'); editBtn.classList.add('irreg-edit-visible'); }
         }
 
         document.body.addEventListener('click', function(e) {
@@ -1500,7 +1517,7 @@
                     sel.addEventListener('change', saveGradesToStorage);
                 });
                 var editBtn = sectionDiv.querySelector('.irreg-edit-section-btn');
-                if (editBtn) editBtn.style.display = '';
+                if (editBtn) { editBtn.classList.remove('irreg-edit-hidden'); editBtn.classList.add('irreg-edit-visible'); }
                 var checkBtn = sectionDiv.querySelector('.irreg-check-section-btn');
                 if (checkBtn) checkBtn.style.display = '';
                 saveGradesToStorage();

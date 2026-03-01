@@ -199,6 +199,7 @@ _INDEX_TO_YEAR_SEM = [
     ("1st Year", "Midterm"),
     ("2nd Year", "First Semester"),
     ("2nd Year", "Second Semester"),
+    ("2nd Year", "Midterm"),
     ("3rd Year", "First Semester"),
     ("3rd Year", "Second Semester"),
     ("3rd Year", "Midterm"),
@@ -230,11 +231,14 @@ CURRENT_SEMESTER_CHOICES = [
     (i, "{} - {}".format(yl, sem)) for i, (yl, sem) in enumerate(_INDEX_TO_YEAR_SEM)
 ]
 # Only show 1st–4th year in semester dropdowns (home + add courses); 5th+ added via + Add courses on Generate POS
-SECTION_INDEX_MAX_DROPDOWN = 9  # 0..9 = 1st Year through 4th Year Second Semester
+SECTION_INDEX_MAX_DROPDOWN = 10  # 0..10 = 1st Year through 4th Year Second Semester (incl. 2nd Year Midterm)
 CURRENT_SEMESTER_CHOICES_YEAR4_ONLY = [c for c in CURRENT_SEMESTER_CHOICES if c[0] <= SECTION_INDEX_MAX_DROPDOWN]
 
-# For Regular path on Generate POS: allow selection up to 5th Year Second Semester (index 11)
-CURRENT_SEMESTER_CHOICES_UPTO_5YEAR2 = [c for c in CURRENT_SEMESTER_CHOICES if c[0] <= 11]
+# For Regular path on Generate POS: allow selection up to 5th Year Second Semester (index 12 after adding 2nd Year Midterm)
+CURRENT_SEMESTER_CHOICES_UPTO_5YEAR2 = [c for c in CURRENT_SEMESTER_CHOICES if c[0] <= 12]
+# Regular path dropdown: exclude 2nd Year Midterm (index 5) - add-course only, not a valid "current semester" for regular
+SECOND_YEAR_MIDTERM_INDEX = 5
+CURRENT_SEMESTER_CHOICES_REGULAR = [c for c in CURRENT_SEMESTER_CHOICES_UPTO_5YEAR2 if c[0] != SECOND_YEAR_MIDTERM_INDEX]
 
 
 def _year_semester_to_section_index(year_level, semester):
@@ -587,6 +591,7 @@ def pos_generate(request):
     context = {
         'student': student,
         'has_generated_pos': has_generated_pos,
+        'pos_config': {'is_regular': is_regular, 'has_generated_pos': has_generated_pos, 'irreg_configured': irreg_configured if not is_regular else True},
         'saved_grades_by_section': saved_grades_by_section,
         'saved_only': saved_grades_by_section,
         'session_academic_year': request.session.get('academic_year', ''),
@@ -594,7 +599,7 @@ def pos_generate(request):
         'session_year_level': year_level,
         'curriculum_sections': curriculum_sections,
         'curriculum_sections_dropdown': curriculum_sections[:SECTION_INDEX_MAX_DROPDOWN + 1],
-        'current_semester_choices_regular': CURRENT_SEMESTER_CHOICES_UPTO_5YEAR2,
+        'current_semester_choices_regular': CURRENT_SEMESTER_CHOICES_REGULAR,
         'current_semester_index': next_section_index,
         'preview_sections': preview_sections,
         'display_sections': display_sections,

@@ -67,6 +67,7 @@ POS_CURRICULUM = [
         ("AI 102", "Probability and Statistics for AI", 3, 3, 0, "MATH 102", ""),
         ("PATHFit 4", "Choice of Dance, Sports, Martial Arts, Group Exercise, Outdoor, and Adventure Activities 2", 2, 2, 0, "PATHFit 1 & 2", ""),
     ]),
+    ("SECOND YEAR", "MIDTERM", 0, 0, 0, []),
     ("THIRD YEAR", "FIRST SEMESTER", 21, 16, 15, [
         ("CpE 302", "Logic Circuits and Design", 4, 3, 3, "ECE 405", ""),
         ("CpE 303", "Data Structures and Algorithms", 2, 0, 6, "CpE 205", ""),
@@ -129,8 +130,8 @@ POS_CURRICULUM = [
 # GEdE 101: 2nd Yr 1st or 2nd Yr 2nd (EE Dept); ENGG 105: 4th Yr 1st or 4th Yr 2nd (EE Dept 2nd); ENGG 117: 4th Yr 1st (EE Dept) or 4th Yr 2nd
 FLEXIBLE_SUBJECTS = [
     ("GEdE 101", "The Entrepreneurial Mind", 3, 3, 0, "", "", [(3, ""), (4, "EE Dept")]),
-    ("ENGG 105", "Technopreneurship", 3, 3, 0, "4th Year Standing", "", [(8, ""), (9, "EE Dept")]),
-    ("ENGG 117", "OJT/Internship (320 hrs)", 4, 4, 0, "4th Year Standing", "", [(8, "EE Dept"), (9, "")]),
+    ("ENGG 105", "Technopreneurship", 3, 3, 0, "4th Year Standing", "", [(9, ""), (10, "EE Dept")]),
+    ("ENGG 117", "OJT/Internship (320 hrs)", 4, 4, 0, "4th Year Standing", "", [(9, "EE Dept"), (10, "")]),
 ]
 
 
