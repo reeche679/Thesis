@@ -452,6 +452,9 @@ def pos_generate(request):
     display_sections = []
     editable_section_index = None
     selected_has_grades = False
+    irreg_configured = True
+    irreg_start_index = None
+    irreg_current_sem = None
     # For every section, precompute courses available to add (this + previous semesters, failed or not yet taken, plus flexible)
     picker_available_by_section = {
         si: _picker_available_for_next_section(si, curriculum_sections, saved_grades_by_section)
@@ -492,87 +495,98 @@ def pos_generate(request):
         irreg_start_index = _safe_int(irreg_start_param, _safe_int(request.session.get('irreg_start_index')))
         irreg_current_sem = _safe_int(current_sem_param, _safe_int(request.session.get('irreg_current_sem')))
 
-        if irreg_start_index is not None:
-            request.session['irreg_start_index'] = irreg_start_index
-        else:
-            irreg_start_index = 0
-        if irreg_current_sem is not None:
-            request.session['irreg_current_sem'] = irreg_current_sem
-        else:
-            irreg_current_sem = next_section_index if next_section_index is not None else 0
-        if with_petition in ('yes', 'no'):
-            request.session['irreg_with_petition'] = with_petition
+        irreg_configured = irreg_start_index is not None and irreg_current_sem is not None
 
-        max_si = len(curriculum_sections) - 1
-        irreg_start_index = max(0, min(irreg_start_index, max_si))
-        irreg_current_sem = max(0, min(irreg_current_sem, max_si))
-        if irreg_current_sem < irreg_start_index:
-            irreg_current_sem = irreg_start_index
+        if irreg_configured:
+            if irreg_start_index is not None:
+                request.session['irreg_start_index'] = irreg_start_index
+            if irreg_current_sem is not None:
+                request.session['irreg_current_sem'] = irreg_current_sem
+            if with_petition in ('yes', 'no'):
+                request.session['irreg_with_petition'] = with_petition
 
-        # Collect all passed course codes across all sections
-        all_passed_codes = set()
-        for si_check in range(len(curriculum_sections)):
-            for code, grade in (saved_grades_by_section.get(si_check) or {}).items():
-                if _is_passing_grade(grade):
-                    all_passed_codes.add(code)
+            max_si = len(curriculum_sections) - 1
+            irreg_start_index = max(0, min(irreg_start_index, max_si))
+            irreg_current_sem = max(0, min(irreg_current_sem, max_si))
+            if irreg_current_sem < irreg_start_index:
+                irreg_current_sem = irreg_start_index
 
-        # Sections 0..irreg_start_index: show all curriculum courses (like regular path)
-        for si in range(irreg_start_index + 1):
-            sec = curriculum_sections[si]
-            section_grades = saved_grades_by_section.get(si, {})
-            courses_with_grades = []
-            for c in sec["courses"]:
-                code = c["code"]
-                grade = section_grades.get(code)
-                courses_with_grades.append({'course': c, 'grade': grade})
-            total_units_display = sum(c.get('units', 0) or 0 for c in sec["courses"])
-            display_sections.append({
-                'section': sec, 'courses_with_grades': courses_with_grades, 'section_index': si,
-                'total_units': total_units_display,
-                'is_curriculum_locked': True,
-            })
+            yl, sem = _INDEX_TO_YEAR_SEM[irreg_current_sem]
+            request.session['year_level'] = yl
+            request.session['semester'] = sem
+            if hasattr(student, 'year_level'):
+                student.year_level = yl
+                student.semester = sem
+                student.save(update_fields=['year_level', 'semester'])
 
-        # Sections (irreg_start_index+1)..irreg_current_sem: add-course sections
-        for si in range(irreg_start_index + 1, irreg_current_sem + 1):
-            sec = curriculum_sections[si]
-            section_grades = saved_grades_by_section.get(si, {})
-            courses_with_grades = []
-            seen = set()
-            for c in sec['courses']:
-                if c['code'] in section_grades and section_grades[c['code']]:
-                    seen.add(c['code'])
-                    courses_with_grades.append({'course': c, 'grade': section_grades[c['code']]})
-            for code, grade in (section_grades or {}).items():
-                if not code or not grade or code in seen:
-                    continue
-                seen.add(code)
-                info = course_lookup.get(code)
-                if info:
-                    title, units, lec, lab, prereq, coreq = info
-                else:
-                    title, units, lec, lab, prereq, coreq = code, 0, 0, 0, "", ""
-                courses_with_grades.append({
-                    'course': {'code': code, 'title': title, 'units': units, 'lec': lec, 'lab': lab, 'prereq': prereq, 'coreq': coreq},
-                    'grade': grade,
+        if irreg_configured:
+            # Collect all passed course codes across all sections
+            all_passed_codes = set()
+            for si_check in range(len(curriculum_sections)):
+                for code, grade in (saved_grades_by_section.get(si_check) or {}).items():
+                    if _is_passing_grade(grade):
+                        all_passed_codes.add(code)
+
+            # Sections 0..irreg_start_index: show all curriculum courses (like regular path)
+            for si in range(irreg_start_index + 1):
+                sec = curriculum_sections[si]
+                section_grades = saved_grades_by_section.get(si, {})
+                courses_with_grades = []
+                for c in sec["courses"]:
+                    code = c["code"]
+                    grade = section_grades.get(code)
+                    courses_with_grades.append({'course': c, 'grade': grade})
+                total_units_display = sum(c.get('units', 0) or 0 for c in sec["courses"])
+                display_sections.append({
+                    'section': sec, 'courses_with_grades': courses_with_grades, 'section_index': si,
+                    'total_units': total_units_display,
+                    'is_curriculum_locked': True,
                 })
-            total_units = sum(cg['course'].get('units', 0) or 0 for cg in courses_with_grades)
-            display_sections.append({
-                'section': sec, 'courses_with_grades': courses_with_grades, 'section_index': si,
-                'total_units': total_units,
-                'is_curriculum_locked': False,
-            })
 
-        editable_section_index = irreg_current_sem if irreg_current_sem > irreg_start_index else None
+            # Sections (irreg_start_index+1)..irreg_current_sem: add-course sections
+            for si in range(irreg_start_index + 1, irreg_current_sem + 1):
+                sec = curriculum_sections[si]
+                section_grades = saved_grades_by_section.get(si, {})
+                courses_with_grades = []
+                seen = set()
+                for c in sec['courses']:
+                    if c['code'] in section_grades and section_grades[c['code']]:
+                        seen.add(c['code'])
+                        courses_with_grades.append({'course': c, 'grade': section_grades[c['code']]})
+                for code, grade in (section_grades or {}).items():
+                    if not code or not grade or code in seen:
+                        continue
+                    seen.add(code)
+                    info = course_lookup.get(code)
+                    if info:
+                        title, units, lec, lab, prereq, coreq = info
+                    else:
+                        title, units, lec, lab, prereq, coreq = code, 0, 0, 0, "", ""
+                    courses_with_grades.append({
+                        'course': {'code': code, 'title': title, 'units': units, 'lec': lec, 'lab': lab, 'prereq': prereq, 'coreq': coreq},
+                        'grade': grade,
+                    })
+                total_units = sum(cg['course'].get('units', 0) or 0 for cg in courses_with_grades)
+                display_sections.append({
+                    'section': sec, 'courses_with_grades': courses_with_grades, 'section_index': si,
+                    'total_units': total_units,
+                    'is_curriculum_locked': False,
+                })
 
-        # Rebuild picker_available_by_section filtering out passed courses
-        picker_available_by_section = {}
-        for si in range(irreg_start_index + 1, irreg_current_sem + 1):
-            candidates = _picker_available_for_next_section(si, curriculum_sections, saved_grades_by_section)
-            candidates = [c for c in candidates if c['code'] not in all_passed_codes]
-            picker_available_by_section[si] = candidates
+            editable_section_index = irreg_current_sem if irreg_current_sem > irreg_start_index else None
+
+            # Rebuild picker_available_by_section filtering out passed courses
+            picker_available_by_section = {}
+            for si in range(irreg_start_index + 1, irreg_current_sem + 1):
+                candidates = _picker_available_for_next_section(si, curriculum_sections, saved_grades_by_section)
+                candidates = [c for c in candidates if c['code'] not in all_passed_codes]
+                picker_available_by_section[si] = candidates
+
+    has_generated_pos = POSRecord.objects.filter(student=student).exists()
 
     context = {
         'student': student,
+        'has_generated_pos': has_generated_pos,
         'saved_grades_by_section': saved_grades_by_section,
         'saved_only': saved_grades_by_section,
         'session_academic_year': request.session.get('academic_year', ''),
@@ -590,9 +604,12 @@ def pos_generate(request):
         'picker_available_by_section': picker_available_by_section,
         'is_regular': is_regular,
         'pos_path': pos_path,
-        'irreg_start_index': request.session.get('irreg_start_index', 0) if not is_regular else 0,
-        'irreg_current_sem': request.session.get('irreg_current_sem', 0) if not is_regular else 0,
-        'irreg_with_petition': request.session.get('irreg_with_petition', '') if not is_regular else '',
+        'irreg_configured': irreg_configured if not is_regular else True,
+        'irreg_start_index': irreg_start_index if not is_regular else 0,
+        'irreg_current_sem': irreg_current_sem if not is_regular else 0,
+        'irreg_start_unset': (irreg_start_index is None) if not is_regular else False,
+        'irreg_current_unset': (irreg_current_sem is None) if not is_regular else False,
+        'irreg_with_petition': request.session.get('irreg_with_petition', 'yes') if not is_regular else '',
     }
     return render(request, "pos/generate_pos.html", context)
 

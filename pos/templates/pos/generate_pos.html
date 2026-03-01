@@ -148,6 +148,11 @@
     }
     .irregular-picker-table tbody tr.irregular-picker-row {
         cursor: pointer;
+        outline: none;
+    }
+    .irregular-picker-table tbody tr.irregular-picker-row:focus,
+    .irregular-picker-table tbody tr.irregular-picker-row:focus-visible {
+        outline: none;
     }
     .irregular-picker-table tbody tr.irregular-picker-row:hover {
         background-color: #e9ecef !important;
@@ -157,8 +162,6 @@
     }
     .irregular-picker-table tbody tr.irregular-picker-row.selected {
         background-color: #cfe2ff !important;
-        outline: 2px solid #0d6efd;
-        outline-offset: -2px;
     }
     .irregular-picker-table tbody tr.irregular-picker-row.selected td {
         background-color: #cfe2ff !important;
@@ -180,6 +183,10 @@
     }
     #irregular-add-modal .course-title-cell {
         font-size: 0.8rem !important;
+    }
+    #irregular-add-modal .irregular-picker-row:focus,
+    #irregular-add-modal .irregular-picker-row:focus-visible {
+        outline: none !important;
     }
     .irregular-my-pos-table .grade-select {
         max-width: 56px;
@@ -258,25 +265,27 @@
     <div class="row g-3 align-items-end">
         <div class="col-md-4">
             <label class="form-label small text-uppercase text-muted" for="irreg-current-sem">Your Current Semester</label>
-            <select class="form-select form-select-sm" id="irreg-current-sem">
+            <select class="form-select form-select-sm" id="irreg-current-sem" required>
+                <option value="" {% if irreg_current_unset %}selected{% endif %}>— Select Semester —</option>
                 {% for sec in curriculum_sections_dropdown %}
-                <option value="{{ forloop.counter0 }}" {% if irreg_current_sem == forloop.counter0 %}selected{% endif %}>{{ sec.label }}</option>
+                <option value="{{ forloop.counter0 }}" {% if not irreg_current_unset and irreg_current_sem == forloop.counter0 %}selected{% endif %}>{{ sec.label }}</option>
                 {% endfor %}
             </select>
         </div>
         <div class="col-md-4">
             <label class="form-label small text-uppercase text-muted" for="irreg-start-sem">When you became irregular</label>
-            <select class="form-select form-select-sm" id="irreg-start-sem">
+            <select class="form-select form-select-sm" id="irreg-start-sem" required>
+                <option value="" {% if irreg_start_unset %}selected{% endif %}>— Select Semester —</option>
                 {% for sec in curriculum_sections_dropdown %}
-                <option value="{{ forloop.counter0 }}" {% if irreg_start_index == forloop.counter0 %}selected{% endif %}>{{ sec.label }}</option>
+                <option value="{{ forloop.counter0 }}" {% if not irreg_start_unset and irreg_start_index == forloop.counter0 %}selected{% endif %}>{{ sec.label }}</option>
                 {% endfor %}
             </select>
         </div>
         <div class="col-md-2">
             <label class="form-label small text-uppercase text-muted" for="irreg-with-petition">With Petition?</label>
             <select class="form-select form-select-sm" id="irreg-with-petition">
-                <option value="no" {% if irreg_with_petition != 'yes' %}selected{% endif %}>No</option>
-                <option value="yes" {% if irreg_with_petition == 'yes' %}selected{% endif %}>Yes</option>
+                <option value="no" {% if irreg_with_petition == 'no' %}selected{% endif %}>No</option>
+                <option value="yes" {% if irreg_with_petition != 'no' %}selected{% endif %}>Yes</option>
             </select>
         </div>
         <div class="col-md-2">
@@ -430,21 +439,29 @@
     </div>
     {% endif %}
 
+    {% if not is_regular and not irreg_configured %}
+    <div class="alert alert-info py-3 mb-3">
+        <strong>Select your semester to continue.</strong> Please choose your current semester and when you became irregular above, then click <strong>OK</strong> to proceed to adding grades.
+    </div>
+    {% endif %}
+
 {% for item in display_sections %}
-    <div class="mb-4 main-sem" id="main-sem-{{ item.section_index }}" data-section-index="{{ item.section_index }}"{% if is_regular and not item.courses_with_grades %} style="display:none;"{% endif %}>
-        <div class="d-flex justify-content-between align-items-center mb-2">
-            <div class="flex-grow-1 text-center">
-                <h6 class="fw-bold mb-0">{{ item.section.label }}</h6>
+    <div class="mb-4 main-sem" id="main-sem-{{ item.section_index }}" data-section-index="{{ item.section_index }}" data-curriculum-locked="{{ item.is_curriculum_locked|yesno:"true,false" }}"{% if is_regular and not item.courses_with_grades %} style="display:none;"{% endif %}>
+        <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+            <div class="d-flex align-items-center" style="min-width: 120px;">
+                {% if not is_regular and not item.is_curriculum_locked %}
+                <button type="button" class="btn btn-sm btn-outline-primary" data-section-index="{{ item.section_index }}">+ Add courses</button>
+                {% endif %}
             </div>
-            {% if not is_regular %}
-            <button type="button" class="btn btn-sm btn-outline-secondary irreg-edit-section-btn" data-section-index="{{ item.section_index }}" title="Edit this semester" style="display:none;">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-            </button>
-            {% endif %}
+            <h6 class="fw-bold mb-0 flex-grow-1 text-center mb-0">{{ item.section.label }}</h6>
+            <div class="d-flex align-items-center justify-content-end" style="min-width: 120px;">
+                {% if not is_regular %}
+                <button type="button" class="btn btn-sm btn-outline-secondary irreg-edit-section-btn" data-section-index="{{ item.section_index }}" title="Edit this semester" style="display:{% if has_generated_pos and item.is_curriculum_locked %}inline-block{% else %}none{% endif %};">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                </button>
+                {% endif %}
+            </div>
         </div>
-        {% if not is_regular and not item.is_curriculum_locked %}
-        <button type="button" class="btn btn-sm btn-outline-primary mb-2" data-section-index="{{ item.section_index }}">+ Add courses</button>
-        {% endif %}
         <div class="table-responsive">
             <table class="table table-sm align-middle table-bordered mb-0">
                 <thead class="table-light">
@@ -473,6 +490,9 @@
                         <td class="small text-muted text-center">{{ cg.course.prereq|default:"" }}</td>
                         <td class="small text-muted text-center">{{ cg.course.coreq|default:"" }}</td>
                         <td>
+                            {% if has_generated_pos and not is_regular and item.is_curriculum_locked %}
+                            <span class="fw-semibold">{{ cg.grade|default:"—" }}</span>
+                            {% else %}
                             <select class="form-select form-select-sm grade-select" data-course-code="{{ cg.course.code }}">
                                 <option value="" {% if not cg.grade %}selected{% endif %}></option>
                                 <option value="1.00" {% if cg.grade == '1.00' %}selected{% endif %}>1.00</option>
@@ -486,6 +506,7 @@
                                 <option value="3.00" {% if cg.grade == '3.00' %}selected{% endif %}>3.00</option>
                                 <option value="5.00" {% if cg.grade == '5.00' %}selected{% endif %}>5.00</option>
                             </select>
+                            {% endif %}
                         </td>
                     </tr>
                     {% endfor %}
@@ -494,13 +515,15 @@
                     <tr>
                         <th colspan="2" class="text-end">Total Units</th>
                         <th class="text-center" id="total-units-sem-{{ item.section_index }}">{{ item.total_units|default:0 }}</th>
-                        {% if not is_regular %}
+                        {% if not is_regular and not item.is_curriculum_locked %}
                         <th colspan="4"></th>
                         <th class="text-center">
                             <button type="button" class="btn btn-sm btn-outline-success irreg-check-section-btn p-1" data-section-index="{{ item.section_index }}" title="Save &amp; lock this semester">
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
                             </button>
                         </th>
+                        {% elif not is_regular %}
+                        <th colspan="5"></th>
                         {% else %}
                         <th colspan="5"></th>
                         {% endif %}
@@ -534,6 +557,7 @@
 <script>
     var GRADE_OPTIONS = ['', '1.00', '1.25', '1.50', '1.75', '2.00', '2.25', '2.50', '2.75', '3.00', '5.00'];
     var IS_REGULAR = {{ is_regular|yesno:"true,false" }};
+    var HAS_GENERATED_POS = {{ has_generated_pos|yesno:"true,false" }};
 
     function getCookie(name) {
         var match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
@@ -574,15 +598,28 @@
         return out;
     }
 
+    function getGradeFromRow(row) {
+        var sel = row.querySelector('.grade-select');
+        if (sel) return (sel.value || '').trim();
+        var cells = row.querySelectorAll('td');
+        var gradeCell = cells[7];
+        if (!gradeCell) return '';
+        var span = gradeCell.querySelector('span');
+        var t = span ? span.textContent : gradeCell.textContent;
+        t = (t || '').trim();
+        if (t === '—') return '';
+        return t;
+    }
+
     function collectGradesFromAllSections() {
         var out = {};
         document.querySelectorAll('[id^="main-sem-"]').forEach(function(mainDiv) {
             var sectionIndex = mainDiv.getAttribute('data-section-index');
             if (sectionIndex === null) return;
             var sectionGrades = {};
-            mainDiv.querySelectorAll('.grade-select').forEach(function(select) {
-                var code = select.getAttribute('data-course-code');
-                var value = select.value;
+            mainDiv.querySelectorAll('tbody tr[data-course-code]').forEach(function(row) {
+                var code = row.getAttribute('data-course-code');
+                var value = getGradeFromRow(row);
                 if (code && value) sectionGrades[code] = value;
             });
             out[sectionIndex] = sectionGrades;
@@ -621,7 +658,6 @@
         var gradesBySection = mergedGradesForSave();
         localStorage.setItem('posGrades', JSON.stringify(gradesBySection));
         clearTimeout(saveToServerTimer);
-        saveToServerTimer = setTimeout(function() { saveGradesToServer(gradesBySection); }, 500);
     }
 
     document.addEventListener('DOMContentLoaded', function() {
@@ -674,8 +710,7 @@
     });
 
     document.getElementById('clearGradesBtn').addEventListener('click', function() {
-        var gradesToKeep = getServerGradesForMerge();
-        if (typeof gradesToKeep !== 'object' || gradesToKeep === null) gradesToKeep = {};
+        var gradesToKeep = {};
         var sections = document.querySelectorAll('[id^="main-sem-"]');
         sections.forEach(function(mainSection) {
             var sectionIndex = mainSection.getAttribute('data-section-index');
@@ -686,7 +721,6 @@
             gradesToKeep[sectionIndex] = {};
         });
         localStorage.setItem('posGrades', JSON.stringify(gradesToKeep));
-        saveGradesToServer(gradesToKeep, function() {});
     });
 
     document.getElementById('addExistingGradesBtn').addEventListener('click', function() {
@@ -877,31 +911,30 @@
     }
 
     function validateCurrentSectionForGenerate() {
-        var mainSection = document.querySelector('[id^="main-sem-"]');
-        if (!mainSection) return { ok: true };
-        var tbody = mainSection.querySelector('tbody');
-        if (!tbody) return { ok: true };
-        var rows = tbody.querySelectorAll('tr[data-course-code][data-units]');
-        var totalUnits = 0;
-        var failedUnits = 0;
-        for (var i = 0; i < rows.length; i++) {
-            var row = rows[i];
-            var units = parseInt(row.getAttribute('data-units'), 10) || 0;
-            var sel = row.querySelector('.grade-select');
-            var grade = sel ? (sel.value || '').trim() : '';
-            if (!grade) {
-                return { ok: false, message: 'Please fill all grades before generating POS.' };
+        var sections = document.querySelectorAll('[id^="main-sem-"]');
+        for (var s = 0; s < sections.length; s++) {
+            var mainSection = sections[s];
+            var tbody = mainSection.querySelector('tbody');
+            if (!tbody) continue;
+            var rows = tbody.querySelectorAll('tr[data-course-code][data-units]');
+            var totalUnits = 0;
+            var failedUnits = 0;
+            for (var i = 0; i < rows.length; i++) {
+                var row = rows[i];
+                var units = parseInt(row.getAttribute('data-units'), 10) || 0;
+                var grade = getGradeFromRow(row);
+                if (!grade) {
+                    var label = mainSection.querySelector('h6');
+                    return { ok: false, message: 'Please fill all grades for every semester. Missing grade in: ' + (label ? label.textContent : 'section') };
+                }
+                totalUnits += units;
+                if (grade === '5' || grade === '5.00') failedUnits += units;
             }
-            totalUnits += units;
-            if (grade === '5' || grade === '5.00') failedUnits += units;
-        }
-        if (totalUnits <= 0) return { ok: true };
-        var ratio = failedUnits / totalUnits;
-        if (ratio >= 0.75) {
-            return { ok: false, message: '75% - 100% units failed. Can no longer generate POS.' };
-        }
-        if (ratio >= 0.50) {
-            return { ok: false, message: "Can't generate POS. 50% of units failed. Please proceed to the department for manual evaluation." };
+            if (totalUnits > 0) {
+                var ratio = failedUnits / totalUnits;
+                if (ratio >= 0.75) return { ok: false, message: '75% - 100% units failed in a semester. Can no longer generate POS.' };
+                if (ratio >= 0.50) return { ok: false, message: "50% or more of units failed in a semester. Please proceed to the department for manual evaluation." };
+            }
         }
         return { ok: true };
     }
@@ -917,8 +950,7 @@
             for (var i = 0; i < rows.length; i++) {
                 var row = rows[i];
                 var units = parseInt(row.getAttribute('data-units'), 10) || 0;
-                var sel = row.querySelector('.grade-select');
-                var grade = sel ? (sel.value || '').trim() : '';
+                var grade = getGradeFromRow(row);
                 if (!grade) {
                     var label = mainSection.querySelector('h6');
                     return { ok: false, message: 'Please fill all grades for every semester. Missing grade in: ' + (label ? label.textContent : 'section') };
@@ -936,7 +968,7 @@
     }
 
     document.getElementById('generatePosBtn').addEventListener('click', function() {
-        var validation = IS_REGULAR ? validateAllSectionsForGenerate() : validateCurrentSectionForGenerate();
+        var validation = validateAllSectionsForGenerate();
         if (!validation.ok) {
             alert(validation.message);
             return;
@@ -1044,11 +1076,49 @@
             return merged;
         }
 
-        function shouldShowInPicker(courseCode, currentGrades) {
-            var grade = (currentGrades[courseCode] || '').toString().trim();
-            if (!grade) return true;
-            if (grade === '5' || grade === '5.0' || grade === '5.00') return true;
-            return false;
+        function isPassingGrade(grade) {
+            var g = (grade || '').toString().trim();
+            if (!g || g === '—') return false;
+            if (g === '5' || g === '5.0' || g === '5.00') return false;
+            return true;
+        }
+
+        function collectAllPassedCodes(excludeSectionIndex) {
+            var passed = new Set();
+            document.querySelectorAll('[id^="main-sem-"]').forEach(function(mainDiv) {
+                var si = mainDiv.getAttribute('data-section-index');
+                if (si === String(excludeSectionIndex)) return;
+                mainDiv.querySelectorAll('tbody tr[data-course-code]').forEach(function(row) {
+                    var code = row.getAttribute('data-course-code');
+                    if (!code) return;
+                    var grade = '';
+                    var sel = row.querySelector('.grade-select');
+                    if (sel) {
+                        grade = (sel.value || '').trim();
+                    } else {
+                        var cells = row.querySelectorAll('td');
+                        var gradeCell = cells[7];
+                        if (gradeCell) {
+                            var span = gradeCell.querySelector('span');
+                            grade = span ? span.textContent.trim() : gradeCell.textContent.trim();
+                        }
+                    }
+                    if (isPassingGrade(grade)) passed.add(code);
+                });
+            });
+            return passed;
+        }
+
+        function getCodesAlreadyInSection(sectionIndex) {
+            var codes = new Set();
+            var mainDiv = document.getElementById('main-sem-' + sectionIndex);
+            if (mainDiv) {
+                mainDiv.querySelectorAll('tbody tr[data-course-code]').forEach(function(row) {
+                    var code = row.getAttribute('data-course-code');
+                    if (code) codes.add(code);
+                });
+            }
+            return codes;
         }
 
         function openModalForSection(idx) {
@@ -1064,18 +1134,22 @@
             }
             var coursesToShow;
             if (IS_REGULAR) {
-                // Regular path: show only this semester's curriculum courses,
-                // just like when clicking the Edit button for that semester.
                 coursesToShow = sec.courses.slice();
             } else {
-                // Irregular path: use dynamic picker that includes this and previous
-                // semesters (failed or not yet taken), plus flexible subjects.
                 coursesToShow = (pickerAvailableBySection[idx] || pickerAvailableBySection[String(idx)]) || null;
                 if (!coursesToShow) {
-                    var currentGrades = getCurrentGradesForSection(idx);
-                    coursesToShow = sec.courses.filter(function(c) { return shouldShowInPicker(c.code, currentGrades); });
+                    coursesToShow = sec.courses.slice();
                 }
             }
+
+            var passedCodes = collectAllPassedCodes(idx);
+            var alreadyInSection = getCodesAlreadyInSection(idx);
+            coursesToShow = coursesToShow.filter(function(c) {
+                if (passedCodes.has(c.code)) return false;
+                if (alreadyInSection.has(c.code)) return false;
+                return true;
+            });
+
             coursesToShow.forEach(function(c) {
                 var tr = document.createElement('tr');
                 tr.className = 'irregular-picker-row';
@@ -1127,7 +1201,6 @@
             delete grades[sectionIndex];
             delete grades[String(sectionIndex)];
             localStorage.setItem('posGrades', JSON.stringify(grades));
-            saveGradesToServer(grades, function() {});
         }
 
         // Handle bottom Undo buttons in Regular path
@@ -1146,6 +1219,9 @@
             if (!btn) return;
             // Skip undo buttons (handled above)
             if (btn.classList.contains('regular-undo-btn')) return;
+            // Skip edit and check/lock buttons – they have their own handlers
+            if (btn.classList.contains('irreg-edit-section-btn')) return;
+            if (btn.classList.contains('irreg-check-section-btn')) return;
             // In Regular path, skip next-semester buttons here; they are handled in the IS_REGULAR block above
             if (IS_REGULAR && btn.classList.contains('regular-add-next-btn')) return;
             // Extra safety: when central first "+ Add courses" is clicked, hide its container immediately
@@ -1272,11 +1348,15 @@
                 var currentSem = document.getElementById('irreg-current-sem').value;
                 var startSem = document.getElementById('irreg-start-sem').value;
                 var petition = document.getElementById('irreg-with-petition').value;
+                if (currentSem === '' || startSem === '') {
+                    alert('Please select your current semester and when you became irregular to proceed.');
+                    return;
+                }
                 var params = [];
-                if (currentSem !== '') params.push('current_sem=' + encodeURIComponent(currentSem));
-                if (startSem !== '') params.push('irreg_start=' + encodeURIComponent(startSem));
+                params.push('current_sem=' + encodeURIComponent(currentSem));
+                params.push('irreg_start=' + encodeURIComponent(startSem));
                 if (petition) params.push('with_petition=' + encodeURIComponent(petition));
-                window.location.href = window.location.pathname + (params.length ? '?' + params.join('&') : '');
+                window.location.href = window.location.pathname + '?' + params.join('&');
             });
         }
 
@@ -1302,14 +1382,7 @@
             var si = btn.getAttribute('data-section-index');
             var sectionDiv = document.getElementById('main-sem-' + si);
             if (!sectionDiv) return;
-            var gradesBySection = mergedGradesForSave();
-            saveGradesToServer(gradesBySection, false, function(data) {
-                if (data && data.ok) {
-                    lockSectionToPreview(sectionDiv);
-                } else {
-                    alert('Failed to save. Please try again.');
-                }
-            });
+            lockSectionToPreview(sectionDiv);
         });
 
         // --- Irregular edit button: open modal ---
@@ -1431,6 +1504,9 @@
                 var checkBtn = sectionDiv.querySelector('.irreg-check-section-btn');
                 if (checkBtn) checkBtn.style.display = '';
                 saveGradesToStorage();
+                if (HAS_GENERATED_POS && sectionDiv.getAttribute('data-curriculum-locked') === 'true') {
+                    lockSectionToPreview(sectionDiv);
+                }
                 editModal.hide();
             });
         }

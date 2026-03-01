@@ -597,6 +597,8 @@ def build_pos_pdf(student_name, sr_code, academic_year, grades_by_section=None, 
             else:
                 title, units, lec, lab, prereq, coreq = code, 0, 0, 0, "", ""
             section_rows.append((code, title, units, lec, lab, prereq, coreq, (grade or "").strip()))
+        if not section_rows:
+            continue
         sum_units = sum(r[2] for r in section_rows)
         sum_lec = sum(r[3] for r in section_rows)
         sum_lab = sum(r[4] for r in section_rows)
