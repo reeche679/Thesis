@@ -204,6 +204,30 @@ def add_offering_constraints(model, semester, passed_courses, current_sem, with_
             model.AddAllowedAssignments([semester[c]], [[s] for s in valid_sems])
 
 
+# Graduation semester: only these three courses may appear in the final semester.
+GRADUATION_TRIO = ("CpE 405", "CpE 406", "ENGG 117")
+
+
+def add_graduation_semester_constraint(model, semester, passed_courses):
+    """
+    Enforce that the last semester contains ONLY CpE Practice 2, Compre, and OJT.
+    - The three must be in the same semester.
+    - No other course may be in that semester.
+    """
+    trio = [c for c in GRADUATION_TRIO if c in courses and c not in passed_courses]
+    if len(trio) < 2:
+        return  # Not enough to enforce (e.g. all passed or only one left)
+    ref = trio[0]
+    # All trio members in same semester
+    for c in trio[1:]:
+        model.Add(semester[c] == semester[ref])
+    # No other course may share that semester
+    for c, info in courses.items():
+        if c in passed_courses or c in GRADUATION_TRIO:
+            continue
+        model.Add(semester[c] != semester[ref])
+
+
 def add_unit_constraints(model, semester, passed_courses, current_sem):
     """Add per-semester unit load constraints."""
     for s in range(current_sem, u.MAX_SEMESTER + 1):
@@ -241,23 +265,62 @@ def add_prereq_year_coreq_constraints(
             return None
         return year_standing_map.get(_normalize_code(code))
 
-    def add_year_standing(course, req_year, enforce_if=None):
-        req_units = math.ceil(0.9 * year_units.get(req_year, 0))
-        if req_units <= 0:
+    def add_year_standing(course, _req_year_ignored, enforce_if=None):
+        """
+        Enforce year standing as: by the time `course` is taken, the student must
+        have at least 90% of the units from ALL curriculum courses whose original
+        semester comes strictly BEFORE this course's original semester.
+
+        This is a semester-prefix rule, not tied to a specific year bucket.
+        """
+        info_c = courses.get(course)
+        orig_sem_c = _first_semester(info_c)
+        if orig_sem_c is None:
             return
-        earned = earned_units_by_year.get(req_year, 0)
-        if earned >= req_units:
+
+        # All curriculum courses that appear before this course in the POS template.
+        prefix_courses = []
+        total_units = 0
+        earned_fixed = 0
+        for code, info in courses.items():
+            orig_sem = _first_semester(info)
+            if orig_sem is None or orig_sem >= orig_sem_c:
+                continue
+            units = info.get("units", 0)
+            prefix_courses.append((code, units))
+            total_units += units
+            if code in passed_courses:
+                earned_fixed += units
+
+        if total_units <= 0:
             return
+
+        req_units = math.ceil(0.9 * total_units)
+        # Units still needed from scheduled courses (beyond already-passed ones).
+        remaining_needed = req_units - earned_fixed
+
+        if remaining_needed <= 0:
+            # Standing already satisfied from passed courses alone.
+            return
+
         before_vars = []
-        for yc in year_courses_list.get(req_year, []):
-            b = model.NewBoolVar(f"{yc}_before_{course}")
-            model.Add(semester[yc] < semester[course]).OnlyEnforceIf(b)
-            model.Add(semester[yc] >= semester[course]).OnlyEnforceIf(b.Not())
-            before_vars.append(b * courses[yc].get("units", 0))
+        for code, units in prefix_courses:
+            if code in passed_courses:
+                # Already counted in earned_fixed at sem 0.
+                continue
+            b = model.NewBoolVar(f"{code}_before_{course}")
+            model.Add(semester[code] < semester[course]).OnlyEnforceIf(b)
+            model.Add(semester[code] >= semester[course]).OnlyEnforceIf(b.Not())
+            before_vars.append(b * units)
+
+        if not before_vars:
+            # No remaining courses can contribute extra units; leave as-is.
+            return
+
         if enforce_if:
-            model.Add(sum(before_vars) >= req_units).OnlyEnforceIf(enforce_if)
+            model.Add(sum(before_vars) >= remaining_needed).OnlyEnforceIf(enforce_if)
         else:
-            model.Add(sum(before_vars) >= req_units)
+            model.Add(sum(before_vars) >= remaining_needed)
 
     # --- C. Prerequisite & Year Standing Constraints ---
     for c, info in courses.items():
@@ -323,21 +386,27 @@ def add_objective(model, semester, passed_courses, failed_courses, current_sem):
         if c not in passed_courses:
             model.Add(max_sem_used >= semester[c])
     # Scale so we first minimize max_sem_used, then minimize sum of semesters (pack current first)
-    scale = u.MAX_SEMESTER * u.MAX_SEMESTER + 1
+    scale = u.MAX_SEMESTER *  u.MAX_SEMESTER + 1
     model.Minimize(
         max_sem_used * scale
         + sum(semester[c] for c in courses if c not in passed_courses)
     )
 
 
-def solve_and_print(model, semester, passed_courses, failed_courses, current_sem):
-    """Solve model and print generated POS or infeasibility info."""
-    # 6. Solver
+def _solve_and_collect(model, semester, passed_courses, failed_courses, current_sem):
+    """
+    Internal helper: solve model and return a structured POS result.
+
+    Returns a dict:
+      - status: "ok" | "infeasible"
+      - message: optional string (mainly for infeasible cases)
+      - pos: list of per-semester dicts when status == "ok"
+    """
     solver = cp_model.CpSolver()
     status = solver.Solve(model)
 
     if status in [cp_model.OPTIMAL, cp_model.FEASIBLE]:
-        lines = ["--- GENERATED PROGRAM OF STUDY ---"]
+        pos = []
         for s in range(current_sem, u.MAX_SEMESTER + 1):
             sem_list = [
                 c
@@ -345,32 +414,44 @@ def solve_and_print(model, semester, passed_courses, failed_courses, current_sem
                 if c not in passed_courses and solver.Value(semester[c]) == s
             ]
             label = _sem_label(s)
-            if sem_list:
-                total_u = sum(courses[c].get("units", 0) for c in sem_list)
-                lines.append(f"{label} ({total_u} units)")
-                for c in sorted(sem_list):
-                    title = courses[c].get("course_title", c)
-                    units = courses[c].get("units", 0)
-                    lines.append(f"  • {c} — {title} ({units} units)")
-            else:
-                lines.append(f"{label} (0 units)")
-        print("\n" + "\n".join(lines))
+            total_u = sum(courses[c].get("units", 0) for c in sem_list) if sem_list else 0
+            pos.append(
+                {
+                    "semester_index": s,
+                    "label": label,
+                    "total_units": total_u,
+                    "courses": [
+                        {
+                            "code": c,
+                            "title": courses[c].get("course_title", c),
+                            "units": courses[c].get("units", 0),
+                        }
+                        for c in sorted(sem_list)
+                    ],
+                }
+            )
+        return {"status": "ok", "message": None, "pos": pos}
     else:
-        _log_infeasible(
-            solver, status, current_sem, failed_courses, passed_courses, courses, u
-        )
+        import io
+        import contextlib
+
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            _log_infeasible(
+                solver, status, current_sem, failed_courses, passed_courses, courses, u
+            )
+        return {"status": "infeasible", "message": buf.getvalue().strip(), "pos": []}
 
 
-def run_pos_with_state(current_sem, passed_courses, failed_courses, with_petition: bool = False):
+def _run_core(current_sem, passed_courses, failed_courses, with_petition: bool):
     """
-    Core solver pipeline shared by static and dynamic modes.
-    Expects current_sem, passed_courses, failed_courses to be precomputed.
+    Internal pipeline that runs the full model and returns a structured result dict.
+    Shared by CLI and external callers.
     """
     # 1b. Probation / failed-units check (per semester)
     probation_msg = check_probation(current_sem, passed_courses, failed_courses)
     if probation_msg is not None:
-        print(f"\n{probation_msg}")
-        return
+        return {"status": "probation", "message": probation_msg, "pos": []}
 
     # 2. Model Initialization
     model = cp_model.CpModel()
@@ -385,6 +466,7 @@ def run_pos_with_state(current_sem, passed_courses, failed_courses, with_petitio
     # 4. Constraints
     add_offering_constraints(model, semester, passed_courses, current_sem, with_petition)
     add_unit_constraints(model, semester, passed_courses, current_sem)
+    add_graduation_semester_constraint(model, semester, passed_courses)
     add_prereq_year_coreq_constraints(
         model,
         semester,
@@ -400,8 +482,59 @@ def run_pos_with_state(current_sem, passed_courses, failed_courses, with_petitio
     # 5. Objective
     add_objective(model, semester, passed_courses, failed_courses, current_sem)
 
-    # 6. Solver + output
-    solve_and_print(model, semester, passed_courses, failed_courses, current_sem)
+    # 6. Solver
+    return _solve_and_collect(model, semester, passed_courses, failed_courses, current_sem)
+
+
+def generate_pos(payload: dict) -> dict:
+    """
+    Pure API entry point for external callers (e.g. Django).
+
+    Expected payload keys:
+      - current_sem (int)
+      - passed_courses (list of course codes)
+      - failed_courses (list of course codes)
+      - with_petition (bool, optional)
+    """
+    if payload is None:
+        raise ValueError("payload must be a dict")
+
+    try:
+        current_sem = int(payload.get("current_sem"))
+    except (TypeError, ValueError):
+        raise ValueError("payload['current_sem'] must be an integer")
+
+    passed_courses = list(payload.get("passed_courses") or [])
+    failed_courses = list(payload.get("failed_courses") or [])
+    with_petition = bool(payload.get("with_petition", False))
+
+    return _run_core(current_sem, passed_courses, failed_courses, with_petition=with_petition)
+
+
+def run_pos_with_state(current_sem, passed_courses, failed_courses, with_petition: bool = False):
+    """
+    Core solver pipeline shared by static and dynamic modes.
+    Expects current_sem, passed_courses, failed_courses to be precomputed.
+    """
+    result = _run_core(current_sem, passed_courses, failed_courses, with_petition=with_petition)
+
+    status = result.get("status")
+    if status == "ok":
+        lines = ["--- GENERATED PROGRAM OF STUDY ---"]
+        for sem in result["pos"]:
+            label = sem["label"]
+            total_u = sem["total_units"]
+            courses_in_sem = sem["courses"]
+            lines.append(f"{label} ({total_u} units)")
+            for course in courses_in_sem:
+                lines.append(
+                    f"  • {course['code']} — {course['title']} ({course['units']} units)"
+                )
+        print("\n" + "\n".join(lines))
+    else:
+        message = result.get("message")
+        if message:
+            print(f"\n{message}")
 
 
 def run_pos_generator():
