@@ -12,10 +12,11 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.http import HttpResponse, HttpResponseBadRequest, JsonResponse, StreamingHttpResponse
 from django.views.decorators.http import require_POST
-from django.views.decorators.csrf import ensure_csrf_cookie
+from django.views.decorators.csrf import ensure_csrf_cookie, csrf_exempt
 
 from django.utils import timezone
 from accounts.models import Student, StudentGrade, POSRecord
+from .solver_bridge import generate_pos_via_solver
 
 SR_CODE_REGEX = re.compile(r'^\d{2}-\d{5}$')
 EMAIL_REGEX = re.compile(r'^\d{2}-\d{5}@g\.batstate-u\.edu\.ph$')
@@ -785,6 +786,48 @@ def validate_pos(request):
         'message': 'POS is valid.' if ok else 'Validation failed.',
         'errors': errors,
     })
+
+
+
+@csrf_exempt
+def generate_pos_api(request):
+    """
+    API endpoint: call the CP-SAT solver and return a structured POS.
+
+    Expects JSON body with at least:
+      - current_sem (int)
+      - passed_courses (list of course codes)
+      - failed_courses (list of course codes)
+      - with_petition (bool, optional)
+
+    Response is the solver's result dict:
+      - status: "ok" | "probation" | "infeasible"
+      - message: optional explanation string
+      - pos: list of per-semester dicts when status == "ok"
+    """
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    if not isinstance(data, dict):
+        return JsonResponse({"error": "Expected JSON object"}, status=400)
+
+    payload = {
+        "current_sem": data.get("current_sem"),
+        "passed_courses": data.get("passed_courses") or [],
+        "failed_courses": data.get("failed_courses") or [],
+        "with_petition": data.get("with_petition", False),
+    }
+
+    try:
+        result = generate_pos_via_solver(payload)
+    except ValueError as e:
+        return JsonResponse({"error": str(e)}, status=400)
+    except RuntimeError as e:
+        return JsonResponse({"error": str(e)}, status=500)
+
+    return JsonResponse(result)
 
 
 MAX_POS_RECORDS_PER_USER = 50
