@@ -58,6 +58,7 @@
             border-radius: 16px; /* slightly rounded, not full pill */
             display: inline-flex;
             align-items: center;
+            justify-content: center;
             gap: 0.3rem;
             margin-right: 0.3rem; /* space between nav buttons */
         }
@@ -79,6 +80,48 @@
         .pos-navbar .nav-link.active {
             color: #ffffff;
             background-color: #a0161c;
+        }
+
+        /* Responsive nav: single row, horizontal scroll on small screens (no wrap) */
+        .pos-navbar .navbar-collapse {
+            flex-basis: auto;
+            overflow-x: auto;
+            overflow-y: hidden;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: thin;
+        }
+        .pos-navbar .navbar-nav {
+            flex-wrap: nowrap;
+            gap: 0.25rem;
+        }
+        .pos-navbar .nav-item {
+            flex: 0 0 auto;
+        }
+        @media (max-width: 991.98px) {
+            .pos-navbar .nav-link {
+                font-size: 0.75rem;
+                padding: 0.35rem 0.5rem;
+                gap: 0.2rem;
+            }
+            .pos-navbar .nav-link .bi {
+                font-size: 0.8rem;
+            }
+        }
+        @media (max-width: 575.98px) {
+            .pos-navbar .nav-link {
+                font-size: 0.7rem;
+                padding: 0.4rem 0.5rem;
+                gap: 0;
+                margin-right: 0.15rem;
+            }
+            .pos-navbar .nav-link .nav-link-text {
+                display: none;
+            }
+            .pos-navbar .nav-link .bi {
+                font-size: 1.05rem;
+                margin: 0;
+                display: block;
+            }
         }
 
         .pos-main {
@@ -302,6 +345,113 @@
             background-color: #f8f9fa;
             border-radius: 0 0 12px 12px;
         }
+
+        /* ========== Responsive / Fluid / Mobile-friendly (RWD) ========== */
+        /* Fluid layout: relative units; adaptive breakpoints for container */
+        html { font-size: 16px; box-sizing: border-box; }
+        *, *::before, *::after { box-sizing: inherit; }
+
+        /* Adaptive container: fixed max-widths at breakpoints (Bootstrap-aligned) */
+        @media (min-width: 576px) {
+            .pos-container-wide { max-width: 540px; }
+        }
+        @media (min-width: 768px) {
+            .pos-container-wide { max-width: 720px; }
+        }
+        @media (min-width: 992px) {
+            .pos-container-wide { max-width: 960px; }
+        }
+        @media (min-width: 1200px) {
+            .pos-container-wide { max-width: 1140px; }
+        }
+
+        /* Header: single row, text can truncate on small screens */
+        .pos-header-brand { min-width: 0; }
+        .pos-header-brand > div { min-width: 0; }
+        @media (max-width: 575.98px) {
+            .pos-header-title { font-size: 0.7rem; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+            .pos-header-subtitle { font-size: 0.6rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+            .pos-header-logo { width: 36px; height: 36px; flex-shrink: 0; }
+        }
+
+        /* Footer: keep single row (no wrap) */
+        .pos-footer .container {
+            flex-direction: row !important;
+            flex-wrap: nowrap !important;
+            justify-content: flex-start !important;
+            gap: 0.75rem;
+            padding-right: 0.75rem !important;
+            padding-left: 0.75rem;
+            overflow-x: auto;
+            overflow-y: hidden;
+            -webkit-overflow-scrolling: touch;
+        }
+        .pos-footer .footer-copyright,
+        .pos-footer .footer-right {
+            white-space: nowrap;
+        }
+        .pos-footer .footer-right {
+            margin-left: auto;
+        }
+        .pos-footer .footer-right a {
+            padding-right: 2rem;
+        }
+        @media (max-width: 575.98px) {
+            .pos-footer { font-size: 0.62rem; }
+            .pos-footer .container { gap: 0.5rem; }
+        }
+        .pos-footer { font-size: clamp(0.65rem, 2vw, 0.7rem); }
+
+        /* Mobile-friendly: touch targets min 44px where possible */
+        .pos-navbar .nav-link {
+            min-height: 2.5rem;
+            min-width: 2.5rem;
+        }
+        @media (max-width: 575.98px) {
+            .pos-navbar .nav-link { min-height: 2.75rem; min-width: 2.75rem; }
+        }
+
+        /* Fixed corner logo: smaller on mobile, avoid overlap */
+        .pos-fixed-bottom-right-logo-link {
+            bottom: clamp(0.5rem, 2vw, 1rem);
+            right: clamp(0.5rem, 2vw, 1rem);
+        }
+        .pos-fixed-bottom-right-logo-link .pos-fixed-bottom-right-logo {
+            width: clamp(32px, 8vw, 40px);
+            height: auto;
+        }
+
+        /* Modals: full width on mobile */
+        @media (max-width: 575.98px) {
+            #privacyPolicyModal .modal-dialog { max-width: 100%; margin: 0.5rem; }
+        }
+
+        /* Responsive text: scale down on mobile for better layout */
+        .pos-main {
+            font-size: clamp(0.875rem, 1.8vw, 1rem);
+        }
+        .pos-main h1, .pos-main .h1 { font-size: clamp(1.05rem, 2.8vw, 1.25rem); }
+        .pos-main h2, .pos-main .h2 { font-size: clamp(1rem, 2.2vw, 1.15rem); }
+        .pos-main h5, .pos-main .h5 { font-size: clamp(0.95rem, 2vw, 1rem); }
+        .pos-main .pos-section-title { font-size: clamp(0.95rem, 2vw, 1.1rem); }
+        .pos-main .text-muted { font-size: clamp(0.8rem, 1.8vw, 0.9rem); }
+        .pos-main p, .pos-main .form-text, .pos-main .form-label { font-size: clamp(0.8125rem, 1.7vw, 0.9rem); }
+        .pos-main .small { font-size: clamp(0.75rem, 1.5vw, 0.875rem) !important; }
+        .pos-main .alert { font-size: clamp(0.8125rem, 1.7vw, 0.9rem); }
+        @media (max-width: 767.98px) {
+            .pos-main .btn { font-size: 0.875rem; padding: 0.35rem 0.65rem; }
+            .pos-main .btn-sm { font-size: 0.8rem; padding: 0.25rem 0.5rem; }
+        }
+        @media (max-width: 575.98px) {
+            .pos-main .btn { font-size: 0.8125rem; padding: 0.4rem 0.6rem; }
+            .pos-main .btn-sm { font-size: 0.75rem; padding: 0.3rem 0.45rem; }
+        }
+
+        /* Sign Out in nav: right-anchored, same tab style; extra left margin to separate from main tabs */
+        .pos-nav-signout { margin-left: 0.5rem; }
+        @media (max-width: 575.98px) {
+            .pos-nav-signout { margin-left: 0.35rem; }
+        }
     </style>
     {% block extra_head %}{% endblock %}
 </head>
@@ -309,8 +459,8 @@
     <div class="pos-sticky-header-wrapper">
     {% block header %}
     <header class="pos-header-bar">
-        <div class="container pos-container-wide d-flex align-items-center justify-content-between">
-            <div class="d-flex align-items-center">
+        <div class="container pos-container-wide d-flex align-items-center">
+            <div class="d-flex align-items-center pos-header-brand">
                 <img src="{% static 'img/BSU_Logo.png' %}" alt="Batangas State University Logo" class="pos-header-logo me-3">
                 <div>
                     <div class="pos-header-title">
@@ -321,56 +471,37 @@
                     </div>
                 </div>
             </div>
-            <div>
-                {% block header_action %}{% endblock header_action %}
-            </div>
         </div>
     </header>
     {% endblock header %}
 
     {% block navbar %}
-    <nav class="navbar navbar-expand-lg pos-navbar">
+    <nav class="navbar navbar-expand pos-navbar">
         <div class="container pos-container-wide">
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNavbar" aria-controls="mainNavbar" aria-expanded="false" aria-label="Toggle navigation">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            <div class="collapse navbar-collapse" id="mainNavbar">
-                <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+            <div class="navbar-collapse d-flex align-items-center flex-nowrap" id="mainNavbar">
+                <ul class="navbar-nav me-auto mb-2 mb-lg-0 flex-nowrap">
                     <li class="nav-item">
-                        <a class="nav-link {% block nav_home_active %}{% endblock %}" href="{% url 'pos_home' %}">
-                            <i class="bi bi-house-door-fill"></i>
-                            Home
-                        </a>
+                        <a class="nav-link {% block nav_home_active %}{% endblock %}" href="{% url 'pos_home' %}" title="Home"><i class="bi bi-house-door-fill"></i><span class="nav-link-text">Home</span></a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link {% block nav_generate_active %}{% endblock %}" href="{% if has_complete_info %}{% url 'pos_generate' %}{% else %}{% url 'pos_home' %}?required=1{% endif %}">
-                            <i class="bi bi-journal-plus"></i>
-                            Generate POS
-                        </a>
+                        <a class="nav-link {% block nav_generate_active %}{% endblock %}" href="{% if has_complete_info %}{% url 'pos_generate' %}{% else %}{% url 'pos_home' %}?required=1{% endif %}" title="Generate POS"><i class="bi bi-journal-plus"></i><span class="nav-link-text">Generate POS</span></a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link {% block nav_preview_active %}{% endblock %}" href="{% if has_complete_info %}{% url 'pos_preview' %}{% else %}{% url 'pos_home' %}?required=1{% endif %}">
-                            <i class="bi bi-eye-fill"></i>
-                            Preview POS
-                        </a>
+                        <a class="nav-link {% block nav_preview_active %}{% endblock %}" href="{% if has_complete_info %}{% url 'pos_preview' %}{% else %}{% url 'pos_home' %}?required=1{% endif %}" title="Preview POS"><i class="bi bi-eye-fill"></i><span class="nav-link-text">Preview POS</span></a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link {% block nav_history_active %}{% endblock %}" href="{% if has_complete_info %}{% url 'pos_history' %}{% else %}{% url 'pos_home' %}?required=1{% endif %}">
-                            <i class="bi bi-clock-history"></i>
-                            History
-                        </a>
+                        <a class="nav-link {% block nav_history_active %}{% endblock %}" href="{% if has_complete_info %}{% url 'pos_history' %}{% else %}{% url 'pos_home' %}?required=1{% endif %}" title="History"><i class="bi bi-clock-history"></i><span class="nav-link-text">History</span></a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link {% block nav_contact_active %}{% endblock %}" href="{% url 'contact_us' %}">
-                            <i class="bi bi-envelope-fill"></i>
-                            Contact Us
-                        </a>
+                        <a class="nav-link {% block nav_contact_active %}{% endblock %}" href="{% url 'contact_us' %}" title="Contact Us"><i class="bi bi-envelope-fill"></i><span class="nav-link-text">Contact Us</span></a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link {% block nav_help_active %}{% endblock %}" href="{% url 'help' %}">
-                            <i class="bi bi-question-circle-fill"></i>
-                            Help
-                        </a>
+                        <a class="nav-link {% block nav_help_active %}{% endblock %}" href="{% url 'help' %}" title="Help"><i class="bi bi-question-circle-fill"></i><span class="nav-link-text">Help</span></a>
+                    </li>
+                </ul>
+                <ul class="navbar-nav mb-2 mb-lg-0 ms-auto flex-shrink-0">
+                    <li class="nav-item">
+                        <a class="nav-link pos-nav-signout" href="{% url 'sign_out' %}" title="Sign Out"><i class="bi bi-box-arrow-right"></i><span class="nav-link-text">Sign Out</span></a>
                     </li>
                 </ul>
             </div>
@@ -394,14 +525,15 @@
 
     {% block footer %}
     <footer class="pos-footer py-3 mt-auto">
-        <div class="container pos-container-wide d-flex justify-content-between align-items-center">
-            <div>
-                © {% now "Y" %} <a href="https://batstateu.edu.ph/" target="_blank" rel="noopener noreferrer">Batangas State University – The National Engineering University</a>.
-                All rights reserved.
+        <div class="container pos-container-wide d-flex justify-content-between align-items-center flex-nowrap">
+            <div class="footer-copyright">
+                <span class="d-none d-md-inline">© {% now "Y" %} <a href="https://batstateu.edu.ph/" target="_blank" rel="noopener noreferrer">Batangas State University – The National Engineering University</a>. All rights reserved.</span>
+                <span class="d-inline d-md-none">© {% now "Y" %} <a href="https://batstateu.edu.ph/" target="_blank" rel="noopener noreferrer">BSU – TNEU</a> · POS Generation System</span>
             </div>
-            <div class="text-end">
-                <span class="me-3">Program of Study Generation System</span>
-                <a href="#" data-bs-toggle="modal" data-bs-target="#privacyPolicyModal">Privacy Policy</a>
+            <div class="text-end footer-right">
+                <span class="me-3 d-none d-md-inline">Program of Study Generation System</span>
+                <a href="#" class="d-none d-md-inline" data-bs-toggle="modal" data-bs-target="#privacyPolicyModal">Privacy Policy</a>
+                <a href="#" class="d-inline d-md-none" data-bs-toggle="modal" data-bs-target="#privacyPolicyModal">Privacy</a>
             </div>
         </div>
     </footer>

@@ -2,10 +2,6 @@
 
 {% block title %}Preview POS | Program of Study Generation System{% endblock %}
 
-{% block header_action %}
-<a href="{% url 'sign_out' %}" class="btn btn-sm btn-outline-light px-3">Sign Out</a>
-{% endblock header_action %}
-
 {% block nav_preview_active %}active{% endblock %}
 
 {% block extra_head %}
@@ -35,21 +31,24 @@
     .table thead th {
         text-align: center;
         vertical-align: middle;
-        font-size: 0.9rem;
+        font-size: 0.85rem;
         white-space: nowrap;
     }
 
     .pos-card h6.fw-bold {
         text-align: center;
+        font-size: 0.95rem;
     }
 
     .table-responsive {
-        overflow-x: visible;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
     }
 
     .table {
         table-layout: fixed;
         width: 100%;
+        min-width: 640px;
     }
 
     .table thead th,
@@ -63,7 +62,7 @@
         box-sizing: border-box;
         padding-left: 0.5rem;
         padding-right: 0.5rem;
-        font-size: 0.9rem;
+        font-size: 0.85rem;
     }
 
     .table .course-title-cell,
@@ -72,12 +71,12 @@
         white-space: normal;
         word-break: break-word;
         overflow-wrap: break-word;
-        font-size: 0.9rem !important;
+        font-size: 0.85rem !important;
     }
 
     .table td:nth-child(4),
     .table td:nth-child(5) {
-        font-size: 0.8rem;
+        font-size: 0.75rem;
     }
     .table td:nth-child(6),
     .table td:nth-child(7) {
@@ -86,9 +85,21 @@
         overflow-wrap: break-word;
         overflow: visible;
         text-overflow: clip;
-        font-size: 0.75rem;
+        font-size: 0.7rem;
         line-height: 1.25;
         vertical-align: middle;
+    }
+
+    /* Slightly smaller table text on small screens */
+    @media (max-width: 575.98px) {
+        .table thead th,
+        .table tbody td {
+            font-size: 0.8rem;
+        }
+        .table .course-title-cell,
+        .table .elective-course-cell {
+            font-size: 0.8rem !important;
+        }
     }
 
     .grade-display {
@@ -101,7 +112,7 @@
         min-width: 100px;
         min-height: 100px;
         border: 2px solid #3a3a3a;
-        border-radius: 8px;
+        border-radius: 0.5rem;
         background: rgba(255, 255, 255, 0.5);
         display: flex;
         align-items: center;
@@ -118,6 +129,47 @@
         color: #666;
         font-size: 0.7rem;
         padding: 4px;
+    }
+    /* Student profile scroll: keep photo fixed, allow details to scroll on small screens */
+    .pos-student-profile-scroll {
+        flex: 1 1 auto;
+    }
+    /* Responsive: same landscape (photo left, details right) on mobile as desktop */
+    @media (max-width: 767.98px) {
+        .pos-student-profile-row .preview-photo-box {
+            width: 70px;
+            height: 70px;
+            min-width: 70px;
+            min-height: 70px;
+        }
+        .pos-student-profile-row { gap: 0.75rem; }
+        .pos-student-profile-details .text-muted { font-size: 0.65rem; }
+        .pos-student-profile-details .fw-semibold { font-size: 0.8rem; }
+        .pos-student-profile-scroll {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+        .pos-student-profile-details {
+            min-width: 660px;
+        }
+    }
+    @media (max-width: 575.98px) {
+        .pos-student-profile-row .preview-photo-box {
+            width: 64px;
+            height: 64px;
+            min-width: 64px;
+            min-height: 64px;
+        }
+        .pos-student-profile-row { gap: 0.5rem; align-items: center; }
+        .pos-student-profile-details .text-muted { font-size: 0.6rem; }
+        .pos-student-profile-details .fw-semibold { font-size: 0.75rem; }
+        .pos-student-profile-details {
+            min-width: 600px;
+        }
+    }
+    @media (max-width: 380px) {
+        .pos-student-profile-row { flex-direction: column; align-items: center; text-align: center; }
+        .pos-student-profile-details { justify-content: center; }
     }
 </style>
 {% endblock %}
@@ -145,7 +197,7 @@
         <div class="fw-semibold text-muted">{% now "F d, Y" %}</div>
     </div>
 
-    <div class="d-flex align-items-start gap-3">
+    <div class="d-flex align-items-start gap-3 pos-student-profile-row">
         <div class="preview-photo-box flex-shrink-0">
             {% if student.profile_photo %}
             <img src="{{ student.profile_photo.url }}" alt="Student photo">
@@ -153,31 +205,39 @@
             <span class="photo-placeholder">Photo</span>
             {% endif %}
         </div>
-        <div class="row small flex-grow-1">
-            <div class="col-md-4 mb-2">
-                <div class="text-muted text-uppercase">Student Name</div>
-                <div class="fw-semibold">{{ student.full_name|default:"—"|upper }}</div>
+        <div class="pos-student-profile-scroll flex-grow-1">
+        <div class="row small pos-student-profile-details">
+            <div class="col-4 mb-2">
+                <div class="mb-1">
+                    <div class="text-muted text-uppercase">Student Name</div>
+                    <div class="fw-semibold">{{ student.full_name|default:"—"|upper }}</div>
+                </div>
+                <div>
+                    <div class="text-muted text-uppercase">SR-Code</div>
+                    <div class="fw-semibold">{{ student.sr_code|default:"—" }}</div>
+                </div>
             </div>
-            <div class="col-md-4 mb-2">
-                <div class="text-muted text-uppercase">Year Level</div>
-                <div class="fw-semibold">{{ student.year_level|default:"—" }}</div>
+            <div class="col-4 mb-2">
+                <div class="mb-1">
+                    <div class="text-muted text-uppercase">Year Level</div>
+                    <div class="fw-semibold">{{ student.year_level|default:"—" }}</div>
+                </div>
+                <div>
+                    <div class="text-muted text-uppercase">Program</div>
+                    <div class="fw-semibold">BS Computer Engineering</div>
+                </div>
             </div>
-            <div class="col-md-4 mb-2">
-                <div class="text-muted text-uppercase">Curriculum</div>
-                <div class="fw-semibold">BSCpE Curriculum 2025-2026</div>
+            <div class="col-4 mb-2">
+                <div class="mb-1">
+                    <div class="text-muted text-uppercase">Curriculum</div>
+                    <div class="fw-semibold">BSCpE Curriculum 2025-2026</div>
+                </div>
+                <div>
+                    <div class="text-muted text-uppercase">Campus</div>
+                    <div class="fw-semibold">Alangilan Campus</div>
+                </div>
             </div>
-            <div class="col-md-4 mb-2">
-                <div class="text-muted text-uppercase">SR-Code</div>
-                <div class="fw-semibold">{{ student.sr_code|default:"—" }}</div>
-            </div>
-            <div class="col-md-4 mb-2">
-                <div class="text-muted text-uppercase">Program</div>
-                <div class="fw-semibold">BS Computer Engineering</div>
-            </div>
-            <div class="col-md-4 mb-2">
-                <div class="text-muted text-uppercase">Campus</div>
-                <div class="fw-semibold">Alangilan Campus</div>
-            </div>
+        </div>
         </div>
     </div>
     </div>

@@ -903,7 +903,7 @@ def pos_about(request):
 def sign_out(request):
     """Clear session and redirect to landing page."""
     request.session.flush()
-    return redirect('pos_main')
+    return redirect('login')
 
 
 def login_view(request):

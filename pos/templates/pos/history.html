@@ -4,20 +4,26 @@
 
 {% block nav_history_active %}active{% endblock %}
 
-{% block header_action %}
-<a href="{% url 'sign_out' %}" class="btn btn-sm btn-outline-light px-3">Sign Out</a>
-{% endblock header_action %}
-
 {% block extra_head %}
 <style>
     .history-action-btn {
         width: 28px;
         height: 28px;
+        min-width: 28px;
+        min-height: 28px;
         padding: 0;
         display: inline-flex;
         align-items: center;
         justify-content: center;
         border-radius: 4px;
+    }
+    .history-page .table-responsive {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    .history-page .table { min-width: 520px; }
+    @media (max-width: 575.98px) {
+        .history-page .d-flex.justify-content-between.align-items-center { flex-direction: column; align-items: stretch; text-align: center; }
     }
 </style>
 <script>
@@ -37,6 +43,7 @@ document.addEventListener('DOMContentLoaded', function() {
 {% endblock %}
 
 {% block content %}
+<div class="history-page">
 <div class="d-flex justify-content-between align-items-center mb-3">
     <div>
         <h1 class="h5 mb-1">Program of Study History</h1>
@@ -89,6 +96,7 @@ document.addEventListener('DOMContentLoaded', function() {
             </tbody>
         </table>
     </div>
+</div>
 </div>
 {% endblock %}
 

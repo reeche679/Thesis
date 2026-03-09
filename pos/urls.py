@@ -8,7 +8,9 @@ from .views import (
 )
 
 urlpatterns = [
-    path('', pos_main, name='pos_main'),
+    path('', login_view, name='login'),
+    path('login/', login_view),
+    path('main/', pos_main, name='pos_main'),
     path('home/', pos_home, name='pos_home'),
     path('home/set-term/', set_academic_term, name='set_academic_term'),
     path('generate/', pos_generate, name='pos_generate'),
@@ -21,7 +23,6 @@ urlpatterns = [
     path('history/<int:record_id>/download-pdf/', download_pos_pdf_record, name='download_pos_pdf_record'),
     path('history/', pos_history, name='pos_history'),
     path('about/', pos_about, name='pos_about'),
-    path('login/', login_view, name='login'),
     path('register/', register_view, name='register'),
     path('signout/', sign_out, name='sign_out'),
     path('contact/', contact_us, name='contact_us'),

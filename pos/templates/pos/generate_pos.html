@@ -2,10 +2,6 @@
 
 {% block title %}Generate POS | Program of Study Generation System{% endblock %}
 
-{% block header_action %}
-<a href="{% url 'sign_out' %}" class="btn btn-sm btn-outline-light px-3">Sign Out</a>
-{% endblock header_action %}
-
 {% block nav_generate_active %}active{% endblock %}
 
 {% block extra_head %}
@@ -57,6 +53,7 @@
         font-weight: 700;
         line-height: 1.1;
         white-space: nowrap;
+        min-width: 4.5rem;
     }
 
     .table thead th {
@@ -70,32 +67,45 @@
 
     .pos-card h6.fw-bold {
         text-align: center;
+        font-size: 0.95rem;
     }
 
+    /* Responsive: allow horizontal scroll on small viewports so tables stay usable */
     .table-responsive {
-        overflow-x: visible;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
     }
-
     .table {
-        table-layout: fixed;
+        table-layout: auto;
         width: 100%;
+        min-width: 720px; /* full headers/content visible when scrolling horizontally */
     }
 
     .table thead th,
     .table tbody td {
-        min-width: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
         text-align: center;
         vertical-align: middle;
         box-sizing: border-box;
-        padding-left: 0.4rem;
-        padding-right: 0.4rem;
-        padding-top: 0.2rem;
-        padding-bottom: 0.2rem;
-        font-size: 0.9rem;
+        padding-left: 0.5rem;
+        padding-right: 0.5rem;
+        padding-top: 0.25rem;
+        padding-bottom: 0.25rem;
+        font-size: 0.85rem;
+        white-space: nowrap;
     }
+
+    .table thead th {
+        min-width: 4rem;
+    }
+    .table thead th:first-child { min-width: 5.5rem; }
+    .table thead th:nth-child(2) { min-width: 10rem; white-space: normal; }
+    .table thead th:nth-child(5),
+    .table thead th:nth-child(6),
+    .table thead th:nth-child(7) { min-width: 4rem; }
+    .table tbody td:first-child { min-width: 5.5rem; }
+    .table tbody td:nth-child(3),
+    .table tbody td:nth-child(4),
+    .table tbody td:nth-child(5) { min-width: 3rem; }
 
     .table .course-title-cell,
     .table .elective-course-cell {
@@ -103,12 +113,13 @@
         white-space: normal;
         word-break: break-word;
         overflow-wrap: break-word;
-        font-size: 0.9rem !important;
+        font-size: 0.85rem !important;
+        min-width: 10rem;
     }
 
     .table td:nth-child(4),
     .table td:nth-child(5) {
-        font-size: 0.8rem;
+        font-size: 0.75rem;
     }
     .table td:nth-child(6),
     .table td:nth-child(7) {
@@ -117,18 +128,30 @@
         overflow-wrap: break-word;
         overflow: visible;
         text-overflow: clip;
-        font-size: 0.75rem;
+        font-size: 0.7rem;
         line-height: 1.25;
         vertical-align: middle;
     }
 
+    /* Slightly smaller table text on small screens */
+    @media (max-width: 575.98px) {
+        .table thead th,
+        .table tbody td {
+            font-size: 0.8rem;
+        }
+        .table .course-title-cell,
+        .table .elective-course-cell {
+            font-size: 0.8rem !important;
+        }
+    }
+
     .generate-photo-box {
-        width: 100px;
-        height: 100px;
-        min-width: 100px;
-        min-height: 100px;
+        width: clamp(72px, 18vw, 100px);
+        height: clamp(72px, 18vw, 100px);
+        min-width: 72px;
+        min-height: 72px;
         border: 2px solid #3a3a3a;
-        border-radius: 8px;
+        border-radius: 0.5rem;
         background: rgba(255, 255, 255, 0.5);
         display: flex;
         align-items: center;
@@ -193,6 +216,110 @@
     }
     .irreg-edit-section-btn.irreg-edit-visible { display: inline-block !important; }
     .irreg-edit-section-btn.irreg-edit-hidden { display: none !important; }
+
+    /* Student profile scroll: keep photo fixed, allow details to scroll on small screens */
+    .pos-student-profile-scroll {
+        flex: 1 1 auto;
+    }
+
+    /* Responsive: keep student profile landscape (photo left, details right) on all screens */
+    @media (max-width: 767.98px) {
+        .pos-card.p-4.mb-4 .d-flex.justify-content-between.align-items-start { flex-wrap: wrap; gap: 0.75rem; }
+        #pos-action-buttons .d-flex { flex-wrap: wrap; }
+        #pos-action-buttons .btn { min-width: 0; }
+        .pos-student-profile-scroll {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+        .pos-student-profile-details {
+            min-width: 660px;
+        }
+        .pos-student-profile-row .generate-photo-box {
+            width: 70px;
+            height: 70px;
+            min-width: 70px;
+            min-height: 70px;
+        }
+        .pos-student-profile-row { gap: 0.75rem; }
+        .pos-student-profile-details .text-muted { font-size: 0.65rem; }
+        .pos-student-profile-details .fw-semibold { font-size: 0.8rem; }
+    }
+    @media (max-width: 575.98px) {
+        .main-sem .d-flex.justify-content-between.align-items-center.mb-2 { flex-wrap: wrap; gap: 0.5rem; }
+        .main-sem .d-flex.align-items-center[style*="min-width: 120px"] { min-width: 0; }
+        .pos-student-profile-row .generate-photo-box {
+            width: 64px;
+            height: 64px;
+            min-width: 64px;
+            min-height: 64px;
+        }
+        .pos-student-profile-row { gap: 0.5rem; align-items: center; }
+        .pos-student-profile-details .text-muted { font-size: 0.6rem; }
+        .pos-student-profile-details .fw-semibold { font-size: 0.75rem; }
+        .pos-student-profile-details {
+            min-width: 600px;
+        }
+    }
+    @media (max-width: 380px) {
+        .pos-student-profile-row { flex-direction: column; align-items: center; text-align: center; }
+        .pos-student-profile-details { justify-content: center; }
+    }
+
+    /* Semester table header: center title (First Year First Sem, etc.) */
+    .main-sem-header {
+        display: grid;
+        grid-template-columns: 1fr auto 1fr;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    .main-sem-title {
+        grid-column: 2;
+        font-size: 0.95rem;
+    }
+    .main-sem-header-left { justify-self: start; }
+    .main-sem-header-right { justify-self: end; }
+    @media (max-width: 575.98px) {
+        .main-sem-header { grid-template-columns: 1fr 1fr; grid-template-rows: auto auto; }
+        .main-sem-header-left { grid-column: 1; grid-row: 1; }
+        .main-sem-title {
+            grid-column: 1 / -1;
+            grid-row: 2;
+            font-size: 0.9rem;
+        }
+        .main-sem-header-right { grid-column: 2; grid-row: 1; }
+    }
+
+    /* Bottom buttons: Validate left; Clear Grades + Generate POS right */
+    #pos-action-buttons {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+    #pos-action-buttons .pos-actions-right {
+        display: flex;
+        gap: 0.5rem;
+        flex-shrink: 0;
+    }
+
+    /* Bottom buttons: compact + short labels on mobile so all fit one row */
+    #pos-action-buttons .pos-action-btn-text-short { display: none; }
+    @media (max-width: 575.98px) {
+        #pos-action-buttons { flex-wrap: nowrap; gap: 0.35rem; }
+        #pos-action-buttons .pos-actions-right { gap: 0.35rem; }
+        #pos-action-buttons .btn {
+            padding: 0.35rem 0.5rem;
+            font-size: 0.72rem;
+            line-height: 1.1;
+            white-space: nowrap;
+        }
+        #pos-action-buttons .pos-action-btn-text-full { display: none; }
+        #pos-action-buttons .pos-action-btn-text-short { display: inline; }
+    }
+    @media (max-width: 380px) {
+        #pos-action-buttons .btn { padding: 0.3rem 0.4rem; font-size: 0.68rem; }
+    }
 </style>
 {% endblock %}
 
@@ -219,7 +346,7 @@
         <div class="fw-semibold text-muted">{% now "F d, Y" %}</div>
     </div>
 
-    <div class="d-flex align-items-start gap-3">
+    <div class="d-flex align-items-start gap-3 pos-student-profile-row">
         <div class="generate-photo-box flex-shrink-0">
             {% if student.profile_photo %}
             <img src="{{ student.profile_photo.url }}" alt="Student photo">
@@ -227,31 +354,39 @@
             <span class="photo-placeholder">Photo</span>
             {% endif %}
         </div>
-        <div class="row small flex-grow-1">
-            <div class="col-md-4 mb-2">
-                <div class="text-muted text-uppercase">Student Name</div>
-                <div class="fw-semibold">{{ student.full_name|default:"—"|upper }}</div>
+        <div class="pos-student-profile-scroll flex-grow-1">
+        <div class="row small pos-student-profile-details">
+            <div class="col-4 mb-2">
+                <div class="mb-1">
+                    <div class="text-muted text-uppercase">Student Name</div>
+                    <div class="fw-semibold">{{ student.full_name|default:"—"|upper }}</div>
+                </div>
+                <div>
+                    <div class="text-muted text-uppercase">SR-Code</div>
+                    <div class="fw-semibold">{{ student.sr_code|default:"—" }}</div>
+                </div>
             </div>
-            <div class="col-md-4 mb-2">
-                <div class="text-muted text-uppercase">Year Level</div>
-                <div class="fw-semibold">{{ student.year_level|default:"—" }}</div>
+            <div class="col-4 mb-2">
+                <div class="mb-1">
+                    <div class="text-muted text-uppercase">Year Level</div>
+                    <div class="fw-semibold">{{ student.year_level|default:"—" }}</div>
+                </div>
+                <div>
+                    <div class="text-muted text-uppercase">Program</div>
+                    <div class="fw-semibold">BS Computer Engineering</div>
+                </div>
             </div>
-            <div class="col-md-4 mb-2">
-                <div class="text-muted text-uppercase">Curriculum</div>
-                <div class="fw-semibold">BSCpE Curriculum 2025-2026</div>
+            <div class="col-4 mb-2">
+                <div class="mb-1">
+                    <div class="text-muted text-uppercase">Curriculum</div>
+                    <div class="fw-semibold">BSCpE Curriculum 2025-2026</div>
+                </div>
+                <div>
+                    <div class="text-muted text-uppercase">Campus</div>
+                    <div class="fw-semibold">Alangilan Campus</div>
+                </div>
             </div>
-            <div class="col-md-4 mb-2">
-                <div class="text-muted text-uppercase">SR-Code</div>
-                <div class="fw-semibold">{{ student.sr_code|default:"—" }}</div>
-            </div>
-            <div class="col-md-4 mb-2">
-                <div class="text-muted text-uppercase">Program</div>
-                <div class="fw-semibold">BS Computer Engineering</div>
-            </div>
-            <div class="col-md-4 mb-2">
-                <div class="text-muted text-uppercase">Campus</div>
-                <div class="fw-semibold">Alangilan Campus</div>
-            </div>
+        </div>
         </div>
     </div>
     </div>
@@ -431,13 +566,16 @@
     {% if is_regular %}
     <div class="mb-3">
         <div class="small text-uppercase text-muted mb-1">(Regular Path)</div>
-        <select class="form-select form-select-sm" id="regular-current-semester" style="max-width: 320px;">
-            <option value="">— Select current semester —</option>
-            {% for value, label in current_semester_choices_regular %}
-            <option value="{{ value }}" {% if current_semester_index == value %}selected{% endif %}>{{ label }}</option>
-            {% endfor %}
-        </select>
-        <div class="form-text small text-muted">Choose the last semester you have finished. All curriculum courses from 1st Year First Semester up to your selected semester will be listed below.</div>
+        <div class="d-flex align-items-center flex-wrap gap-2">
+            <select class="form-select form-select-sm" id="regular-current-semester" style="max-width: 320px;">
+                <option value="">— Select current semester —</option>
+                {% for value, label in current_semester_choices_regular %}
+                <option value="{{ value }}" {% if has_generated_pos and current_semester_index == value %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+            <button type="button" class="btn btn-sm btn-primary" id="regular-semester-ok-btn">OK</button>
+        </div>
+        <div class="form-text small text-muted">Choose the last semester you have finished, then click OK. All curriculum courses from 1st Year First Semester up to your selected semester will be listed below.</div>
     </div>
     {% endif %}
 
@@ -449,14 +587,14 @@
 
 {% for item in display_sections %}
     <div class="mb-4 main-sem" id="main-sem-{{ item.section_index }}" data-section-index="{{ item.section_index }}" data-curriculum-locked="{{ item.is_curriculum_locked|yesno:"true,false" }}"{% if is_regular and not item.courses_with_grades %} style="display:none;"{% endif %}>
-        <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
-            <div class="d-flex align-items-center" style="min-width: 120px;">
+        <div class="main-sem-header d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+            <div class="main-sem-header-left d-flex align-items-center">
                 {% if not is_regular and not item.is_curriculum_locked %}
                 <button type="button" class="btn btn-sm btn-outline-primary" data-section-index="{{ item.section_index }}">+ Add courses</button>
                 {% endif %}
             </div>
-            <h6 class="fw-bold mb-0 flex-grow-1 text-center mb-0">{{ item.section.label }}</h6>
-            <div class="d-flex align-items-center justify-content-end" style="min-width: 120px;">
+            <h6 class="main-sem-title fw-bold mb-0 text-center">{{ item.section.label }}</h6>
+            <div class="main-sem-header-right d-flex align-items-center justify-content-end">
                 {% if not is_regular %}
                 <button type="button" class="btn btn-sm btn-outline-secondary irreg-edit-section-btn {% if has_generated_pos and item.is_curriculum_locked %}irreg-edit-visible{% else %}irreg-edit-hidden{% endif %}" data-section-index="{{ item.section_index }}" title="Edit this semester">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
@@ -538,16 +676,19 @@
 
 
 
-    <div class="mt-4 d-flex justify-content-between align-items-center flex-wrap gap-2" id="pos-action-buttons" {% if not is_regular and not irreg_configured %}style="display:none;"{% endif %}>
+    <div class="mt-4" id="pos-action-buttons" {% if not is_regular and not irreg_configured %}style="display:none;"{% endif %}>
         <button type="button" class="btn btn-outline-secondary" id="validatePosBtn">
-            Validate POS
+            <span class="pos-action-btn-text-full">Validate POS</span>
+            <span class="pos-action-btn-text-short">Validate</span>
         </button>
-        <div class="d-flex gap-2">
+        <div class="pos-actions-right">
             <button type="button" class="btn btn-outline-secondary" id="clearGradesBtn">
-                Clear Grades
+                <span class="pos-action-btn-text-full">Clear Grades</span>
+                <span class="pos-action-btn-text-short">Clear</span>
             </button>
             <button type="button" class="btn btn-danger" id="generatePosBtn">
-                Generate POS
+                <span class="pos-action-btn-text-full">Generate POS</span>
+                <span class="pos-action-btn-text-short">Generate</span>
             </button>
         </div>
     </div>
@@ -699,12 +840,13 @@
             select.addEventListener('change', saveGradesToStorage);
         });
 
-        // Regular path: allow changing "current semester" (reload with ?section=N)
+        // Regular path: apply semester only when OK is clicked (dropdown is not hyperlinked)
         if (IS_REGULAR) {
             var regSelect = document.getElementById('regular-current-semester');
-            if (regSelect) {
-                regSelect.addEventListener('change', function() {
-                    var v = this.value;
+            var regOkBtn = document.getElementById('regular-semester-ok-btn');
+            if (regSelect && regOkBtn) {
+                regOkBtn.addEventListener('click', function() {
+                    var v = regSelect.value;
                     var url = new URL(window.location.href);
                     if (v !== '') {
                         url.searchParams.set('section', v);

@@ -5,10 +5,6 @@
 
 {% block nav_help_active %}active{% endblock %}
 
-{% block header_action %}
-<a href="{% url 'sign_out' %}" class="btn btn-sm btn-outline-light px-3">Sign Out</a>
-{% endblock header_action %}
-
 {% block content %}
 <div class="position-relative">
     <div class="pos-page-bsu-bg-fixed" aria-hidden="true"></div>
@@ -16,9 +12,9 @@
         <div class="row justify-content-center">
             <div class="col-lg-9">
                 <div class="pos-card pos-card-translucent-bg contact-help-card p-4 mt-2">
-            <div class="mb-3">
-                <h1 class="h5 mb-1">Help & Documentation</h1>
-                <p class="text-muted mb-0">
+            <div class="mb-4">
+                <h1 class="fw-bold mb-2 text-center" style="font-size: clamp(1.05rem, 2.1vw, 1.35rem);">Help & Documentation</h1>
+                <p class="text-muted mb-0 text-start">
                     Find answers to common questions and learn how to use the Program of Study Generation System.
                 </p>
             </div>

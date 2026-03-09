@@ -3,21 +3,19 @@
 
 {% block title %}Home | Program of Study Generation System{% endblock %}
 
-{% block header_action %}
-<a href="{% url 'sign_out' %}" class="btn btn-sm btn-outline-light px-3">Sign Out</a>
-{% endblock header_action %}
-
 {% block nav_home_active %}active{% endblock %}
 
 {% block extra_head %}
 <style>
+    /* Fluid layout: relative units, max-width 100% for small screens */
     .home-outer-card {
         background-color: rgba(255, 255, 255, 0.655);
-        border-radius: 8px;
+        border-radius: 0.5rem;
         box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
-        padding: 24px 32px 28px;
-        max-width: 1100px;
-        margin: 1px auto 2px;
+        padding: clamp(1rem, 4vw, 1.75rem) clamp(1rem, 4vw, 2rem);
+        max-width: min(1100px, 100%);
+        margin: 0 auto;
+        width: 100%;
     }
 
     .home-student-label {
@@ -28,7 +26,7 @@
     }
 
     .home-student-value {
-        font-size: 1.2rem;
+        font-size: clamp(0.95rem, 2.5vw, 1.2rem);
         font-weight: 500;
         color: #000000;
         text-transform: uppercase;
@@ -39,17 +37,17 @@
     }
 
     .home-student-meta {
-        font-size: 0.9rem;
+        font-size: clamp(0.8rem, 2vw, 0.9rem);
         color: #555555;
     }
 
     .home-photo-box {
-        width: 120px;
-        height: 120px;
-        min-width: 120px;
-        min-height: 120px;
+        width: clamp(80px, 22vw, 120px);
+        height: clamp(80px, 22vw, 120px);
+        min-width: 80px;
+        min-height: 80px;
         border: 2px solid #3a3a3a;
-        border-radius: 8px;
+        border-radius: 0.5rem;
         background: rgba(255, 255, 255, 0.5);
         display: flex;
         align-items: center;
@@ -65,8 +63,8 @@
     .home-photo-box .photo-placeholder {
         text-align: center;
         color: #666;
-        font-size: 0.7rem;
-        padding: 4px;
+        font-size: 0.65rem;
+        padding: 0.25rem;
     }
     .home-photo-box input[type="file"] {
         position: absolute;
@@ -85,8 +83,19 @@
         border: 1px solid #dee2e6;
     }
 
+    .home-student-card .pos-student-profile-inner {
+        position: relative;
+    }
+
+    .home-student-meta {
+        position: absolute;
+        top: 0.6rem;
+        right: 0.8rem;
+        z-index: 1;
+    }
+
     .home-academic-term .pos-section-title {
-        font-size: 0.95rem;
+        font-size: clamp(0.9rem, 2vw, 0.95rem);
         margin-bottom: 0.75rem;
     }
 
@@ -121,9 +130,10 @@
         z-index: 1;
     }
 
-    /* Path toggle: Regular / Irregular as square check-style buttons (radio behavior) */
+    /* Path toggle: Regular / Irregular – fluid, wrap on small screens */
     .path-toggle-group {
         display: flex;
+        flex-wrap: wrap;
         gap: 0.5rem;
     }
     .path-toggle {
@@ -139,11 +149,11 @@
         pointer-events: none;
     }
     .path-toggle-box {
-        padding: 0.25rem 0.75rem;
+        padding: 0.35rem 0.75rem;
         border-radius: 0.25rem;
         border: 1px solid #ced4da;
-        font-size: 0.85rem;
-        min-width: 90px;
+        font-size: clamp(0.8rem, 2vw, 0.85rem);
+        min-width: 80px;
         text-align: center;
         background-color: #ffffff;
         color: #495057;
@@ -158,6 +168,44 @@
     .path-toggle-box:hover {
         border-color: #0d6efd;
     }
+
+    /* Responsive: compact landscape on small screens (photo left, info middle, time right) */
+    @media (max-width: 575.98px) {
+        .home-outer-card {
+            padding: 0.75rem 0.6rem;
+        }
+        .home-student-card .pos-student-profile-inner {
+            padding: 0.7rem 0.75rem;
+        }
+        .home-outer-card .pos-student-profile-inner .d-flex.justify-content-between {
+            flex-direction: row;
+            align-items: flex-start;
+            gap: 0.5rem;
+        }
+        .home-outer-card .d-flex.align-items-center.gap-3 {
+            gap: 0.6rem;
+        }
+        .home-outer-card .home-student-meta.text-end {
+            text-align: right !important;
+        }
+        .home-email-toggle-btn i {
+            font-size: 0.9rem;
+        }
+        .home-student-value {
+            white-space: nowrap;
+        }
+        .home-email-value {
+            white-space: nowrap;
+        }
+        .home-academic-term .d-flex.gap-2 {
+            flex-direction: column;
+        }
+        .home-academic-term .d-flex.gap-2 .btn { width: 100%; }
+        .home-academic-year-select { max-width: 100% !important; }
+    }
+    @media (min-width: 576px) {
+        .home-academic-year-select { max-width: 240px; }
+    }
 </style>
 {% endblock %}
 
@@ -165,49 +213,39 @@
 <div class="home-outer-card">
     <div class="pos-card home-student-card p-4 mb-4">
         <div class="pos-student-profile-inner">
-        <div class="mb-3 d-flex justify-content-between align-items-center">
-            <div class="d-flex align-items-center gap-3">
-                <form method="post" action="{% url 'pos_home' %}" enctype="multipart/form-data" class="home-photo-form">
-                    {% csrf_token %}
-                    <label class="home-photo-box mb-0" for="id_profile_photo" title="Click to upload photo">
-                        {% if student.profile_photo %}
-                        <img src="{{ student.profile_photo.url }}" alt="Your photo">
-                        {% else %}
-                        <span class="photo-placeholder">Upload<br>Photo</span>
-                        {% endif %}
-                        <input type="file" name="profile_photo" id="id_profile_photo" accept="image/*" onchange="if(this.files.length) this.form.submit()">
-                    </label>
-                </form>
-                <div>
-                <div class="home-student-value"><strong>{{ student.surname|default:"—" }}</strong></div>
-
-                <div class="home-student-value"><strong>{{ student.first_names|default:"—" }}</strong></div>
-                
-                <div class="home-student-value"><strong>{{ student.sr_code|default:"—" }}</strong></div>
-                <div class="d-flex align-items-center mt-2 fw-semibold">
-                    <button type="button" class="home-email-toggle-btn btn btn-link p-0 border-0 text-secondary fw-semibold" id="home-email-toggle" aria-label="Show or hide email" title="Show or hide email">
-                        <i class="bi bi-envelope fs-5" aria-hidden="true"></i>
-                    </button>
-                    <span class="home-email-value ms-2 small text-muted fw-semibold" id="home-email-value" style="display: none;">{{ student.email|default:"" }}</span>
+            <div class="d-flex align-items-center">
+                <div class="d-flex align-items-center gap-3">
+                    <form method="post" action="{% url 'pos_home' %}" enctype="multipart/form-data" class="home-photo-form">
+                        {% csrf_token %}
+                        <label class="home-photo-box mb-0" for="id_profile_photo" title="Click to upload photo">
+                            {% if student.profile_photo %}
+                            <img src="{{ student.profile_photo.url }}" alt="Your photo">
+                            {% else %}
+                            <span class="photo-placeholder">Upload<br>Photo</span>
+                            {% endif %}
+                            <input type="file" name="profile_photo" id="id_profile_photo" accept="image/*" onchange="if(this.files.length) this.form.submit()">
+                        </label>
+                    </form>
+                    <div>
+                        <div class="home-student-value"><strong>{{ student.surname|default:"—" }}</strong></div>
+                        <div class="home-student-value"><strong>{{ student.first_names|default:"—" }}</strong></div>
+                        <div class="home-student-value"><strong>{{ student.sr_code|default:"—" }}</strong></div>
+                        <div class="d-flex align-items-center mt-2 fw-semibold">
+                            <button type="button" class="home-email-toggle-btn btn btn-link p-0 border-0 text-secondary fw-semibold" id="home-email-toggle" aria-label="Show or hide email" title="Show or hide email">
+                                <i class="bi bi-envelope fs-5" aria-hidden="true"></i>
+                            </button>
+                            <span class="home-email-value ms-2 small text-muted fw-semibold" id="home-email-value" style="display: none;">{{ student.email|default:"" }}</span>
+                        </div>
+                    </div>
                 </div>
-                </div>
-            </div>
-            <div class="text-end home-student-meta">
-                <div class="mb-1 fw-semibold">{% now "F d, Y" %}</div>
-                <div class="mb-2 small">{% now "g:i A" %}</div>
-                <div>College of Engineering - Alangilan Campus</div>
-            
-                <div class="year-program">
-                    <strong class="year">{{ student.year_level|upper|default:"—" }}</strong>
-                    <span class="separator"> - </span>
-                    <strong class="program">BS Computer Engineering</strong>
+                <div class="text-end home-student-meta">
+                    <span class="mb-1 fw-semibold d-block">{% now "F d, Y" %}</span>
+                    <span class="mb-2 small d-block">{% now "g:i A" %}</span>
                 </div>
             </div>
         </div>
-        </div>
-    </div>
 
-    <div class="pos-card p-4 home-academic-term">
+    <div class="pos-card p-4 home-academic-term mt-3">
         <div class="home-term-bsu-logo" aria-hidden="true"></div>
         <div class="home-term-content">
             <div class="pos-section-title mb-3">Current Academic Term</div>
@@ -223,7 +261,7 @@
                 <input type="hidden" name="next" value="{% url 'pos_generate' %}">
                 <div class="mb-3">
                     <label class="text-muted small text-uppercase" for="id_academic_year">ACADEMIC YEAR</label>
-                    <select name="academic_year" id="id_academic_year" class="form-select form-select-sm" style="max-width: 240px;">
+                    <select name="academic_year" id="id_academic_year" class="form-select form-select-sm home-academic-year-select">
                         <option value="">-- Select --</option>
                         {% for value, label in academic_year_choices %}
                         <option value="{{ value }}" {% if session_academic_year == value %}selected{% endif %}>{{ label }}</option>
