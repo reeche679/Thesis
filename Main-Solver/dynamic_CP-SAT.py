@@ -9,7 +9,7 @@ if str(_root) not in sys.path:
 
 from courses_and_year_standings.courses import courses
 import courses_and_year_standings.units_and_year_standings as u
-from helpers_and_optimizations.pos_helpers import _first_semester, _sem_label, _normalize_code
+from algorithms_and_helpers.pos_helpers import _first_semester, _sem_label, _normalize_code
 
 # Map of normalized course code -> canonical course code from the curriculum.
 # Normalization is case-insensitive and collapses whitespace, but the sequence

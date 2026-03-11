@@ -1,8 +1,12 @@
 # Value = year level whose units must be 90% complete to get this standing (2nd standing = after year 1, etc.)
 YEAR_STANDING_RULES = {
-    "2nd Year Standing": 1,  # Reached after completing 1st year
-    "3rd Year Standing": 2,  # Reached after completing 2nd year
-    "4th Year Standing": 3,  # Reached after completing 3rd year
+    # Value = year level whose units must be 90% complete
+    # 2nd Year Standing: 90% of Year 1 units
+    # 3rd Year Standing: 90% of Year 2 units
+    # 4th Year Standing / Graduating: 90% of Year 3 units
+    "2nd Year Standing": 1,
+    "3rd Year Standing": 2,
+    "4th Year Standing": 3,
     "Graduating": 3,
 }
 

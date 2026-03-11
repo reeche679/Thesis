@@ -10,12 +10,16 @@ import math
 from ortools.sat.python import cp_model
 from courses_and_year_standings.courses import PREREQ_ALIASES, YEAR_STANDING_RULES, courses
 import courses_and_year_standings.units_and_year_standings as u
-from helpers_and_optimizations.pos_helpers import (
+from algorithms_and_helpers.pos_helpers import (
     _first_semester,
     _sem_label,
     _normalize_code,
     _get_req_list,
     _log_infeasible,
+)
+from algorithms_and_helpers.algorithms import (
+    ALGORITHMS,
+    DEFAULT_ALGORITHM,
 )
 
 
@@ -173,39 +177,32 @@ def create_semester_variables(model, current_sem, passed_courses):
     return semester
 
 
+# Single algorithm selection: change this name to swap the thesis algorithm.
+# Must be a key in algorithms_and_helpers.algorithms.ALGORITHMS.
+ALGORITHM_NAME = "algo3_capped_trio_weighted"
+
+
+
 def add_offering_constraints(model, semester, passed_courses, current_sem, with_petition: bool):
-    """Add offering-window constraints (Rigid/Flexible/Bottleneck)."""
-    for c, info in courses.items():
-        if c in passed_courses:
-            continue
-        orig = _first_semester(info) or 1
-        cat = info.get("category", "Rigid")  # Rigid is default
-        valid_sems = []
-        for s in range(current_sem, u.MAX_SEMESTER + 1):
-            sem_type, orig_type = s % 3, orig % 3  # 1:1st, 2:2nd, 0:Summer
-            if cat == "Rigid" and sem_type == orig_type:
-                valid_sems.append(s)
-            elif cat == "Flexible" and (
-                (orig_type in [1, 2] and sem_type in [1, 2])
-                or (orig_type == 0 and sem_type == 0)
-            ):
-                valid_sems.append(s)
-            elif cat == "Bottleneck":
-                if not with_petition:
-                    # Without petition: behave like Rigid (only original term type).
-                    if sem_type == orig_type:
-                        valid_sems.append(s)
-                else:
-                    # With petition: can be offered every semester from current_sem onward.
-                    # The objective already prefers earlier semesters, so retakes
-                    # will naturally be scheduled in the very next feasible term.
-                    valid_sems.append(s)
-        if valid_sems:
-            model.AddAllowedAssignments([semester[c]], [[s] for s in valid_sems])
+    """Add offering-window constraints using the selected thesis algorithm."""
+    spec = ALGORITHMS[ALGORITHM_NAME]
+    spec.offering_fn(
+        model,
+        semester,
+        courses,
+        passed_courses,
+        current_sem,
+        with_petition,
+        _first_semester,
+        u.MAX_SEMESTER,
+    )
 
 
 # Graduation semester: only these three courses may appear in the final semester.
 GRADUATION_TRIO = ("CpE 405", "CpE 406", "ENGG 117")
+
+# Toggle this off when you *don't* want to force a "trio-only" semester.
+ENFORCE_GRADUATION_TRIO_ONLY_SEMESTER = False
 
 
 def add_graduation_semester_constraint(model, semester, passed_courses):
@@ -378,18 +375,16 @@ def add_prereq_year_coreq_constraints(
 
 
 def add_objective(model, semester, passed_courses, failed_courses, current_sem):
-    """Set objective: finish as early as possible, fill from current semester first."""
-    # 5. Objective: Minimize latest semester used, then prefer filling earlier semesters
-    # so that the current semester is used when possible (avoids skipping to Summer/sem 3).
-    max_sem_used = model.NewIntVar(current_sem, u.MAX_SEMESTER, "max_sem_used")
-    for c in courses:
-        if c not in passed_courses:
-            model.Add(max_sem_used >= semester[c])
-    # Scale so we first minimize max_sem_used, then minimize sum of semesters (pack current first)
-    scale = u.MAX_SEMESTER *  u.MAX_SEMESTER + 1
-    model.Minimize(
-        max_sem_used * scale
-        + sum(semester[c] for c in courses if c not in passed_courses)
+    """Set objective using the selected thesis algorithm."""
+    spec = ALGORITHMS[ALGORITHM_NAME]
+    spec.objective_fn(
+        model,
+        semester,
+        courses,
+        passed_courses,
+        current_sem,
+        u.MAX_SEMESTER,
+        weights=spec.weights,
     )
 
 
@@ -466,7 +461,8 @@ def _run_core(current_sem, passed_courses, failed_courses, with_petition: bool):
     # 4. Constraints
     add_offering_constraints(model, semester, passed_courses, current_sem, with_petition)
     add_unit_constraints(model, semester, passed_courses, current_sem)
-    add_graduation_semester_constraint(model, semester, passed_courses)
+    if ENFORCE_GRADUATION_TRIO_ONLY_SEMESTER:
+        add_graduation_semester_constraint(model, semester, passed_courses)
     add_prereq_year_coreq_constraints(
         model,
         semester,

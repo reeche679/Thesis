@@ -49,10 +49,11 @@ MAX_UNITS_BY_YEAR_TERM = {
     (6, TERM_1): 21,
     (6, TERM_2): 23,
     (6, TERM_SUMMER): 9,
+
 }
 
 # Planning horizon: highest semester index (CP-SAT will use semesters 1..MAX_SEMESTER).
-MAX_SEMESTER = max(sem_index(yl, t) for (yl, t) in MAX_UNITS_BY_YEAR_TERM) if MAX_UNITS_BY_YEAR_TERM else 12
+MAX_SEMESTER = max(sem_index(yl, t) for (yl, t) in MAX_UNITS_BY_YEAR_TERM) if MAX_UNITS_BY_YEAR_TERM else 14
 
 
 def max_units_for(year_level: int, term_in_year: int) -> int:
