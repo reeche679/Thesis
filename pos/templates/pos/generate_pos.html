@@ -1145,10 +1145,76 @@
         a.click();
         setTimeout(function() { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
         localStorage.setItem('posGrades', JSON.stringify(gradesBySection));
+        // Persist current semester index so Preview can call /generate/api consistently
+        try {
+            var currentSemIndex = null;
+            if (IS_REGULAR) {
+                var regSel = document.getElementById('regular-current-semester');
+                currentSemIndex = regSel ? regSel.value : null;
+            } else {
+                var irSel = document.getElementById('irreg-current-sem');
+                currentSemIndex = irSel ? irSel.value : null;
+            }
+            if (currentSemIndex !== null && currentSemIndex !== undefined && currentSemIndex !== '') {
+                localStorage.setItem('posCurrentSemIndex', String(currentSemIndex));
+            }
+        } catch (e) {}
+
+        function isPassingGrade(grade) {
+            if (!grade) return false;
+            var s = String(grade).trim();
+            if (!s) return false;
+            return !(s === '5' || s === '5.0' || s === '5.00');
+        }
+        function isFailedGrade(grade) {
+            if (!grade) return false;
+            var s = String(grade).trim();
+            return (s === '5' || s === '5.0' || s === '5.00');
+        }
+
+        function buildSolverPayloadFromGrades(gradesBySection) {
+            var passed = new Set();
+            var failed = new Set();
+            Object.keys(gradesBySection || {}).forEach(function(sectionIndex) {
+                var sec = gradesBySection[sectionIndex] || {};
+                Object.keys(sec).forEach(function(code) {
+                    var g = sec[code];
+                    if (isPassingGrade(g)) passed.add(code);
+                    if (isFailedGrade(g)) failed.add(code);
+                });
+            });
+            // If a course is both in passed and failed (retake), keep it in passed.
+            passed.forEach(function(code) { if (failed.has(code)) failed.delete(code); });
+
+            var currentSem = localStorage.getItem('posCurrentSemIndex');
+            var currentSemInt = currentSem !== null && currentSem !== '' ? parseInt(currentSem, 10) : null;
+
+            return {
+                current_sem: currentSemInt,
+                passed_courses: Array.from(passed),
+                failed_courses: Array.from(failed),
+                probation: false
+            };
+        }
+
         saveGradesToServer(gradesBySection, true, function(data) {
             if (data && data.ok) {
-                var previewUrl = "{% url 'pos_preview' %}?t=" + Date.now();
-                setTimeout(function() { window.location.href = previewUrl; }, 300);
+                // Call solver API and store response for Preview page to render dynamically
+                var solverPayload = buildSolverPayloadFromGrades(gradesBySection);
+                fetch("{% url 'generate_pos_api' %}", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(solverPayload)
+                }).then(function(r) { return r.json(); })
+                  .then(function(res) {
+                      try { sessionStorage.setItem('posGeneratedResponse', JSON.stringify(res)); } catch (e) {}
+                      var previewUrl = "{% url 'pos_preview' %}?t=" + Date.now();
+                      setTimeout(function() { window.location.href = previewUrl; }, 100);
+                  })
+                  .catch(function() {
+                      var previewUrl = "{% url 'pos_preview' %}?t=" + Date.now();
+                      setTimeout(function() { window.location.href = previewUrl; }, 100);
+                  });
             } else {
                 alert('Failed to save grades. Please try again.');
             }

@@ -92,7 +92,7 @@
 
     .bg-logo {
         position: absolute;
-        top: 50%;
+        top: 40%;
         left: 50%;
         transform: translate(-50%, -50%);
         opacity: 0.15;
@@ -209,6 +209,13 @@
             padding: 24px 18px;
             border-width: 1px;
             min-height: 440px;
+        }
+        /* BSU logo fixed to viewport so it doesn't move when scrolling */
+        .bg-logo {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
         }
     }
 

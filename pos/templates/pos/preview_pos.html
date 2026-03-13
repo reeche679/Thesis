@@ -248,6 +248,8 @@
         <div class="pos-section-title mb-0">Program of Study Summary</div>
     </div>
 
+    <div id="pos-preview-dynamic" style="display:none;"></div>
+    <div id="pos-preview-server">
     {% for section in preview_sections %}
     <div class="mb-4">
         <h6 class="fw-bold mb-2">{{ section.label }}</h6>
@@ -295,6 +297,7 @@
         </div>
     </div>
     {% endfor %}
+    </div>
 
         <div class="mt-4 d-flex justify-content-end">
         <a href="{% url 'download_pos_pdf' %}" class="btn btn-outline-danger btn-sm" download>
@@ -305,4 +308,145 @@
 {% endblock %}
 
 {% block extra_scripts %}
+<script>
+    (function() {
+        function safeJsonParse(s) {
+            try { return JSON.parse(s); } catch (e) { return null; }
+        }
+        function isFailedGrade(grade) {
+            if (!grade) return false;
+            var s = String(grade).trim();
+            return (s === '5' || s === '5.0' || s === '5.00');
+        }
+        function isPassingGrade(grade) {
+            if (!grade) return false;
+            var s = String(grade).trim();
+            if (!s) return false;
+            return !isFailedGrade(s);
+        }
+        function getGradesBySection() {
+            var raw = localStorage.getItem('posGrades');
+            return raw ? safeJsonParse(raw) : null;
+        }
+        function getGradeFor(semesterIndex, code, gradesBySection) {
+            if (!gradesBySection) return '';
+            var sec = gradesBySection[String(semesterIndex)] || gradesBySection[semesterIndex];
+            if (!sec) return '';
+            return sec[code] || '';
+        }
+        function renderDynamicPOS(res) {
+            var dyn = document.getElementById('pos-preview-dynamic');
+            var srv = document.getElementById('pos-preview-server');
+            if (!dyn || !srv) return;
+
+            if (!res || res.status !== 'ok' || !Array.isArray(res.pos)) return;
+
+            var gradesBySection = getGradesBySection();
+            var html = '';
+            res.pos.forEach(function(sem) {
+                var label = sem.label || ('Semester ' + sem.semester_index);
+                var totalUnits = (sem.total_units !== undefined && sem.total_units !== null) ? sem.total_units : '—';
+                html += '<div class="mb-4">';
+                html +=   '<h6 class="fw-bold mb-2">' + String(label) + '</h6>';
+                html +=   '<div class="table-responsive">';
+                html +=     '<table class="table table-sm align-middle table-bordered mb-0">';
+                html +=       '<thead class="table-light">';
+                html +=         '<tr class="text-center">';
+                html +=           '<th rowspan="2" style="width: 8%;">Course Code</th>';
+                html +=           '<th rowspan="2" style="width: 28%;">Course Title</th>';
+                html +=           '<th rowspan="2" style="width: 5%;">Units</th>';
+                html +=           '<th colspan="2" class="hours-header" style="width: 8%;">No. of hour/s</th>';
+                html +=           '<th rowspan="2" style="width: 12%;">Pre-requisite(s)</th>';
+                html +=           '<th rowspan="2" style="width: 12%;">Co-requisite(s)</th>';
+                html +=           '<th rowspan="2" style="width: 9%;">Final Grade</th>';
+                html +=           '<th rowspan="2" style="width: 9%;">Remarks</th>';
+                html +=         '</tr>';
+                html +=         '<tr class="text-center">';
+                html +=           '<th style="width: 4%;">Lec</th>';
+                html +=           '<th style="width: 4%;">Lab</th>';
+                html +=         '</tr>';
+                html +=       '</thead>';
+                html +=       '<tbody>';
+
+                (sem.courses || []).forEach(function(c) {
+                    var code = c.code || '';
+                    var title = c.title || '';
+                    var units = (c.units !== undefined && c.units !== null) ? c.units : '';
+                    var grade = getGradeFor(sem.semester_index, code, gradesBySection);
+                    var remark = grade ? (isPassingGrade(grade) ? 'Passed' : (isFailedGrade(grade) ? 'Failed' : '')) : '';
+                    var gradeClass = (grade && isFailedGrade(grade)) ? 'text-danger' : '';
+                    var remarkClass = (remark === 'Passed') ? 'text-success' : ((remark === 'Failed') ? 'text-danger' : '');
+
+                    html += '<tr>';
+                    html +=   '<td class="text-center">' + String(code) + '</td>';
+                    html +=   '<td class="course-title-cell">' + String(title) + '</td>';
+                    html +=   '<td class="text-center">' + String(units) + '</td>';
+                    html +=   '<td class="text-center">—</td>';
+                    html +=   '<td class="text-center">—</td>';
+                    html +=   '<td class="small text-muted text-center">—</td>';
+                    html +=   '<td class="small text-muted text-center">—</td>';
+                    html +=   '<td class="text-center grade-display ' + gradeClass + '">' + (grade ? String(grade) : '—') + '</td>';
+                    html +=   '<td class="text-center remarks-display ' + remarkClass + '">' + (remark ? String(remark) : '—') + '</td>';
+                    html += '</tr>';
+                });
+
+                html +=       '</tbody>';
+                html +=       '<tfoot><tr>';
+                html +=         '<th colspan="2" class="text-end">Total Units</th>';
+                html +=         '<th class="text-center">' + String(totalUnits) + '</th>';
+                html +=         '<th colspan="6"></th>';
+                html +=       '</tr></tfoot>';
+                html +=     '</table>';
+                html +=   '</div>';
+                html += '</div>';
+            });
+
+            dyn.innerHTML = html;
+            dyn.style.display = '';
+            srv.style.display = 'none';
+        }
+
+        // Prefer fresh response passed from Generate POS
+        var ss = sessionStorage.getItem('posGeneratedResponse');
+        var ssObj = ss ? safeJsonParse(ss) : null;
+        if (ssObj && ssObj.status) {
+            renderDynamicPOS(ssObj);
+            return;
+        }
+
+        // Fallback: if user refreshed Preview, regenerate by calling API using stored grades + semester
+        var gradesBySection = getGradesBySection();
+        var currentSemRaw = localStorage.getItem('posCurrentSemIndex');
+        var currentSem = currentSemRaw !== null && currentSemRaw !== '' ? parseInt(currentSemRaw, 10) : null;
+        if (!gradesBySection || currentSem === null || isNaN(currentSem)) return;
+
+        var passed = new Set();
+        var failed = new Set();
+        Object.keys(gradesBySection || {}).forEach(function(sectionIndex) {
+            var sec = gradesBySection[sectionIndex] || {};
+            Object.keys(sec).forEach(function(code) {
+                var g = sec[code];
+                if (isPassingGrade(g)) passed.add(code);
+                if (isFailedGrade(g)) failed.add(code);
+            });
+        });
+        passed.forEach(function(code) { if (failed.has(code)) failed.delete(code); });
+
+        fetch("{% url 'generate_pos_api' %}", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                current_sem: currentSem,
+                passed_courses: Array.from(passed),
+                failed_courses: Array.from(failed),
+                probation: false
+            })
+        }).then(function(r) { return r.json(); })
+          .then(function(res) {
+              try { sessionStorage.setItem('posGeneratedResponse', JSON.stringify(res)); } catch (e) {}
+              renderDynamicPOS(res);
+          })
+          .catch(function() {});
+    })();
+</script>
 {% endblock %}
