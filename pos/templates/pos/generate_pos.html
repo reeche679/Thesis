@@ -54,8 +54,6 @@
         }
     }
 
-    /* (Custom mobile dropdown CSS removed; using Choices.js instead) */
-
     .grade-select option,
     .edit-grade-select option {
         text-align: left;
@@ -80,6 +78,11 @@
         vertical-align: middle;
         font-size: 1rem !important;
         color: #212529 !important;
+        /* Allow long course titles to wrap into multiple lines */
+        white-space: normal;
+        word-break: break-word;
+        overflow-wrap: break-word;
+        line-height: 1.2;
     }
 
     /* Extract loading overlay: circular progress (stroke-dasharray set by JS) */
@@ -165,7 +168,10 @@
         .table .course-title-cell,
         .table .elective-course-cell {
             font-size: 0.8rem !important;
-            min-width: 13rem;
+            /* Let long titles wrap instead of forcing very wide columns */
+            white-space: normal;
+            word-break: break-word;
+            overflow-wrap: break-word;
         }
         /* Units, Lec, Lab: equal, shorter width on mobile */
         .table thead th:nth-child(3),
@@ -280,27 +286,6 @@
         justify-content: center;
         line-height: 1;
         font-size: 0.85rem;
-    }
-    /* Make Choices.js dropdowns compact and rounded */
-    .choices {
-        margin-bottom: 0;
-    }
-    .choices__inner {
-        padding: 0.1rem 0.75rem;
-        min-height: 1.8rem;
-        border-radius: 0.5rem;
-        font-size: 0.8rem;
-    }
-    .choices__list--single {
-        padding: 0;
-    }
-    .choices__list--dropdown {
-        font-size: 0.8rem;
-    }
-    /* Extra-compact for grade dropdowns */
-    .choices-grade .choices__inner {
-        padding: 0.05rem 0.5rem 0.05rem 0.35rem;
-        min-width: 4.25rem;
     }
     @media (max-width: 575.98px) {
         #irreg-edit-modal .irreg-edit-grade-col,
@@ -838,38 +823,6 @@
     var HAS_GENERATED_POS = !!posConfig.has_generated_pos;
     var IRREG_CONFIGURED = IS_REGULAR || posConfig.irreg_configured === true;
 
-    // Enhance dropdowns with Choices.js on this page
-    function enhanceSelectWithChoices(el) {
-        if (!window.Choices || !el || el.dataset.choices === 'active') return;
-        var instance = new Choices(el, {
-            searchEnabled: false,
-            itemSelectText: '',
-            shouldSort: false,
-            allowHTML: false
-        });
-        // Make grade dropdowns compact
-        if (el.classList.contains('grade-select') || el.classList.contains('edit-grade-select')) {
-            var container = el.parentElement && el.parentElement.querySelector('.choices');
-            if (container) container.classList.add('choices-grade');
-        }
-        return instance;
-    }
-
-    document.addEventListener('DOMContentLoaded', function() {
-        if (!window.Choices) return;
-
-        ['regular-current-semester', 'irreg-current-sem', 'irreg-start-sem', 'irreg-with-petition']
-            .forEach(function(id) {
-                var el = document.getElementById(id);
-                if (!el) return;
-                enhanceSelectWithChoices(el);
-            });
-
-        document.querySelectorAll('.grade-select, .edit-grade-select').forEach(function(el) {
-            enhanceSelectWithChoices(el);
-        });
-    });
-
     function getCookie(name) {
         var match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
         return match ? match[2] : null;
@@ -1406,7 +1359,6 @@
                 sel.appendChild(o);
             });
             sel.addEventListener('change', saveGradesToStorage);
-            enhanceSelectWithChoices(sel);
             return sel;
         }
 
@@ -1803,8 +1755,6 @@
                 '<td><select class="form-select form-select-sm edit-grade-select" data-course-code="' + code + '">' + gradeOptionsHtml(grade || '') + '</select></td>' +
                 '<td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger edit-remove-row" title="Remove">&times;</button></td>';
             editTbody.appendChild(tr);
-            var sel = tr.querySelector('.edit-grade-select');
-            if (sel) enhanceSelectWithChoices(sel);
         }
 
         document.body.addEventListener('click', function(e) {
