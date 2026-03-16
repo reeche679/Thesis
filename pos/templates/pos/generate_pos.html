@@ -6,8 +6,11 @@
 
 {% block extra_head %}
 <style>
-    .grade-select {
-        max-width: 56px;
+    .grade-select,
+    .edit-grade-select {
+        min-width: 3.75rem;
+        max-width: 4.5rem;
+        width: auto;
         text-align: left;
         margin: 0 auto;
         display: block;
@@ -21,11 +24,46 @@
         background-size: 12px 10px;
         padding: 0.15rem 1.1rem 0.15rem 0.4rem;
     }
+    /* Regular path layout: label on its own line, dropdown + OK on same row (web & mobile) */
+    .regular-ok-btn {
+        min-width: 6rem;
+    }
+    .regular-semester-row .d-flex {
+        flex-direction: row;
+        align-items: center;
+        gap: 0.5rem;
+        flex-wrap: nowrap;
+    }
+    .regular-semester-row #regular-current-semester {
+        max-width: 260px;
+        flex: 0 1 auto;
+    }
+    /* Mobile: let semester dropdown grow and wrap OK to next row */
+    @media (max-width: 575.98px) {
+        .regular-semester-row .d-flex {
+            flex-wrap: wrap;
+        }
+        .regular-semester-row #regular-current-semester {
+            max-width: 100%;
+            flex: 1 1 auto;
+        }
+        .regular-semester-row .regular-ok-btn {
+            margin-top: 0.35rem;
+            margin-bottom: 0.5rem;
+            width: 100%;
+        }
+    }
 
-    .grade-select option {
+    .grade-select option,
+    .edit-grade-select option {
         text-align: left;
         padding-left: 0.5rem;
         font-size: 0.8rem;
+    }
+    /* Main semester tables: keep grade column wide enough for full value (e.g. 1.00, 5.00) but not too wide */
+    .main-sem .grade-col-header,
+    .main-sem table td:nth-child(8) {
+        min-width: 4.5rem;
     }
 
     .elective-course-cell {
@@ -70,10 +108,12 @@
         font-size: 0.95rem;
     }
 
-    /* Responsive: allow horizontal scroll on small viewports so tables stay usable */
+    /* Horizontal scroll is handled by the script in base.html so the table under the finger scrolls. */
+    .main-sem .table-responsive,
     .table-responsive {
         overflow-x: auto;
         -webkit-overflow-scrolling: touch;
+        overscroll-behavior-x: contain;
     }
     .table {
         table-layout: auto;
@@ -93,28 +133,9 @@
         font-size: 0.85rem;
         white-space: nowrap;
     }
-
-    .table thead th {
-        min-width: 4rem;
-    }
-    .table thead th:first-child { min-width: 5.5rem; }
-    .table thead th:nth-child(2) { min-width: 10rem; white-space: normal; }
-    .table thead th:nth-child(5),
-    .table thead th:nth-child(6),
-    .table thead th:nth-child(7) { min-width: 4rem; }
-    .table tbody td:first-child { min-width: 5.5rem; }
-    .table tbody td:nth-child(3),
-    .table tbody td:nth-child(4),
-    .table tbody td:nth-child(5) { min-width: 3rem; }
-
-    .table .course-title-cell,
-    .table .elective-course-cell {
-        text-align: left;
-        white-space: normal;
-        word-break: break-word;
-        overflow-wrap: break-word;
-        font-size: 0.85rem !important;
-        min-width: 10rem;
+    /* Override: course titles always left-aligned, including in edit modal rows */
+    .table tbody td.course-title-cell {
+        text-align: left !important;
     }
 
     .table td:nth-child(4),
@@ -142,6 +163,16 @@
         .table .course-title-cell,
         .table .elective-course-cell {
             font-size: 0.8rem !important;
+            min-width: 13rem;
+        }
+        /* Units, Lec, Lab: equal, shorter width on mobile */
+        .table thead th:nth-child(3),
+        .table tbody td:nth-child(3),
+        .table thead th:nth-child(4),
+        .table tbody td:nth-child(4),
+        .table thead th:nth-child(5),
+        .table tbody td:nth-child(5) {
+            min-width: 2.4rem;
         }
     }
 
@@ -216,13 +247,53 @@
     }
     .irreg-edit-section-btn.irreg-edit-visible { display: inline-block !important; }
     .irreg-edit-section-btn.irreg-edit-hidden { display: none !important; }
+    /* Edit semester modal: grade column as compact as possible but still readable */
+    #irreg-edit-modal .irreg-edit-grade-col,
+    #irreg-edit-modal table td:nth-child(8) {
+        min-width: 3.75rem;
+        width: 8%;
+    }
+    #irreg-edit-modal .grade-select {
+        min-width: 4.5rem;
+        max-width: none;
+    }
+    /* Edit popup remove (x) button: small centered square */
+    #irreg-edit-modal .edit-remove-row {
+        padding: 0;
+        width: 1.6rem;
+        height: 1.6rem;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        line-height: 1;
+        font-size: 0.85rem;
+    }
+    /* Irregular check (✓) button under tables: small centered square */
+    .irreg-check-section-btn {
+        padding: 0;
+        width: 1.6rem;
+        height: 1.6rem;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        line-height: 1;
+        font-size: 0.85rem;
+    }
+    @media (max-width: 575.98px) {
+        #irreg-edit-modal .irreg-edit-grade-col,
+        #irreg-edit-modal table td:nth-child(8) {
+            min-width: 5.5rem;
+        }
+    }
 
     /* Student profile scroll: keep photo fixed, allow details to scroll on small screens */
     .pos-student-profile-scroll {
         flex: 1 1 auto;
+        max-width: 100%;
     }
 
-    /* Responsive: keep student profile landscape (photo left, details right) on all screens */
+    /* Responsive: keep student profile landscape (photo left, details right) on all screens,
+       and keep text left-aligned while the details area scrolls only inside the card. */
     @media (max-width: 767.98px) {
         .pos-card.p-4.mb-4 .d-flex.justify-content-between.align-items-start { flex-wrap: wrap; gap: 0.75rem; }
         #pos-action-buttons .d-flex { flex-wrap: wrap; }
@@ -232,7 +303,8 @@
             -webkit-overflow-scrolling: touch;
         }
         .pos-student-profile-details {
-            min-width: 660px;
+            min-width: 540px;
+            text-align: left;
         }
         .pos-student-profile-row .generate-photo-box {
             width: 70px;
@@ -253,17 +325,18 @@
             min-width: 64px;
             min-height: 64px;
         }
-        .pos-student-profile-row { gap: 0.5rem; align-items: center; }
+        .pos-student-profile-row {
+            gap: 0.5rem;
+            align-items: flex-start;
+        }
         .pos-student-profile-details .text-muted { font-size: 0.6rem; }
         .pos-student-profile-details .fw-semibold { font-size: 0.75rem; }
         .pos-student-profile-details {
-            min-width: 600px;
+            min-width: 520px;
+            text-align: left;
         }
     }
-    @media (max-width: 380px) {
-        .pos-student-profile-row { flex-direction: column; align-items: center; text-align: center; }
-        .pos-student-profile-details { justify-content: center; }
-    }
+    /* Keep landscape layout even on very small screens (photo left, text right) */
 
     /* Semester table header: center title (First Year First Sem, etc.) */
     .main-sem-header {
@@ -317,6 +390,19 @@
         #pos-action-buttons .pos-action-btn-text-full { display: none; }
         #pos-action-buttons .pos-action-btn-text-short { display: inline; }
     }
+    /* Mobile: make header + Academic Term smaller on Generate POS */
+    @media (max-width: 575.98px) {
+        .generate-page-header h1.h5 {
+            font-size: 1rem;
+        }
+        .generate-page-header p.text-muted {
+            font-size: 0.8rem;
+        }
+        .generate-academic-term .small,
+        .generate-academic-term .fw-semibold {
+            font-size: 0.8rem !important;
+        }
+    }
     @media (max-width: 380px) {
         #pos-action-buttons .btn { padding: 0.3rem 0.4rem; font-size: 0.68rem; }
     }
@@ -324,14 +410,14 @@
 {% endblock %}
 
 {% block content %}
-<div class="mb-3 d-flex justify-content-between align-items-start">
+<div class="mb-3 d-flex justify-content-between align-items-start generate-page-header">
     <div>
         <h1 class="h5 mb-1">Generate Program of Study</h1>
         <p class="text-muted mb-0">
             Review your current academic profile and specify grades for enrolled courses.
         </p>
     </div>
-    <div class="text-end">
+    <div class="text-end generate-academic-term">
         <div class="small text-muted text-uppercase">Academic Term</div>
         <div class="fw-semibold">{{ session_academic_year|default:"—" }}{% if session_semester %} · {{ session_semester }}{% endif %}</div>
     </div>
@@ -379,7 +465,7 @@
             <div class="col-4 mb-2">
                 <div class="mb-1">
                     <div class="text-muted text-uppercase">Curriculum</div>
-                    <div class="fw-semibold">BSCpE Curriculum 2025-2026</div>
+                    <div class="fw-semibold text-nowrap">BSCpE Curriculum 2025-2026</div>
                 </div>
                 <div>
                     <div class="text-muted text-uppercase">Campus</div>
@@ -398,7 +484,10 @@
 {% if not is_regular %}
 <div class="pos-card p-4 mb-4" id="current-semester-card">
     <div class="pos-section-title mb-2">Irregular Path</div>
-    <p class="small text-muted mb-3">Set your current semester and when you became irregular. Curriculum courses up to that semester are listed automatically; semesters after that show an add-course picker.</p>
+    <p class="small text-muted mb-3 text-justify">
+        Set your current semester now, when you became irregular, and if there is petition or not.
+        Curriculum courses up to that semester will be listed below.
+    </p>
     <div class="row g-3 align-items-end">
         <div class="col-md-4">
             <label class="form-label small text-uppercase text-muted" for="irreg-current-sem">Your Current Semester</label>
@@ -427,6 +516,30 @@
         </div>
         <div class="col-md-2">
             <button type="button" class="btn btn-sm btn-primary w-100" id="irreg-ok-btn">OK</button>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% if is_regular %}
+<div class="pos-card p-4 mb-4" id="regular-path-card">
+    <div class="pos-section-title mb-2">Regular Path</div>
+    <p class="small text-muted mb-3 text-justify">
+        Choose the last semester you have finished, then click OK.
+        Curriculum courses up to that semester will be listed below.
+    </p>
+    <div class="regular-semester-row">
+        <label class="form-label small text-uppercase text-muted mb-1" for="regular-current-semester">
+            Your Current Semester
+        </label>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <select class="form-select form-select-sm" id="regular-current-semester">
+                <option value="">— Select current semester —</option>
+                {% for value, label in current_semester_choices_regular %}
+                <option value="{{ value }}" {% if has_generated_pos and current_semester_index == value %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+            <button type="button" class="btn btn-sm btn-primary regular-ok-btn" id="regular-semester-ok-btn">OK</button>
         </div>
     </div>
 </div>
@@ -493,8 +606,8 @@
                             <tr class="text-center">
                                 <th rowspan="2" style="width:8%">Course Code</th>
                                 <th rowspan="2" style="width:30%">Course Title</th>
-                                <th rowspan="2" style="width:5%">Units</th>
-                                <th colspan="2" class="hours-header" style="width:8%">No. of hour/s</th>
+                                <th rowspan="2" style="width:4%">Units</th>
+                                <th colspan="2" class="hours-header" style="width:6%">No. of hour/s</th>
                                 <th rowspan="2" style="width:13%">Pre-requisite(s)</th>
                                 <th rowspan="2" style="width:13%">Co-requisite(s)</th>
                             </tr>
@@ -529,13 +642,13 @@
                         <thead class="table-light">
                             <tr class="text-center">
                                 <th rowspan="2" style="width:8%">Course Code</th>
-                                <th rowspan="2" style="width:28%">Course Title</th>
-                                <th rowspan="2" style="width:5%">Units</th>
-                                <th colspan="2" class="hours-header" style="width:8%">No. of hour/s</th>
-                                <th rowspan="2" style="width:12%">Pre-requisite(s)</th>
-                                <th rowspan="2" style="width:12%">Co-requisite(s)</th>
-                                <th rowspan="2" style="width:10%">Grade</th>
-                                <th rowspan="2" style="width:5%"></th>
+                                <th rowspan="2" style="width:24%">Course Title</th>
+                                <th rowspan="2" style="width:4%">Units</th>
+                                <th colspan="2" class="hours-header" style="width:6%">No. of hour/s</th>
+                                <th rowspan="2" style="width:11%">Pre-requisite(s)</th>
+                                <th rowspan="2" style="width:11%">Co-requisite(s)</th>
+                                <th rowspan="2" class="irreg-edit-grade-col" style="width:8%">Grade</th>
+                                <th rowspan="2" style="width:4%"></th>
                             </tr>
                             <tr class="text-center">
                                 <th style="width:4%">Lec</th>
@@ -563,22 +676,6 @@
         </button>
     </div>
 
-    {% if is_regular %}
-    <div class="mb-3">
-        <div class="small text-uppercase text-muted mb-1">(Regular Path)</div>
-        <div class="d-flex align-items-center flex-wrap gap-2">
-            <select class="form-select form-select-sm" id="regular-current-semester" style="max-width: 320px;">
-                <option value="">— Select current semester —</option>
-                {% for value, label in current_semester_choices_regular %}
-                <option value="{{ value }}" {% if has_generated_pos and current_semester_index == value %}selected{% endif %}>{{ label }}</option>
-                {% endfor %}
-            </select>
-            <button type="button" class="btn btn-sm btn-primary" id="regular-semester-ok-btn">OK</button>
-        </div>
-        <div class="form-text small text-muted">Choose the last semester you have finished, then click OK. All curriculum courses from 1st Year First Semester up to your selected semester will be listed below.</div>
-    </div>
-    {% endif %}
-
     {% if not is_regular and not irreg_configured %}
     <div class="alert alert-info py-3 mb-3">
         <strong>Select your semester to continue.</strong> Please choose your current semester and when you became irregular above, then click <strong>OK</strong> to proceed to adding grades.
@@ -604,15 +701,25 @@
         </div>
         <div class="table-responsive">
             <table class="table table-sm align-middle table-bordered mb-0">
+                <colgroup>
+                    <col style="width:8%;">   <!-- Code -->
+                    <col style="width:34%;">  <!-- Title (slightly longer) -->
+                    <col style="width:4%;">   <!-- Units -->
+                    <col style="width:3%;">   <!-- Lec -->
+                    <col style="width:3%;">   <!-- Lab -->
+                    <col style="width:12%;">  <!-- Pre-req -->
+                    <col style="width:12%;">  <!-- Co-req -->
+                    <col style="width:8%;">   <!-- Grade -->
+                </colgroup>
                 <thead class="table-light">
                     <tr class="text-center">
                         <th rowspan="2" style="width: 8%;">Course Code</th>
                         <th rowspan="2" style="width: 30%;">Course Title</th>
-                        <th rowspan="2" style="width: 5%;">Units</th>
-                        <th colspan="2" class="hours-header" style="width: 8%;">No. of hour/s</th>
+                        <th rowspan="2" style="width: 4%;">Units</th>
+                        <th colspan="2" class="hours-header" style="width: 6%;">No. of hour/s</th>
                         <th rowspan="2" style="width: 13%;">Pre-requisite(s)</th>
                         <th rowspan="2" style="width: 13%;">Co-requisite(s)</th>
-                        <th rowspan="2" style="width: 10%;">Grade</th>
+                        <th rowspan="2" class="grade-col-header" style="width: 7%; min-width: 4.5rem;">Grade</th>
                     </tr>
                     <tr class="text-center">
                         <th style="width: 4%;">Lec</th>
@@ -1631,7 +1738,7 @@
             tr.setAttribute('data-course-code', code);
             tr.innerHTML =
                 '<td class="text-center">' + code + '</td>' +
-                '<td>' + title + '</td>' +
+                '<td class="course-title-cell">' + title + '</td>' +
                 '<td class="text-center">' + units + '</td>' +
                 '<td class="text-center">' + lec + '</td>' +
                 '<td class="text-center">' + lab + '</td>' +

@@ -40,8 +40,14 @@ Write-Host "Ensuring PDF/OCR deps (pymupdf, easyocr)... first time may take a mi
 pip install pymupdf easyocr numpy --quiet
 if ($LASTEXITCODE -ne 0) { Write-Host "Warning: PDF/OCR install failed; scanned PDF upload may not work." -ForegroundColor Yellow }
 
-Write-Host "Starting Django server..." -ForegroundColor Green
-python manage.py runserver
+$ip = (Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.IPAddress -ne '127.0.0.1' -and $_.PrefixOrigin -ne 'WellKnown' } | Select-Object -First 1).IPAddress
+if (-not $ip) { $ip = "YOUR_PC_IP" }
+
+Write-Host "Starting Django server (localhost + same Wi-Fi)..." -ForegroundColor Green
+Write-Host "  On this PC:  http://127.0.0.1:8000" -ForegroundColor Gray
+Write-Host "  On phone:    http://${ip}:8000  (same Wi-Fi)" -ForegroundColor Gray
+Write-Host ""
+python manage.py runserver 0.0.0.0:8000
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Server exited. Press Enter to close." -ForegroundColor Yellow
     Read-Host

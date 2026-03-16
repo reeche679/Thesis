@@ -187,15 +187,29 @@
         }
         .home-outer-card .home-student-meta.text-end {
             text-align: right !important;
+            font-size: 0.6rem;
         }
-        .home-email-toggle-btn i {
-            font-size: 0.9rem;
+        /* Override Bootstrap .small so time matches smaller date size on mobile */
+        .home-student-card .home-student-meta span.small {
+            font-size: 0.55rem !important;
+        }
+        .home-email-toggle-btn {
+            padding: 0;
+            min-width: 0;
+            line-height: 1;
+        }
+        /* Make email icon small (but readable) on mobile (override Bootstrap fs-5) */
+        .home-student-card .home-email-toggle-btn i {
+            font-size: 0.7rem !important;
         }
         .home-student-value {
             white-space: nowrap;
+            font-size: 0.8rem;
         }
-        .home-email-value {
+        /* Make email text very small on mobile (override .small, fw-semibold) */
+        .home-student-card .home-email-value {
             white-space: nowrap;
+            font-size: 0.45rem !important;
         }
         .home-academic-term .d-flex.gap-2 {
             flex-direction: column;

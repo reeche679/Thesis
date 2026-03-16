@@ -43,12 +43,13 @@
     .table-responsive {
         overflow-x: auto;
         -webkit-overflow-scrolling: touch;
+        overscroll-behavior-x: contain;
     }
 
     .table {
-        table-layout: fixed;
+        table-layout: auto;
         width: 100%;
-        min-width: 640px;
+        min-width: 960px;
     }
 
     .table thead th,
@@ -80,12 +81,7 @@
     }
     .table td:nth-child(6),
     .table td:nth-child(7) {
-        white-space: normal;
-        word-break: break-word;
-        overflow-wrap: break-word;
-        overflow: visible;
-        text-overflow: clip;
-        font-size: 0.7rem;
+        font-size: 0.75rem;
         line-height: 1.25;
         vertical-align: middle;
     }
@@ -98,6 +94,19 @@
         }
         .table .course-title-cell,
         .table .elective-course-cell {
+            font-size: 0.8rem !important;
+        }
+    }
+    /* Mobile: make header + Academic Term smaller on Preview POS */
+    @media (max-width: 575.98px) {
+        .preview-page-header h1.h5 {
+            font-size: 1rem;
+        }
+        .preview-page-header p.text-muted {
+            font-size: 0.8rem;
+        }
+        .preview-academic-term .small,
+        .preview-academic-term .fw-semibold {
             font-size: 0.8rem !important;
         }
     }
@@ -133,8 +142,9 @@
     /* Student profile scroll: keep photo fixed, allow details to scroll on small screens */
     .pos-student-profile-scroll {
         flex: 1 1 auto;
+        max-width: 100%;
     }
-    /* Responsive: same landscape (photo left, details right) on mobile as desktop */
+    /* Match Generate POS mobile student profile layout (landscape, text left, horizontal scroll inside card) */
     @media (max-width: 767.98px) {
         .pos-student-profile-row .preview-photo-box {
             width: 70px;
@@ -150,7 +160,8 @@
             -webkit-overflow-scrolling: touch;
         }
         .pos-student-profile-details {
-            min-width: 660px;
+            min-width: 540px;
+            text-align: left;
         }
     }
     @media (max-width: 575.98px) {
@@ -160,29 +171,29 @@
             min-width: 64px;
             min-height: 64px;
         }
-        .pos-student-profile-row { gap: 0.5rem; align-items: center; }
+        .pos-student-profile-row {
+            gap: 0.5rem;
+            align-items: flex-start;
+        }
         .pos-student-profile-details .text-muted { font-size: 0.6rem; }
         .pos-student-profile-details .fw-semibold { font-size: 0.75rem; }
         .pos-student-profile-details {
-            min-width: 600px;
+            min-width: 520px;
+            text-align: left;
         }
-    }
-    @media (max-width: 380px) {
-        .pos-student-profile-row { flex-direction: column; align-items: center; text-align: center; }
-        .pos-student-profile-details { justify-content: center; }
     }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="mb-3 d-flex justify-content-between align-items-start">
+<div class="mb-3 d-flex justify-content-between align-items-start preview-page-header">
     <div>
         <h1 class="h5 mb-1">Preview Program of Study</h1>
         <p class="text-muted mb-0">
             Read-only view of the generated Program of Study for the selected term.
         </p>
     </div>
-    <div class="text-end">
+    <div class="text-end preview-academic-term">
         <div class="small text-muted text-uppercase">Academic Term</div>
         <div class="fw-semibold">{{ session_academic_year|default:"—" }}{% if session_semester %} · {{ session_semester }}{% endif %}</div>
     </div>
@@ -230,7 +241,7 @@
             <div class="col-4 mb-2">
                 <div class="mb-1">
                     <div class="text-muted text-uppercase">Curriculum</div>
-                    <div class="fw-semibold">BSCpE Curriculum 2025-2026</div>
+                    <div class="fw-semibold text-nowrap">BSCpE Curriculum 2025-2026</div>
                 </div>
                 <div>
                     <div class="text-muted text-uppercase">Campus</div>
@@ -255,12 +266,23 @@
         <h6 class="fw-bold mb-2">{{ section.label }}</h6>
         <div class="table-responsive">
             <table class="table table-sm align-middle table-bordered mb-0">
+                <colgroup>
+                    <col style="width:8%;">   <!-- Code -->
+                    <col style="width:32%;">  <!-- Title -->
+                    <col style="width:4%;">   <!-- Units -->
+                    <col style="width:3%;">   <!-- Lec -->
+                    <col style="width:3%;">   <!-- Lab -->
+                    <col style="width:12%;">  <!-- Pre-req -->
+                    <col style="width:12%;">  <!-- Co-req -->
+                    <col style="width:8%;">   <!-- Final Grade -->
+                    <col style="width:8%;">   <!-- Remarks -->
+                </colgroup>
                 <thead class="table-light">
                     <tr class="text-center">
                         <th rowspan="2" style="width: 8%;">Course Code</th>
                         <th rowspan="2" style="width: 28%;">Course Title</th>
-                        <th rowspan="2" style="width: 5%;">Units</th>
-                        <th colspan="2" class="hours-header" style="width: 8%;">No. of hour/s</th>
+                        <th rowspan="2" style="width: 4%;">Units</th>
+                        <th colspan="2" class="hours-header" style="width: 6%;">No. of hour/s</th>
                         <th rowspan="2" style="width: 12%;">Pre-requisite(s)</th>
                         <th rowspan="2" style="width: 12%;">Co-requisite(s)</th>
                         <th rowspan="2" style="width: 9%;">Final Grade</th>
@@ -350,12 +372,23 @@
                 html +=   '<h6 class="fw-bold mb-2">' + String(label) + '</h6>';
                 html +=   '<div class="table-responsive">';
                 html +=     '<table class="table table-sm align-middle table-bordered mb-0">';
+                html +=       '<colgroup>';
+                html +=         '<col style="width:8%;">';   // Code
+                html +=         '<col style="width:32%;">';  // Title
+                html +=         '<col style="width:4%;">';   // Units
+                html +=         '<col style="width:3%;">';   // Lec
+                html +=         '<col style="width:3%;">';   // Lab
+                html +=         '<col style="width:12%;">';  // Pre-req
+                html +=         '<col style="width:12%;">';  // Co-req
+                html +=         '<col style="width:8%;">';   // Final Grade
+                html +=         '<col style="width:8%;">';   // Remarks
+                html +=       '</colgroup>';
                 html +=       '<thead class="table-light">';
                 html +=         '<tr class="text-center">';
                 html +=           '<th rowspan="2" style="width: 8%;">Course Code</th>';
                 html +=           '<th rowspan="2" style="width: 28%;">Course Title</th>';
-                html +=           '<th rowspan="2" style="width: 5%;">Units</th>';
-                html +=           '<th colspan="2" class="hours-header" style="width: 8%;">No. of hour/s</th>';
+                html +=           '<th rowspan="2" style="width: 4%;">Units</th>';
+                html +=           '<th colspan="2" class="hours-header" style="width: 6%;">No. of hour/s</th>';
                 html +=           '<th rowspan="2" style="width: 12%;">Pre-requisite(s)</th>';
                 html +=           '<th rowspan="2" style="width: 12%;">Co-requisite(s)</th>';
                 html +=           '<th rowspan="2" style="width: 9%;">Final Grade</th>';

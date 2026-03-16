@@ -82,6 +82,11 @@
             background-color: #a0161c;
         }
 
+        /* Utility: justify text (Bootstrap 5 dropped .text-justify) */
+        .text-justify {
+            text-align: justify !important;
+        }
+
         /* Responsive nav: single row, horizontal scroll on small screens (no wrap) */
         .pos-navbar .navbar-collapse {
             flex-basis: auto;
@@ -128,6 +133,7 @@
             padding-top: 1.5rem;
             padding-bottom: 2.5rem;
             flex: 1;
+            overflow-x: hidden;
         }
 
         .pos-sticky-header-wrapper {

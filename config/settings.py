@@ -25,7 +25,7 @@ SECRET_KEY = 'django-insecure-%_33$(i#xpxax&hi*swbaq(l%=rk&3dh)(+29uzt96s4u+gas1
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', '*']  # '*' allows phone access on same Wi-Fi (dev only)
 
 
 # Application definition

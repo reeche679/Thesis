@@ -95,7 +95,7 @@
         top: 40%;
         left: 50%;
         transform: translate(-50%, -50%);
-        opacity: 0.15;
+        opacity: 0.09;
         max-width: 400px;
         width: 50%;
         z-index: 2;
@@ -118,13 +118,25 @@
         justify-content: space-between;
     }
 
+    .login-bottom-row {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+    }
+    .login-create-help-row {
+        display: flex;
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: center;
+        width: 100%;
+    }
     .inner-card .help-links {
-        font-size: 0.9rem;
+        font-size: clamp(0.7rem, 1.8vw, 0.9rem);
         margin-top: auto;
         margin-bottom: 0;
         text-align: right;
         color: #666;
-        align-self: flex-end;
     }
 
     .inner-card .help-links a {
@@ -138,21 +150,15 @@
 
     @media (max-width: 575.98px) {
         .login-bottom-row {
-            flex-direction: column;
-            align-items: flex-start !important;
-            gap: 0.9rem !important;
+            gap: 0.4rem;
         }
         .login-bottom-row .small,
         .login-bottom-row .help-links {
             white-space: nowrap;
         }
-        .login-bottom-row .help-links {
-            align-self: flex-end;
-        }
         .inner-card .help-links {
-            font-size: 0.8rem;
+            font-size: clamp(0.65rem, 2vw, 0.8rem);
             text-align: right;
-            align-self: flex-end;
         }
     }
 
@@ -204,7 +210,7 @@
 
     .inner-card .form-control {
         font-size: 0.85rem;
-        background-color: rgba(255, 255, 255, 0.4);
+        background-color: rgba(255, 255, 255, 0.58);
     }
 
     .inner-card .btn {
@@ -289,7 +295,7 @@
 
     .password-toggle-wrap .password-toggle-btn {
         border-color: #ced4da;
-        background: rgba(255, 255, 255, 0.4);
+        background: rgba(255, 255, 255, 0.58);
         padding: 0.25rem 0.4rem;
         flex: 0 0 auto;
         width: 2.25rem;
@@ -419,18 +425,15 @@
 
                 <hr class="my-4">
 
-                <div class="d-flex justify-content-between align-items-end gap-3 login-bottom-row">
-                    <div>
-                        <div class="small mb-2">Don't have an account yet?</div>
-                        <div class="small mb-0">
-                            <a href="{% url 'register' %}" class="text-decoration-none">Create an account</a>
+                <div class="login-bottom-row">
+                    <div class="small mb-2">Don't have an account yet?</div>
+                    <div class="d-flex justify-content-between align-items-center login-create-help-row">
+                        <a href="{% url 'register' %}" class="text-decoration-none small">Create an account</a>
+                        <div class="help-links mb-0">
+                            <a href="#" data-bs-toggle="modal" data-bs-target="#loginHelpModal">Need Help?</a>
+                            &nbsp;|&nbsp;
+                            <a href="#" data-bs-toggle="modal" data-bs-target="#loginContactModal">Contact Us</a>
                         </div>
-                    </div>
-
-                    <div class="help-links">
-                        <a href="#" data-bs-toggle="modal" data-bs-target="#loginHelpModal">Need Help?</a>
-                        &nbsp;|&nbsp;
-                        <a href="#" data-bs-toggle="modal" data-bs-target="#loginContactModal">Contact Us</a>
                     </div>
                 </div>
                 </div>
