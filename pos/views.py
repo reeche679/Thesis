@@ -672,6 +672,30 @@ def save_pos_grades(request):
 
 @_require_student
 @require_POST
+def delete_pos_data(request):
+    """Delete current POS grades/courses for the logged-in student (keeps History)."""
+    student = get_logged_in_student(request)
+
+    StudentGrade.objects.filter(student=student).delete()
+
+    # Reset session selections so Generate/Preview return to "no input" state
+    for k in (
+        'year_level',
+        'semester',
+        'irreg_start_index',
+        'irreg_current_sem',
+        'irreg_with_petition',
+    ):
+        try:
+            request.session.pop(k, None)
+        except Exception:
+            pass
+
+    return JsonResponse({'ok': True})
+
+
+@_require_student
+@require_POST
 def validate_pos(request):
     """Validate POS: check grades_by_section for failed-unit ratio and completeness. Returns JSON { ok, message, errors }."""
     try:

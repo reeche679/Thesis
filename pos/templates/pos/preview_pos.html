@@ -447,6 +447,16 @@
             return;
         }
 
+        // If POS data was deleted, don't attempt to render stale preview
+        try {
+            var deletedFlag = localStorage.getItem('posDeleted');
+            if (deletedFlag === '1') {
+                localStorage.removeItem('posDeleted');
+                sessionStorage.removeItem('posGeneratedResponse');
+                return;
+            }
+        } catch (e) {}
+
         // Fallback: if user refreshed Preview, regenerate by calling API using stored grades + semester
         var gradesBySection = getGradesBySection();
         var currentSemRaw = localStorage.getItem('posCurrentSemIndex');

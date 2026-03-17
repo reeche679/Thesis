@@ -516,6 +516,14 @@
         gap: 0.5rem;
         flex-shrink: 0;
     }
+    .pos-gear-btn {
+        width: 2.1rem;
+        height: 2.1rem;
+        padding: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
 
     /* Bottom buttons: compact + short labels on mobile so all fit one row */
     #pos-action-buttons .pos-action-btn-text-short { display: none; }
@@ -882,19 +890,48 @@
 
 
     <div class="mt-4" id="pos-action-buttons" {% if not is_regular and not irreg_configured %}style="display:none;"{% endif %}>
-        <button type="button" class="btn btn-outline-secondary" id="validatePosBtn">
-            <span class="pos-action-btn-text-full">Validate POS</span>
-            <span class="pos-action-btn-text-short">Validate</span>
-        </button>
-        <div class="pos-actions-right">
-            <button type="button" class="btn btn-outline-secondary" id="clearGradesBtn">
-                <span class="pos-action-btn-text-full">Clear Grades</span>
-                <span class="pos-action-btn-text-short">Clear</span>
+        <div class="d-flex align-items-center gap-2">
+            <div class="dropdown">
+                <button type="button" class="btn btn-outline-secondary btn-sm pos-gear-btn dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" title="Options">
+                    <i class="bi bi-gear"></i>
+                </button>
+                <ul class="dropdown-menu">
+                    <li><button type="button" class="dropdown-item" id="clearGradesMenuItem">Clear Grades</button></li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li><button type="button" class="dropdown-item text-danger" id="deletePosMenuItem">POS Delete</button></li>
+                </ul>
+            </div>
+
+            <button type="button" class="btn btn-outline-secondary" id="validatePosBtn">
+                <span class="pos-action-btn-text-full">Validate POS</span>
+                <span class="pos-action-btn-text-short">Validate</span>
             </button>
+        </div>
+
+        <div class="pos-actions-right">
             <button type="button" class="btn btn-danger" id="generatePosBtn">
                 <span class="pos-action-btn-text-full">Generate POS</span>
                 <span class="pos-action-btn-text-short">Generate</span>
             </button>
+        </div>
+    </div>
+
+    <!-- POS Delete confirmation -->
+    <div class="modal fade" id="delete-pos-modal" tabindex="-1" aria-labelledby="delete-pos-modal-label" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="delete-pos-modal-label">Delete POS data?</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    Are you sure you want to delete <strong>all</strong> courses and grades from your current POS? This will reset Generate/Preview back to no input, but will <strong>not</strong> delete your History records.
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-danger" id="confirmDeletePosBtn">Delete</button>
+                </div>
+            </div>
         </div>
     </div>
 </div>
@@ -1282,7 +1319,7 @@
         }
     });
 
-    document.getElementById('clearGradesBtn').addEventListener('click', function() {
+    function clearAllGradesUIAndStorage() {
         var gradesToKeep = {};
         var sections = document.querySelectorAll('[id^="main-sem-"]');
         sections.forEach(function(mainSection) {
@@ -1302,7 +1339,49 @@
             gradesToKeep[sectionIndex] = {};
         });
         localStorage.setItem('posGrades', JSON.stringify(gradesToKeep));
-    });
+    }
+
+    var clearMenuItem = document.getElementById('clearGradesMenuItem');
+    if (clearMenuItem) {
+        clearMenuItem.addEventListener('click', function() {
+            clearAllGradesUIAndStorage();
+        });
+    }
+
+    var deleteMenuItem = document.getElementById('deletePosMenuItem');
+    var confirmDeleteBtn = document.getElementById('confirmDeletePosBtn');
+    if (deleteMenuItem && confirmDeleteBtn) {
+        deleteMenuItem.addEventListener('click', function() {
+            var mEl = document.getElementById('delete-pos-modal');
+            if (mEl && typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+                new bootstrap.Modal(mEl).show();
+            }
+        });
+        confirmDeleteBtn.addEventListener('click', function() {
+            confirmDeleteBtn.disabled = true;
+            fetch("{% url 'delete_pos_data' %}", {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+                body: JSON.stringify({}),
+                credentials: 'same-origin'
+            }).then(function(r) { return r.json(); }).then(function(data) {
+                confirmDeleteBtn.disabled = false;
+                if (!data || !data.ok) {
+                    alert('Failed to delete POS data. Please try again.');
+                    return;
+                }
+                try { localStorage.removeItem('posGrades'); } catch (e) {}
+                try { localStorage.removeItem('posCurrentSemIndex'); } catch (e) {}
+                try { sessionStorage.removeItem('posGeneratedResponse'); } catch (e) {}
+                try { localStorage.setItem('posDeleted', '1'); } catch (e) {}
+                // Reload Generate POS without params (resets dropdowns)
+                window.location.href = window.location.pathname;
+            }).catch(function() {
+                confirmDeleteBtn.disabled = false;
+                alert('Failed to delete POS data. Please try again.');
+            });
+        });
+    }
 
     // (Removed) Add Existing Grades (PDF upload/extract)
 

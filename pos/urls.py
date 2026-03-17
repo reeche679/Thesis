@@ -17,6 +17,7 @@ from .views import (
     save_pos_grades,
     set_academic_term,
     delete_pos_record,
+    delete_pos_data,
     validate_pos,
     generate_pos_api,
 )
@@ -33,6 +34,7 @@ urlpatterns = [
     path("generate/", pos_generate, name="pos_generate"),
     path("generate/save-grades/", save_pos_grades, name="save_pos_grades"),
     path("generate/validate-pos/", validate_pos, name="validate_pos"),
+    path("generate/delete-pos/", delete_pos_data, name="delete_pos_data"),
     path("generate/api/", generate_pos_api, name="generate_pos_api"),
 
     path("preview/", pos_preview, name="pos_preview"),
