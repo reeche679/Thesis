@@ -24,6 +24,144 @@
         background-size: 12px 10px;
         padding: 0.15rem 1.1rem 0.15rem 0.4rem;
     }
+
+    /* Custom grade dropdown (Generate POS only) */
+    .grade-cell {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    /* Grade dropdown button (keep the tuned sizing) */
+    .grade-display-btn {
+        min-width: 3.1rem;
+        max-width: 3.6rem;
+        width: 3.35rem;
+        min-height: 1.48rem;
+        padding: 0.19rem 1.05rem 0.19rem 0.35rem;
+        font-size: 0.75rem;
+        line-height: 1;
+        text-align: left;
+        position: relative;
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e");
+        background-repeat: no-repeat;
+        background-position: right 0.25rem center;
+        background-size: 11px 9px;
+    }
+
+    /* Path dropdown buttons (regular/irregular selects) – fill their column */
+    .pos-select-display-btn {
+        min-height: 1.8rem;
+        padding: 0.35rem 1.3rem 0.35rem 0.6rem;
+        font-size: 0.75rem;
+        line-height: 1;
+        text-align: left;
+        position: relative;
+        width: 100%;
+        display: inline-block;
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e");
+        background-repeat: no-repeat;
+        background-position: right 0.25rem center;
+        background-size: 11px 9px;
+    }
+    /* Filled state: reduce vertical padding so text isn't "too tall" */
+    .grade-display-btn.has-grade {
+        padding-top: 0.12rem;
+        padding-bottom: 0.12rem;
+        padding-left: 0.3rem;
+    }
+    .pos-select-display-btn.has-value {
+        padding-top: 0.12rem;
+        padding-bottom: 0.12rem;
+        padding-left: 0.3rem;
+    }
+
+    /* Hover: keep it light gray (not dark) */
+    .grade-display-btn:hover,
+    .pos-select-display-btn:hover {
+        background-color: rgba(108, 117, 125, 0.12) !important;
+        color: inherit !important;
+    }
+    .grade-display-btn:active,
+    .pos-select-display-btn:active {
+        background-color: rgba(108, 117, 125, 0.18) !important;
+    }
+
+    /* Empty state: subtle reddish border to indicate required/unfinished */
+    .grade-display-btn:not(.has-grade),
+    .pos-select-display-btn:not(.has-value) {
+        border-color: rgba(176, 42, 55, 0.85) !important;
+        color: #b02a37 !important;
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23b02a37' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e") !important;
+    }
+    .grade-display-btn:not(.has-grade):focus,
+    .pos-select-display-btn:not(.has-value):focus {
+        box-shadow: 0 0 0 0.15rem rgba(176, 42, 55, 0.22) !important;
+    }
+
+    @media (max-width: 575.98px) {
+        .grade-display-btn { min-height: 1.58rem; }
+        .pos-select-display-btn { min-height: 1.9rem; }
+        /* Regular & irregular path: dropdowns take full row on mobile */
+        .regular-semester-row .pos-select-cell,
+        .irregular-path-config .pos-select-cell {
+            flex: 1 1 100%;
+        }
+        .regular-semester-row .pos-select-display-btn,
+        .irregular-path-config .pos-select-display-btn {
+            width: 100%;
+        }
+    }
+    .grade-cell .grade-select,
+    .grade-cell .edit-grade-select {
+        position: absolute;
+        opacity: 0;
+        pointer-events: none;
+        width: 0;
+        height: 0;
+        padding: 0;
+        margin: 0;
+    }
+    #grade-menu-popup {
+        position: absolute;
+        z-index: 1055;
+        background-color: #ffffff;
+        border: 1px solid rgba(0,0,0,0.15);
+        border-radius: 0.375rem;
+        box-shadow: 0 0.5rem 1rem rgba(0,0,0,0.15);
+        padding: 0.25rem 0;
+        min-width: 4.5rem;
+        max-height: 200px;
+        overflow-y: auto;
+        font-size: 0.8rem;
+        display: none;
+    }
+    #grade-menu-popup button {
+        display: block;
+        width: 100%;
+        padding: 0.2rem 0.6rem;
+        text-align: left;
+        border: none;
+        background: transparent;
+        font-size: 0.8rem;
+    }
+    #grade-menu-popup button:hover,
+    #grade-menu-popup button:focus {
+        background-color: rgba(220,53,69,0.08);
+    }
+    #grade-menu-backdrop {
+        position: fixed;
+        inset: 0;
+        background: transparent;
+        z-index: 1054;
+        display: none;
+    }
+    /* Generic path-select popup list: add left padding so text is not hugging edge */
+    #pos-select-menu-popup button {
+        display: block;
+        width: 100%;
+        padding-left: 0.8rem;
+        text-align: left;
+    }
     /* Regular path layout: label on its own line, dropdown + OK on same row (web & mobile) */
     .regular-ok-btn {
         min-width: 6rem;
@@ -500,7 +638,7 @@
         <div class="col-md-4">
             <label class="form-label small text-uppercase text-muted" for="irreg-current-sem">Your Current Semester</label>
             <select class="form-select form-select-sm" id="irreg-current-sem" required>
-                <option value="" {% if irreg_current_unset %}selected{% endif %}>— Select Semester —</option>
+                <option value="" {% if irreg_current_unset %}selected{% endif %}>- Select Semester -</option>
                 {% for sec in curriculum_sections_dropdown %}
                 <option value="{{ forloop.counter0 }}" {% if not irreg_current_unset and irreg_current_sem == forloop.counter0 %}selected{% endif %}>{{ sec.label }}</option>
                 {% endfor %}
@@ -509,7 +647,7 @@
         <div class="col-md-4">
             <label class="form-label small text-uppercase text-muted" for="irreg-start-sem">When you became irregular</label>
             <select class="form-select form-select-sm" id="irreg-start-sem" required>
-                <option value="" {% if irreg_start_unset %}selected{% endif %}>— Select Semester —</option>
+                <option value="" {% if irreg_start_unset %}selected{% endif %}>- Select Semester -</option>
                 {% for sec in curriculum_sections_dropdown %}
                 <option value="{{ forloop.counter0 }}" {% if not irreg_start_unset and irreg_start_index == forloop.counter0 %}selected{% endif %}>{{ sec.label }}</option>
                 {% endfor %}
@@ -542,7 +680,7 @@
         </label>
         <div class="d-flex align-items-center gap-2 flex-wrap">
             <select class="form-select form-select-sm" id="regular-current-semester">
-                <option value="">— Select current semester —</option>
+                <option value="">- Select Semester -</option>
                 {% for value, label in current_semester_choices_regular %}
                 <option value="{{ value }}" {% if has_generated_pos and current_semester_index == value %}selected{% endif %}>{{ label }}</option>
                 {% endfor %}
@@ -815,6 +953,206 @@
 {{ pos_config|json_script:"pos-config" }}
 <script>
     var GRADE_OPTIONS = ['', '1.00', '1.25', '1.50', '1.75', '2.00', '2.25', '2.50', '2.75', '3.00', '5.00'];
+
+    var gradeMenuPopup = null;
+    var gradeMenuBackdrop = null;
+    var currentGradeSelect = null;
+    var genericMenuPopup = null;
+    var genericCurrentSelect = null;
+
+    function getGradeLabel(value) {
+        return value && value.trim() ? value.trim() : '';
+    }
+
+    function ensureGradeMenuElements() {
+        if (!gradeMenuPopup) {
+            gradeMenuPopup = document.createElement('div');
+            gradeMenuPopup.id = 'grade-menu-popup';
+            document.body.appendChild(gradeMenuPopup);
+        }
+        if (!gradeMenuBackdrop) {
+            gradeMenuBackdrop = document.createElement('div');
+            gradeMenuBackdrop.id = 'grade-menu-backdrop';
+            gradeMenuBackdrop.addEventListener('click', function() {
+                closeGradeMenu();
+                closeGenericMenu();
+            });
+            document.body.appendChild(gradeMenuBackdrop);
+        }
+        if (!genericMenuPopup) {
+            genericMenuPopup = document.createElement('div');
+            genericMenuPopup.id = 'pos-select-menu-popup';
+            genericMenuPopup.className = 'position-absolute bg-white border rounded shadow-sm';
+            genericMenuPopup.style.zIndex = '1055';
+            genericMenuPopup.style.minWidth = '8rem';
+            genericMenuPopup.style.maxHeight = '240px';
+            genericMenuPopup.style.overflowY = 'auto';
+            genericMenuPopup.style.display = 'none';
+            genericMenuPopup.style.padding = '0.25rem 0';
+            document.body.appendChild(genericMenuPopup);
+        }
+    }
+
+    function openGradeMenuForSelect(selectEl, anchorButton) {
+        if (!selectEl || !anchorButton) return;
+        ensureGradeMenuElements();
+        currentGradeSelect = selectEl;
+
+        gradeMenuPopup.innerHTML = '';
+        var currentVal = (selectEl.value || '').trim();
+        GRADE_OPTIONS.forEach(function(opt) {
+            var label = opt ? opt : '__';
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.textContent = label;
+            if (!opt) btn.style.color = '#aaa';
+            if (opt === currentVal || (!opt && !currentVal)) {
+                btn.classList.add('fw-semibold');
+            }
+            btn.addEventListener('click', function() {
+                if (!currentGradeSelect) return;
+                currentGradeSelect.value = opt;
+                var ev = new Event('change', { bubbles: true });
+                currentGradeSelect.dispatchEvent(ev);
+                var cell = currentGradeSelect.closest('.grade-cell');
+                if (cell) {
+                    var displayBtn = cell.querySelector('.grade-display-btn');
+                    if (displayBtn) {
+                        var txt = getGradeLabel(opt);
+                        displayBtn.textContent = txt;
+                        displayBtn.classList.toggle('has-grade', !!txt);
+                    }
+                }
+                closeGradeMenu();
+            });
+            gradeMenuPopup.appendChild(btn);
+        });
+
+        var rect = anchorButton.getBoundingClientRect();
+        var popupWidth = Math.max(gradeMenuPopup.offsetWidth || 0, rect.width);
+        gradeMenuPopup.style.minWidth = popupWidth + 'px';
+
+        var top = rect.bottom + window.scrollY + 4;
+        var left = rect.left + window.scrollX;
+        gradeMenuPopup.style.top = top + 'px';
+        gradeMenuPopup.style.left = left + 'px';
+
+        gradeMenuBackdrop.style.display = 'block';
+        gradeMenuPopup.style.display = 'block';
+    }
+
+    function closeGradeMenu() {
+        if (gradeMenuPopup) gradeMenuPopup.style.display = 'none';
+        if (gradeMenuBackdrop) gradeMenuBackdrop.style.display = 'none';
+        currentGradeSelect = null;
+    }
+
+    function closeGenericMenu() {
+        if (genericMenuPopup) genericMenuPopup.style.display = 'none';
+        if (gradeMenuBackdrop) gradeMenuBackdrop.style.display = 'none';
+        genericCurrentSelect = null;
+    }
+
+    function initGradeSelectVisual(selectEl) {
+        if (!selectEl) return;
+        if (selectEl.closest('.grade-cell')) return;
+        var td = selectEl.closest('td');
+        if (!td) return;
+        var container = document.createElement('div');
+        container.className = 'grade-cell';
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn btn-sm btn-outline-secondary grade-display-btn';
+        var initialTxt = getGradeLabel(selectEl.value || '');
+        btn.textContent = initialTxt;
+        btn.classList.toggle('has-grade', !!initialTxt);
+        btn.addEventListener('click', function() {
+            if (selectEl.disabled) return;
+            openGradeMenuForSelect(selectEl, btn);
+        });
+        td.replaceChild(container, selectEl);
+        container.appendChild(btn);
+        container.appendChild(selectEl);
+    }
+
+    function initGradeDropdowns(root) {
+        var scope = root || document;
+        var selects = scope.querySelectorAll('.grade-select, .edit-grade-select');
+        selects.forEach(function(sel) {
+            initGradeSelectVisual(sel);
+        });
+        ensureGradeMenuElements();
+    }
+
+    function initPosSelectVisual(selectEl) {
+        if (!selectEl) return;
+        if (selectEl.closest('.pos-select-cell')) return;
+        var wrapper = document.createElement('div');
+        wrapper.className = 'pos-select-cell';
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn btn-sm btn-outline-secondary pos-select-display-btn';
+        var selectedOption = selectEl.options[selectEl.selectedIndex];
+        var label = (selectedOption && selectedOption.value) ? selectedOption.textContent.trim() : '';
+        btn.textContent = label || '- Select Semester -';
+        if (label) btn.classList.add('has-value');
+        btn.addEventListener('click', function() {
+            if (selectEl.disabled) return;
+            openGenericMenuForSelect(selectEl, btn);
+        });
+        var parent = selectEl.parentNode;
+        parent.replaceChild(wrapper, selectEl);
+        wrapper.appendChild(btn);
+        wrapper.appendChild(selectEl);
+        selectEl.style.position = 'absolute';
+        selectEl.style.opacity = '0';
+        selectEl.style.pointerEvents = 'none';
+        selectEl.style.width = '0';
+        selectEl.style.height = '0';
+        selectEl.style.padding = '0';
+        selectEl.style.margin = '0';
+    }
+
+    function openGenericMenuForSelect(selectEl, anchorButton) {
+        if (!selectEl || !anchorButton) return;
+        ensureGradeMenuElements();
+        genericCurrentSelect = selectEl;
+        genericMenuPopup.innerHTML = '';
+        for (var i = 0; i < selectEl.options.length; i++) {
+            (function(opt) {
+                var btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'dropdown-item small';
+                btn.textContent = opt.textContent;
+                if (!opt.value) btn.style.color = '#aaa';
+                if (opt.selected) btn.classList.add('fw-semibold');
+                btn.addEventListener('click', function() {
+                    if (!genericCurrentSelect) return;
+                    genericCurrentSelect.value = opt.value;
+                    var ev = new Event('change', { bubbles: true });
+                    genericCurrentSelect.dispatchEvent(ev);
+                    var cell = genericCurrentSelect.closest('.pos-select-cell');
+                    if (cell) {
+                        var displayBtn = cell.querySelector('.pos-select-display-btn');
+                        if (displayBtn) {
+                            var txt = opt.value ? opt.textContent.trim() : '';
+                            displayBtn.textContent = txt || '- Select Semester -';
+                            displayBtn.classList.toggle('has-value', !!txt);
+                        }
+                    }
+                    closeGenericMenu();
+                });
+                genericMenuPopup.appendChild(btn);
+            })(selectEl.options[i]);
+        }
+        var rect = anchorButton.getBoundingClientRect();
+        var popupWidth = Math.max(genericMenuPopup.offsetWidth || 0, rect.width);
+        genericMenuPopup.style.minWidth = popupWidth + 'px';
+        genericMenuPopup.style.top = (rect.bottom + window.scrollY + 4) + 'px';
+        genericMenuPopup.style.left = (rect.left + window.scrollX) + 'px';
+        gradeMenuBackdrop.style.display = 'block';
+        genericMenuPopup.style.display = 'block';
+    }
     var posConfig = (function() {
         var el = document.getElementById('pos-config');
         return el && el.textContent ? JSON.parse(el.textContent) : { is_regular: false, has_generated_pos: false, irreg_configured: false };
@@ -947,12 +1285,30 @@
             var sectionGrades = (sectionIndex !== null) ? (bySection[sectionIndex] || bySection[String(sectionIndex)] || {}) : {};
             mainSection.querySelectorAll('.grade-select').forEach(function(select) {
                 var courseCode = select.getAttribute('data-course-code');
-                if (courseCode && sectionGrades[courseCode]) select.value = sectionGrades[courseCode];
+                if (courseCode && sectionGrades[courseCode]) {
+                    select.value = sectionGrades[courseCode];
+                }
+                var cell = select.closest('.grade-cell');
+                if (cell) {
+                    var displayBtn = cell.querySelector('.grade-display-btn');
+                    if (displayBtn) {
+                        var txt = getGradeLabel(select.value || '');
+                        displayBtn.textContent = txt;
+                        displayBtn.classList.toggle('has-grade', !!txt);
+                    }
+                }
             });
         });
 
         gradeSelects.forEach(function(select) {
             select.addEventListener('change', saveGradesToStorage);
+        });
+
+        initGradeDropdowns(document);
+        // Custom dropdowns for irregular & regular path selects
+        ['irreg-current-sem', 'irreg-start-sem', 'irreg-with-petition', 'regular-current-semester'].forEach(function(id) {
+            var sel = document.getElementById(id);
+            if (sel) initPosSelectVisual(sel);
         });
 
         // Regular path: apply semester only when OK is clicked (dropdown is not hyperlinked)
@@ -982,6 +1338,14 @@
             if (sectionIndex === null) return;
             mainSection.querySelectorAll('.grade-select').forEach(function(select) {
                 select.selectedIndex = 0;
+                var cell = select.closest('.grade-cell');
+                if (cell) {
+                    var displayBtn = cell.querySelector('.grade-display-btn');
+                    if (displayBtn) {
+                        displayBtn.textContent = '';
+                        displayBtn.classList.remove('has-grade');
+                    }
+                }
             });
             gradesToKeep[sectionIndex] = {};
         });
@@ -1624,6 +1988,7 @@
                 gradeSel.disabled = true;
                 gradeSel.title = 'Choose grade after adding';
                 tdGrade.appendChild(gradeSel);
+                initGradeDropdowns(tdGrade);
                 row.innerHTML = '<td class="text-center">' + c.code + '</td><td class="course-title-cell">' + c.title + '</td>' +
                     '<td class="text-center">' + c.units + '</td><td class="text-center">' + c.lec + '</td><td class="text-center">' + c.lab + '</td>' +
                     '<td class="small text-muted text-center">' + (c.prereq || '') + '</td><td class="small text-muted text-center">' + (c.coreq || '') + '</td>';
@@ -1692,6 +2057,17 @@
                     alert('Please select your current semester and when you became irregular to proceed.');
                     return;
                 }
+                var currentIdx = parseInt(currentSem, 10);
+                var startIdx = parseInt(startSem, 10);
+                if (!Number.isFinite(currentIdx) || !Number.isFinite(startIdx)) {
+                    alert('Please select valid semesters to proceed.');
+                    return;
+                }
+                // Current semester must be the same or ahead of when they became irregular
+                if (currentIdx < startIdx) {
+                    alert('Invalid selection: "Your Current Semester" must be the same as or ahead of "When you became irregular".');
+                    return;
+                }
                 var params = [];
                 params.push('current_sem=' + encodeURIComponent(currentSem));
                 params.push('irreg_start=' + encodeURIComponent(startSem));
@@ -1755,6 +2131,7 @@
                 '<td><select class="form-select form-select-sm edit-grade-select" data-course-code="' + code + '">' + gradeOptionsHtml(grade || '') + '</select></td>' +
                 '<td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger edit-remove-row" title="Remove">&times;</button></td>';
             editTbody.appendChild(tr);
+            initGradeDropdowns(tr);
         }
 
         document.body.addEventListener('click', function(e) {
@@ -1839,6 +2216,7 @@
                 tbody.querySelectorAll('.grade-select').forEach(function(sel) {
                     sel.addEventListener('change', saveGradesToStorage);
                 });
+                initGradeDropdowns(sectionDiv);
                 var editBtn = sectionDiv.querySelector('.irreg-edit-section-btn');
                 if (editBtn) { editBtn.classList.remove('irreg-edit-hidden'); editBtn.classList.add('irreg-edit-visible'); }
                 var checkBtn = sectionDiv.querySelector('.irreg-check-section-btn');

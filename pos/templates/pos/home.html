@@ -120,7 +120,7 @@
         top: 0;
         right: 0;
         bottom: 0;
-        background: url('{% static "img/BSU_Logo.png" %}') 90% center / 45% no-repeat;
+        background: url('{% static "img/BSU_Logo.png" %}') 90% center / 30% no-repeat;
         opacity: 0.08;
         pointer-events: none;
         z-index: 0;
@@ -216,9 +216,83 @@
         }
         .home-academic-term .d-flex.gap-2 .btn { width: 100%; }
         .home-academic-year-select { max-width: 100% !important; }
+        /* Mobile: make the faint BSU logo bigger */
+        .home-term-bsu-logo {
+            background-size: 65%;
+            background-position: 88% center;
+        }
     }
     @media (min-width: 576px) {
         .home-academic-year-select { max-width: 240px; }
+    }
+
+    /* Custom dropdown for Academic Year (Home) */
+    .home-select-wrap {
+        position: relative;
+    }
+    .home-select-display-btn {
+        width: 100%;
+        text-align: left;
+        background-color: #fff;
+        border: 1px solid #ced4da;
+        border-radius: 0.25rem;
+        padding: 0.35rem 1.6rem 0.35rem 0.5rem;
+        font-size: 0.875rem;
+        line-height: 1.2;
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e");
+        background-repeat: no-repeat;
+        background-position: right 0.45rem center;
+        background-size: 12px 10px;
+    }
+    .home-select-display-btn:hover {
+        background-color: rgba(108, 117, 125, 0.12);
+    }
+    .home-select-display-btn.is-empty {
+        color: #b02a37;
+        border-color: rgba(176, 42, 55, 0.85);
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23b02a37' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e");
+    }
+    .home-select-display-btn:focus {
+        outline: 0;
+        box-shadow: 0 0 0 0.15rem rgba(13, 110, 253, 0.18);
+        border-color: rgba(13, 110, 253, 0.55);
+    }
+    .home-select-display-btn.is-empty:focus {
+        box-shadow: 0 0 0 0.15rem rgba(176, 42, 55, 0.22);
+        border-color: rgba(176, 42, 55, 0.85);
+    }
+    #home-academic-year-menu {
+        position: absolute;
+        z-index: 1055;
+        background: #fff;
+        border: 1px solid rgba(0,0,0,0.15);
+        border-radius: 0.375rem;
+        box-shadow: 0 0.5rem 1rem rgba(0,0,0,0.15);
+        padding: 0.25rem 0;
+        max-height: 240px;
+        overflow-y: auto;
+        display: none;
+    }
+    #home-academic-year-menu button {
+        display: block;
+        width: 100%;
+        border: none;
+        background: transparent;
+        text-align: left;
+        padding: 0.25rem 0.75rem;
+        font-size: 0.875rem;
+    }
+    #home-academic-year-menu button:hover,
+    #home-academic-year-menu button:focus {
+        background: rgba(13, 110, 253, 0.08);
+        outline: none;
+    }
+    #home-academic-year-backdrop {
+        position: fixed;
+        inset: 0;
+        background: transparent;
+        z-index: 1054;
+        display: none;
     }
 </style>
 {% endblock %}
@@ -275,12 +349,16 @@
                 <input type="hidden" name="next" value="{% url 'pos_generate' %}">
                 <div class="mb-3">
                     <label class="text-muted small text-uppercase" for="id_academic_year">ACADEMIC YEAR</label>
-                    <select name="academic_year" id="id_academic_year" class="form-select form-select-sm home-academic-year-select">
-                        <option value="">-- Select --</option>
-                        {% for value, label in academic_year_choices %}
-                        <option value="{{ value }}" {% if session_academic_year == value %}selected{% endif %}>{{ label }}</option>
-                        {% endfor %}
-                    </select>
+                    <div class="home-academic-year-select home-select-wrap">
+                        <button type="button" class="home-select-display-btn" id="home-academic-year-btn"></button>
+                        <select name="academic_year" id="id_academic_year" class="form-select form-select-sm home-academic-year-select" style="position:absolute;opacity:0;pointer-events:none;width:0;height:0;padding:0;margin:0;">
+                            <option value="">-- Select --</option>
+                            {% for value, label in academic_year_choices %}
+                            <option value="{{ value }}" {% if session_academic_year == value %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                        <div id="home-academic-year-menu" role="listbox" aria-label="Academic year options"></div>
+                    </div>
                 </div>
 
                 {% if not has_generated_pos %}
@@ -322,6 +400,70 @@
 {% block extra_scripts %}
 <script>
     document.addEventListener('DOMContentLoaded', function() {
+        // Custom Academic Year dropdown (Home)
+        var aySelect = document.getElementById('id_academic_year');
+        var ayBtn = document.getElementById('home-academic-year-btn');
+        var ayMenu = document.getElementById('home-academic-year-menu');
+        if (aySelect && ayBtn && ayMenu) {
+            var backdrop = document.getElementById('home-academic-year-backdrop');
+            if (!backdrop) {
+                backdrop = document.createElement('div');
+                backdrop.id = 'home-academic-year-backdrop';
+                backdrop.addEventListener('click', closeAyMenu);
+                document.body.appendChild(backdrop);
+            }
+            // Ensure the popup menu is positioned relative to the page, not inside the card
+            if (ayMenu.parentNode !== document.body) {
+                document.body.appendChild(ayMenu);
+            }
+
+            function syncBtn() {
+                var opt = aySelect.options[aySelect.selectedIndex];
+                var hasValue = !!(opt && opt.value);
+                ayBtn.textContent = hasValue ? opt.textContent.trim() : '-- Select Academic Year --';
+                ayBtn.classList.toggle('is-empty', !hasValue);
+            }
+            function closeAyMenu() {
+                ayMenu.style.display = 'none';
+                backdrop.style.display = 'none';
+            }
+            function openAyMenu() {
+                ayMenu.innerHTML = '';
+                for (var i = 0; i < aySelect.options.length; i++) {
+                    (function(opt) {
+                        var b = document.createElement('button');
+                        b.type = 'button';
+                        b.textContent = opt.textContent;
+                        if (!opt.value) b.style.color = '#aaa';
+                        if (opt.selected) b.classList.add('fw-semibold');
+                        b.addEventListener('click', function() {
+                            aySelect.value = opt.value;
+                            aySelect.dispatchEvent(new Event('change', { bubbles: true }));
+                            syncBtn();
+                            closeAyMenu();
+                        });
+                        ayMenu.appendChild(b);
+                    })(aySelect.options[i]);
+                }
+
+                var rect = ayBtn.getBoundingClientRect();
+                ayMenu.style.minWidth = rect.width + 'px';
+                ayMenu.style.top = (rect.bottom + window.scrollY + 4) + 'px';
+                ayMenu.style.left = (rect.left + window.scrollX) + 'px';
+                ayMenu.style.display = 'block';
+                backdrop.style.display = 'block';
+            }
+
+            syncBtn();
+            ayBtn.addEventListener('click', function() {
+                if (ayMenu.style.display === 'block') closeAyMenu();
+                else openAyMenu();
+            });
+            window.addEventListener('resize', function() {
+                if (ayMenu.style.display === 'block') closeAyMenu();
+            });
+        }
+
         var btn = document.getElementById('home-email-toggle');
         var emailEl = document.getElementById('home-email-value');
         if (btn && emailEl) {

@@ -4,11 +4,15 @@
 <head>
     <meta charset="UTF-8">
     <title>{% block title %}Program of Study Generation System{% endblock %}</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
     <link rel="icon" type="image/png" href="{% static 'img/BSU_Logo.png' %}">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
     <style>
+        html, body {
+            overflow-x: hidden;
+        }
+
         body {
             font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
             background: url('{% static "img/BSU_Background.jpg" %}') no-repeat center center fixed;
@@ -378,6 +382,16 @@
             .pos-header-title { font-size: 0.7rem; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
             .pos-header-subtitle { font-size: 0.6rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
             .pos-header-logo { width: 36px; height: 36px; flex-shrink: 0; }
+
+            /* Mobile: unify dropdown size (all selects) */
+            .pos-main select,
+            .pos-main .form-select {
+                font-size: 0.8rem;
+                padding: 0.25rem 1.75rem 0.25rem 0.5rem;
+                height: 2rem;
+                /* Keep default Bootstrap radius instead of fully curved pill */
+                border-radius: 0.375rem;
+            }
         }
 
         /* Global: allow long course titles to wrap in tables */
