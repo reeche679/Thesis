@@ -223,11 +223,6 @@
         line-height: 1.2;
     }
 
-    /* Extract loading overlay: circular progress (stroke-dasharray set by JS) */
-    .extract-progress-fill {
-        transition: stroke-dasharray 0.2s ease;
-    }
-
     /* "No. of hour/s" - small so it fits above Lec and Lab only */
     .table thead th.hours-header {
         font-size: 0.7rem;
@@ -691,46 +686,6 @@
 </div>
 {% endif %}
 
-<div class="modal fade" id="upload-grades-modal" tabindex="-1" aria-labelledby="upload-grades-modal-label" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="upload-grades-modal-label">Add Existing Grades</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <p class="small text-muted">Upload a PDF or scanned copy of your POS. The system will read year level, semester, course codes, and grades. Only valid course codes and grades (1.00–3.00, 5.00) are accepted. Extracted data will replace your current grades and open in <strong>Preview</strong> (read-only). To edit grades, go to Generate POS from the menu after preview.</p>
-                <div class="mb-3">
-                    <label class="form-label small" for="id_pos_pdf">Select PDF</label>
-                    <input type="file" class="form-control form-control-sm" id="id_pos_pdf" name="pos_pdf" accept=".pdf,application/pdf">
-                </div>
-                <div id="upload-grades-errors" class="alert alert-danger small py-2 d-none" role="alert"></div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-primary" id="upload-grades-submit-btn">Upload and Extract</button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Full-screen loading overlay during PDF extraction: only Cancel is clickable -->
-<div id="extract-loading-overlay" class="position-fixed top-0 start-0 w-100 h-100 d-none" style="z-index: 9999; background: rgba(0,0,0,0.5); pointer-events: auto;">
-    <div class="d-flex align-items-center justify-content-center h-100">
-        <div class="bg-white rounded shadow-sm p-4 text-center" style="min-width: 200px; pointer-events: auto;">
-            <div class="extract-progress-ring mx-auto mb-2" style="width: 64px; height: 64px;">
-                <svg viewBox="0 0 36 36" class="d-block w-100 h-100">
-                    <path class="extract-progress-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#eee" stroke-width="3"/>
-                    <path class="extract-progress-fill" id="extract-progress-fill" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#0d6efd" stroke-width="3" stroke-dasharray="100, 100" stroke-linecap="round" transform="rotate(-90 18 18)"/>
-                </svg>
-            </div>
-            <div id="extract-progress-pct" class="small fw-semibold mb-1">0%</div>
-            <div class="small text-muted mb-3">Extracting POS Grades...</div>
-            <button type="button" class="btn btn-sm btn-outline-secondary" id="extract-loading-cancel">Cancel</button>
-        </div>
-    </div>
-</div>
-
 <div class="modal fade" id="irregular-add-modal" tabindex="-1" aria-labelledby="irregular-add-modal-label" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-scrollable">
         <div class="modal-content">
@@ -817,9 +772,6 @@
 <div class="pos-card p-4">
     <div class="mb-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
         <div class="pos-section-title mb-0">Course List by Semester</div>
-        <button type="button" class="btn btn-sm btn-outline-secondary" id="addExistingGradesBtn" title="Upload PDF or scanned POS to extract grades">
-            Add Existing Grades
-        </button>
     </div>
 
     {% if not is_regular and not irreg_configured %}
@@ -1352,169 +1304,7 @@
         localStorage.setItem('posGrades', JSON.stringify(gradesToKeep));
     });
 
-    document.getElementById('addExistingGradesBtn').addEventListener('click', function() {
-        var modal = document.getElementById('upload-grades-modal');
-        document.getElementById('id_pos_pdf').value = '';
-        document.getElementById('upload-grades-errors').classList.add('d-none');
-        if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
-            new bootstrap.Modal(modal).show();
-        } else {
-            modal.classList.add('show');
-            modal.style.display = 'block';
-        }
-    });
-
-    (function() {
-        var overlay = document.getElementById('extract-loading-overlay');
-        var progressFill = document.getElementById('extract-progress-fill');
-        var progressPct = document.getElementById('extract-progress-pct');
-        var cancelBtn = document.getElementById('extract-loading-cancel');
-        var progressInterval = null;
-        var extractAbortController = null;
-        var displayedProgress = 0;  // what we show (animates 1, 2, 3, ...)
-        var targetProgress = 0;     // latest value from server
-
-        function setProgress(pct) {
-            pct = Math.min(100, Math.max(0, pct));
-            var dash = (pct / 100) * 100;
-            if (progressFill) progressFill.setAttribute('stroke-dasharray', dash + ', 100');
-            if (progressPct) progressPct.textContent = Math.round(pct) + '%';
-        }
-
-        function setTarget(pct) {
-            targetProgress = Math.min(100, Math.max(targetProgress, Math.max(0, pct)));
-        }
-
-        function startProgressAnimation() {
-            displayedProgress = 0;
-            targetProgress = 0;
-            setProgress(0);
-            if (progressInterval) clearInterval(progressInterval);
-            progressInterval = setInterval(function() {
-                if (displayedProgress < targetProgress) {
-                    displayedProgress += 1;
-                    setProgress(displayedProgress);
-                }
-                if (displayedProgress >= 100) clearInterval(progressInterval);
-            }, 250);
-        }
-
-        function hideOverlay() {
-            if (progressInterval) { clearInterval(progressInterval); progressInterval = null; }
-            if (overlay) overlay.classList.add('d-none');
-            displayedProgress = 0;
-            targetProgress = 0;
-            setProgress(0);
-        }
-
-        document.getElementById('upload-grades-submit-btn').addEventListener('click', function() {
-            var input = document.getElementById('id_pos_pdf');
-            var errEl = document.getElementById('upload-grades-errors');
-            errEl.classList.add('d-none');
-            if (!input.files || !input.files.length) {
-                errEl.textContent = 'Please select a PDF file.';
-                errEl.classList.remove('d-none');
-                return;
-            }
-            var formData = new FormData();
-            formData.append('pos_pdf', input.files[0]);
-            formData.append('csrfmiddlewaretoken', getCookie('csrftoken'));
-            var btn = document.getElementById('upload-grades-submit-btn');
-            btn.disabled = true;
-            input.disabled = true;
-            overlay.classList.remove('d-none');
-            startProgressAnimation();
-            extractAbortController = new AbortController();
-            fetch("{% url 'upload_pos_grades' %}", {
-                method: 'POST',
-                body: formData,
-                credentials: 'same-origin',
-                headers: { 'X-CSRFToken': getCookie('csrftoken') },
-                signal: extractAbortController.signal
-            }).then(function(r) {
-                if (!r.ok) return r.json().then(function(d) { throw d; });
-                return r.body.getReader();
-            }).then(function(reader) {
-                var decoder = new TextDecoder();
-                var buffer = '';
-                function read() {
-                    return reader.read().then(function(result) {
-                        if (result.done) {
-                            if (buffer.trim()) {
-                                var line = buffer.trim();
-                                var pct = parseInt(line, 10);
-                                if (!isNaN(pct)) setTarget(pct);
-                                else try {
-                                    var data = JSON.parse(line);
-                                    handleResult(data);
-                                } catch (err) {}
-                            }
-                            return;
-                        }
-                        buffer += decoder.decode(result.value, { stream: true });
-                        var lines = buffer.split('\n');
-                        buffer = lines.pop() || '';
-                        for (var i = 0; i < lines.length; i++) {
-                            var line = lines[i].trim();
-                            if (!line) continue;
-                            var pct = parseInt(line, 10);
-                            if (!isNaN(pct)) setTarget(pct);
-                            else try {
-                                var data = JSON.parse(line);
-                                handleResult(data);
-                                return;
-                            } catch (err) {}
-                        }
-                        return read();
-                    });
-                }
-                function handleResult(data) {
-                    setTarget(100);
-                    if (data.ok && data.redirect) {
-                        var modal = document.getElementById('upload-grades-modal');
-                        if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
-                            var m = bootstrap.Modal.getInstance(modal);
-                            if (m) m.hide();
-                        }
-                        // Wait until the visual progress reaches 100% before redirecting
-                        var redirectUrl = data.redirect;
-                        var waitId = setInterval(function() {
-                            if (displayedProgress >= 100) {
-                                clearInterval(waitId);
-                                btn.disabled = false;
-                                input.disabled = false;
-                                window.location.href = redirectUrl;
-                            }
-                        }, 100);
-                    } else {
-                        hideOverlay();
-                        btn.disabled = false;
-                        input.disabled = false;
-                        errEl.innerHTML = (data.errors && data.errors.length) ? data.errors.join('<br>') : (data.error || 'Upload failed.');
-                        errEl.classList.remove('d-none');
-                    }
-                }
-                return read();
-            }).catch(function(e) {
-                hideOverlay();
-                btn.disabled = false;
-                input.disabled = false;
-                if (e && e.name === 'AbortError') return;
-                var msg = (e && e.errors && e.errors.length) ? e.errors.join('<br>') : (e && e.message) || 'Upload failed. Please try again.';
-                errEl.innerHTML = msg;
-                errEl.classList.remove('d-none');
-            });
-        });
-
-        cancelBtn.addEventListener('click', function() {
-            if (extractAbortController) extractAbortController.abort();
-            hideOverlay();
-            var btn = document.getElementById('upload-grades-submit-btn');
-            var input = document.getElementById('id_pos_pdf');
-            if (btn) btn.disabled = false;
-            if (input) input.disabled = false;
-        });
-    })();
+    // (Removed) Add Existing Grades (PDF upload/extract)
 
     var validatePosBtn = document.getElementById('validatePosBtn');
     if (validatePosBtn) {

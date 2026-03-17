@@ -340,7 +340,7 @@
 
             {% if required_term %}
             <div class="alert alert-warning small mb-3" role="alert">
-                Complete your information before proceeding. Upload your <strong>photo</strong> above and select <strong>Academic Year</strong>{% if not has_generated_pos %} and <strong>path (Regular/Irregular)</strong>{% endif %}. Then you can use <strong>Generate POS</strong> below.
+                Complete your information before proceeding. Upload your <strong>photo</strong> above and select <strong>Academic Year</strong> and <strong>path (Regular/Irregular)</strong>. Then you can use <strong>Generate POS</strong> below.
             </div>
             {% endif %}
 
@@ -361,7 +361,6 @@
                     </div>
                 </div>
 
-                {% if not has_generated_pos %}
                 <div class="mb-3">
                     <label class="text-muted small text-uppercase d-block mb-2">PATH</label>
                     <div class="path-toggle-group">
@@ -375,7 +374,6 @@
                         </label>
                     </div>
                 </div>
-                {% endif %}
             </form>
 
             <hr>

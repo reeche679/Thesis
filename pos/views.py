@@ -1,16 +1,13 @@
 """
 Views for POS templates and auth (register, login, session).
 """
-import io
 import json
 import re
 import os
-import threading
-import time
 from django.conf import settings
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
-from django.http import HttpResponse, HttpResponseBadRequest, JsonResponse, StreamingHttpResponse
+from django.http import HttpResponse, HttpResponseBadRequest, JsonResponse
 from django.views.decorators.http import require_POST
 from django.views.decorators.csrf import ensure_csrf_cookie, csrf_exempt
 
@@ -671,70 +668,6 @@ def save_pos_grades(request):
         _prune_old_pos_records(student)
         request.session['pos_path'] = 'irregular'
     return JsonResponse({'ok': True})
-
-
-@_require_student
-@require_POST
-def upload_pos_grades(request):
-    """Upload a PDF; extract grades with real progress. Returns streaming response: progress lines (0-100) then JSON."""
-    if not _has_academic_term(request) or not _has_profile_photo(request):
-        return JsonResponse({'ok': False, 'errors': ['Complete your profile and set academic term first.']}, status=400)
-    student = get_logged_in_student(request)
-    pdf_file = request.FILES.get('pos_pdf') or request.FILES.get('file')
-    if not pdf_file:
-        return JsonResponse({'ok': False, 'errors': ['No file uploaded.']}, status=400)
-    name = (pdf_file.name or '').lower()
-    if not name.endswith('.pdf'):
-        return JsonResponse({'ok': False, 'errors': ['Only PDF files are accepted.']}, status=400)
-
-    raw = pdf_file.read()
-    progress_list = [0]
-    result_holder = {}
-
-    def run_extraction():
-        try:
-            from .pos_extract import extract_pos_from_pdf
-            g, e = extract_pos_from_pdf(io.BytesIO(raw), progress_list=progress_list)
-            result_holder['grades'] = g
-            result_holder['errors'] = e
-        except Exception as ex:
-            result_holder['grades'] = {}
-            result_holder['errors'] = ['Failed to read PDF: {}'.format(str(ex))]
-
-    def stream():
-        t = threading.Thread(target=run_extraction)
-        t.start()
-        while t.is_alive():
-            yield str(progress_list[0]) + "\n"
-            # Send progress updates more frequently so the frontend bar moves smoothly
-            time.sleep(0.1)
-        yield "100\n"
-        grades_by_section = result_holder.get('grades') or {}
-        errors = result_holder.get('errors') or []
-        if errors:
-            yield json.dumps({'ok': False, 'errors': errors}) + "\n"
-            return
-        if not grades_by_section:
-            yield json.dumps({'ok': False, 'errors': ['No valid grades found in PDF. Ensure course codes and grades (1.00–3.00, 5.00) are readable.']}) + "\n"
-            return
-        StudentGrade.objects.filter(student=student).delete()
-        for section_key, section_dict in grades_by_section.items():
-            try:
-                si = int(section_key)
-            except (ValueError, TypeError):
-                continue
-            for course_code, grade in section_dict.items():
-                if course_code and grade:
-                    StudentGrade.objects.create(
-                        student=student,
-                        course_code=str(course_code).strip(),
-                        grade=str(grade).strip(),
-                        section_index=si,
-                    )
-        request.session['pos_path'] = 'irregular'
-        yield json.dumps({'ok': True, 'redirect': reverse('pos_preview')}) + "\n"
-
-    return StreamingHttpResponse(stream(), content_type='application/x-ndjson')
 
 
 @_require_student

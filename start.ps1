@@ -36,10 +36,6 @@ if (-not (Test-Path $activateScript)) {
     & $activateScript
 }
 
-Write-Host "Ensuring PDF/OCR deps (pymupdf, easyocr)... first time may take a minute." -ForegroundColor Gray
-pip install pymupdf easyocr numpy --quiet
-if ($LASTEXITCODE -ne 0) { Write-Host "Warning: PDF/OCR install failed; scanned PDF upload may not work." -ForegroundColor Yellow }
-
 $ip = (Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.IPAddress -ne '127.0.0.1' -and $_.PrefixOrigin -ne 'WellKnown' } | Select-Object -First 1).IPAddress
 if (-not $ip) { $ip = "YOUR_PC_IP" }
 
