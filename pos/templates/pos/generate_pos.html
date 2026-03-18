@@ -934,6 +934,26 @@
             </div>
         </div>
     </div>
+
+    <!-- Generated POS preview (from solver) -->
+    <div class="modal fade" id="generated-pos-modal" tabindex="-1" aria-labelledby="generated-pos-modal-label" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="generated-pos-modal-label">Generated Program of Study</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="generated-pos-error" class="alert alert-danger d-none" role="alert"></div>
+                    <div id="generated-pos-container"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary" id="goToPreviewBtn">Go to Preview</button>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 {% endblock %}
 
@@ -1383,6 +1403,14 @@
         });
     }
 
+    var goToPreviewBtn = document.getElementById('goToPreviewBtn');
+    if (goToPreviewBtn) {
+        goToPreviewBtn.addEventListener('click', function() {
+            var previewUrl = "{% url 'pos_preview' %}?t=" + Date.now();
+            window.location.href = previewUrl;
+        });
+    }
+
     // (Removed) Add Existing Grades (PDF upload/extract)
 
     var validatePosBtn = document.getElementById('validatePosBtn');
@@ -1481,17 +1509,6 @@
             return;
         }
         var gradesBySection = mergedGradesForSave();
-        var payload = { grades_by_section: gradesBySection };
-        var jsonStr = JSON.stringify(payload, null, 2);
-        var blob = new Blob([jsonStr], { type: 'application/json;charset=utf-8;' });
-        var url = URL.createObjectURL(blob);
-        var a = document.createElement('a');
-        a.href = url;
-        a.download = 'pos_grades.json';
-        a.style.display = 'none';
-        document.body.appendChild(a);
-        a.click();
-        setTimeout(function() { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
         localStorage.setItem('posGrades', JSON.stringify(gradesBySection));
         // Persist current semester index so Preview can call /generate/api consistently
         try {
@@ -1534,15 +1551,124 @@
             // If a course is both in passed and failed (retake), keep it in passed.
             passed.forEach(function(code) { if (failed.has(code)) failed.delete(code); });
 
-            var currentSem = localStorage.getItem('posCurrentSemIndex');
-            var currentSemInt = currentSem !== null && currentSem !== '' ? parseInt(currentSem, 10) : null;
+            // NOTE: UI uses 0-based "section index" (0=1st Yr 1st Sem).
+            // Solver uses 1-based "semester_index" (1=1st Yr 1st Sem).
+            // Therefore: solver_sem = ui_section + 1.
+            var currentSemInt = 1; // default to solver sem 1
+            if (IS_REGULAR) {
+                var regSel = document.getElementById('regular-current-semester');
+                if (regSel && regSel.value !== '') {
+                    var finishedSectionIdx = parseInt(regSel.value, 10);
+                    if (!isNaN(finishedSectionIdx)) {
+                        // Regular: dropdown is LAST finished section.
+                        // Next section to schedule = finishedSectionIdx + 1 (still UI index).
+                        // Convert to solver semester_index by adding 1 more.
+                        currentSemInt = finishedSectionIdx + 2;
+                    }
+                }
+            } else {
+                var irSel = document.getElementById('irreg-current-sem');
+                if (irSel && irSel.value !== '') {
+                    var currentSectionIdx = parseInt(irSel.value, 10);
+                    if (!isNaN(currentSectionIdx)) {
+                        // Irregular: dropdown is CURRENT semester section (UI index).
+                        currentSemInt = currentSectionIdx + 1;
+                    }
+                }
+            }
+
+            var withPetition = false;
+            if (!IS_REGULAR) {
+                var petitionSel = document.getElementById('irreg-with-petition');
+                if (petitionSel && petitionSel.value === 'yes') {
+                    withPetition = true;
+                }
+            }
 
             return {
                 current_sem: currentSemInt,
                 passed_courses: Array.from(passed),
                 failed_courses: Array.from(failed),
-                probation: false
+                with_petition: withPetition
             };
+        }
+
+        // Download the exact solver payload JSON (matches /generate/api contract)
+        try {
+            var solverPayloadForDownload = buildSolverPayloadFromGrades(gradesBySection);
+            var jsonStr = JSON.stringify(solverPayloadForDownload, null, 2);
+            var blob = new Blob([jsonStr], { type: 'application/json;charset=utf-8;' });
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url;
+            a.download = 'pos_payload.json';
+            a.style.display = 'none';
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(function() { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+        } catch (e) {}
+
+        function renderGeneratedPos(pos) {
+            var container = document.getElementById('generated-pos-container');
+            if (!container) return;
+            container.innerHTML = '';
+
+            (pos || []).forEach(function(sem) {
+                var card = document.createElement('div');
+                card.className = 'pos-card p-3 mb-3';
+                var title = document.createElement('div');
+                title.className = 'fw-bold mb-2 text-center';
+                title.textContent = (sem.label || ('Semester ' + sem.semester_index)) + ' — ' + (sem.total_units || 0) + ' units';
+                card.appendChild(title);
+
+                var tableWrap = document.createElement('div');
+                tableWrap.className = 'table-responsive';
+                var table = document.createElement('table');
+                table.className = 'table table-sm table-bordered mb-0';
+                table.innerHTML =
+                    '<thead class="table-light"><tr>' +
+                    '<th style="width:18%">Course Code</th>' +
+                    '<th>Course Title</th>' +
+                    '<th style="width:10%">Units</th>' +
+                    '</tr></thead><tbody></tbody>';
+                var tbody = table.querySelector('tbody');
+                (sem.courses || []).forEach(function(c) {
+                    var tr = document.createElement('tr');
+                    tr.innerHTML =
+                        '<td class="text-center">' + (c.code || '') + '</td>' +
+                        '<td class="course-title-cell">' + (c.title || '') + '</td>' +
+                        '<td class="text-center">' + (c.units != null ? c.units : '') + '</td>';
+                    tbody.appendChild(tr);
+                });
+                tableWrap.appendChild(table);
+                card.appendChild(tableWrap);
+                container.appendChild(card);
+            });
+        }
+
+        function showGeneratedPosModal(result) {
+            var errEl = document.getElementById('generated-pos-error');
+            if (errEl) errEl.classList.add('d-none');
+
+            if (!result || result.status !== 'ok') {
+                var msg = (result && (result.message || result.error)) || 'Solver could not generate a POS.';
+                if (errEl) {
+                    errEl.textContent = msg;
+                    errEl.classList.remove('d-none');
+                } else {
+                    alert(msg);
+                }
+            } else {
+                renderGeneratedPos(result.pos || []);
+            }
+
+            var modalEl = document.getElementById('generated-pos-modal');
+            if (modalEl && typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+                new bootstrap.Modal(modalEl).show();
+            } else if (modalEl) {
+                modalEl.classList.add('show');
+                modalEl.style.display = 'block';
+            }
         }
 
         saveGradesToServer(gradesBySection, true, function(data) {
@@ -1551,17 +1677,16 @@
                 var solverPayload = buildSolverPayloadFromGrades(gradesBySection);
                 fetch("{% url 'generate_pos_api' %}", {
                     method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(solverPayload)
+                    headers: { "Content-Type": "application/json", "X-CSRFToken": getCookie('csrftoken') },
+                    body: JSON.stringify(solverPayload),
+                    credentials: "same-origin"
                 }).then(function(r) { return r.json(); })
                   .then(function(res) {
                       try { sessionStorage.setItem('posGeneratedResponse', JSON.stringify(res)); } catch (e) {}
-                      var previewUrl = "{% url 'pos_preview' %}?t=" + Date.now();
-                      setTimeout(function() { window.location.href = previewUrl; }, 100);
+                      showGeneratedPosModal(res);
                   })
                   .catch(function() {
-                      var previewUrl = "{% url 'pos_preview' %}?t=" + Date.now();
-                      setTimeout(function() { window.location.href = previewUrl; }, 100);
+                      showGeneratedPosModal({ status: "infeasible", message: "Request to generate POS failed. Please try again.", pos: [] });
                   });
             } else {
                 alert('Failed to save grades. Please try again.');

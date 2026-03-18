@@ -687,3 +687,116 @@ def build_pos_pdf(student_name, sr_code, academic_year, grades_by_section=None, 
     doc.build(story, onFirstPage=page_canvas, onLaterPages=page_canvas)
     buffer.seek(0)
     return buffer.getvalue()
+
+
+def build_generated_pos_pdf(student_name, sr_code, academic_year, pos, eval_date=None, logo_path=None):
+    """
+    Build a PDF from the solver-generated POS (list of semesters with courses).
+
+    This is intentionally simpler than the curriculum template PDF: it prints the
+    generated schedule by semester using the same page header/footer styling.
+
+    `pos` is expected to be the solver output list:
+      [{ "semester_index": int, "label": str, "total_units": int, "courses": [{code,title,units}, ...] }, ...]
+    """
+    if eval_date is None:
+        eval_date = date.today()
+    date_str = eval_date.strftime("%B %d, %Y")
+
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=legal,
+        leftMargin=0.5 * inch,
+        rightMargin=0.5 * inch,
+        topMargin=2.15 * inch,
+        bottomMargin=1.0 * inch,
+    )
+
+    styles = getSampleStyleSheet()
+    normal = styles["Normal"]
+    cell_style = _cell_style()
+    header_cell_style = _header_cell_style()
+
+    title_style = ParagraphStyle(
+        name="GenTitle",
+        parent=normal,
+        fontSize=12,
+        fontName="Times-Bold",
+        alignment=1,
+        spaceAfter=8,
+    )
+    meta_style = ParagraphStyle(
+        name="GenMeta",
+        parent=normal,
+        fontSize=9,
+        fontName="Times-Roman",
+        alignment=1,
+        spaceAfter=12,
+    )
+    sem_style = ParagraphStyle(
+        name="GenSemester",
+        parent=normal,
+        fontSize=10,
+        fontName="Times-Bold",
+        alignment=1,
+        spaceBefore=10,
+        spaceAfter=6,
+    )
+
+    story = []
+    story.append(Paragraph("Generated Program of Study", title_style))
+    story.append(
+        Paragraph(
+            f"{student_name} &nbsp;&nbsp;|&nbsp;&nbsp; {sr_code} &nbsp;&nbsp;|&nbsp;&nbsp; {academic_year} &nbsp;&nbsp;|&nbsp;&nbsp; Evaluated: {date_str}",
+            meta_style,
+        )
+    )
+
+    for sem in (pos or []):
+        label = sem.get("label") or f"Semester {sem.get('semester_index', '')}"
+        total_units = sem.get("total_units", 0) or 0
+        story.append(Paragraph(f"{label} — {total_units} units", sem_style))
+
+        table_data = [
+            [
+                Paragraph("<b>Course Code</b>", header_cell_style),
+                Paragraph("<b>Course Title</b>", header_cell_style),
+                Paragraph("<b>Units</b>", header_cell_style),
+            ]
+        ]
+        for c in (sem.get("courses") or []):
+            table_data.append(
+                [
+                    Paragraph(str(c.get("code", "")), cell_style),
+                    Paragraph(str(c.get("title", "")), cell_style),
+                    Paragraph(str(c.get("units", "")), cell_style),
+                ]
+            )
+
+        t = Table(table_data, colWidths=[1.2 * inch, 5.8 * inch, 0.8 * inch], repeatRows=1)
+        t.setStyle(
+            TableStyle(
+                [
+                    ("BOX", (0, 0), (-1, -1), 0.5, colors.black),
+                    ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.black),
+                    ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                    ("ALIGN", (0, 0), (0, -1), "CENTER"),
+                    ("ALIGN", (2, 0), (2, -1), "CENTER"),
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.whitesmoke),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 4),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+                    ("TOPPADDING", (0, 0), (-1, -1), 3),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+                ]
+            )
+        )
+        story.append(t)
+
+    def page_canvas(canvas, doc):
+        _page_header_canvas(canvas, logo_path)
+        _footer_canvas(canvas, doc)
+
+    doc.build(story, onFirstPage=page_canvas, onLaterPages=page_canvas)
+    buffer.seek(0)
+    return buffer.getvalue()

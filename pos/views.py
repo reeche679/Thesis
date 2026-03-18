@@ -784,6 +784,16 @@ def generate_pos_api(request):
     except RuntimeError as e:
         return JsonResponse({"error": str(e)}, status=500)
 
+    # If called from the authenticated app UI, cache the last generated solver output in session
+    # so we can generate a PDF from it on demand.
+    try:
+        student = get_logged_in_student(request)
+        if student is not None and isinstance(result, dict) and result.get("status") == "ok":
+            request.session["last_generated_pos"] = result.get("pos") or []
+            request.session["last_generated_payload"] = payload
+    except Exception:
+        pass
+
     return JsonResponse(result)
 
 
@@ -838,6 +848,38 @@ def download_pos_pdf(request):
         logo_path=logo_path,
     )
     filename = f"POS_{student.sr_code or 'POS'}.pdf"
+    response = HttpResponse(pdf_bytes, content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response
+
+
+@_require_student
+def download_generated_pos_pdf(request):
+    """
+    Download a PDF built from the last solver-generated POS (stored in session).
+
+    This is distinct from `download_pos_pdf` (which is based on grades_by_section).
+    """
+    if not _has_academic_term(request) or not _has_profile_photo(request):
+        return redirect(reverse('pos_home') + '?required=1')
+    student = get_logged_in_student(request)
+    academic_year = request.session.get('academic_year', '') or getattr(student, 'academic_year', '') or ''
+    generated_pos = request.session.get("last_generated_pos") or []
+    if not isinstance(generated_pos, list) or not generated_pos:
+        return HttpResponseBadRequest("No generated POS found. Please generate a POS first.")
+
+    from .pos_pdf import build_generated_pos_pdf
+    logo_path = os.path.abspath(os.path.normpath(os.path.join(str(settings.BASE_DIR), 'static', 'img', 'BSU_Logo.png')))
+    if not os.path.isfile(logo_path):
+        logo_path = None
+    pdf_bytes = build_generated_pos_pdf(
+        student_name=student.full_name or '',
+        sr_code=student.sr_code or '',
+        academic_year=academic_year,
+        pos=generated_pos,
+        logo_path=logo_path,
+    )
+    filename = f"POS_Generated_{student.sr_code or 'POS'}.pdf"
     response = HttpResponse(pdf_bytes, content_type='application/pdf')
     response['Content-Disposition'] = f'attachment; filename="{filename}"'
     return response
