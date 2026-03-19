@@ -677,18 +677,36 @@
         Choose the last semester you have finished, then click OK.
         Curriculum courses up to that semester will be listed below.
     </p>
-    <div class="regular-semester-row">
-        <label class="form-label small text-uppercase text-muted mb-1" for="regular-current-semester">
-            Your Current Semester
-        </label>
-        <div class="d-flex align-items-center gap-2 flex-wrap">
+    <div class="regular-semester-row row g-3 align-items-end">
+        <!-- 1st column: current semester -->
+        <div class="col-md-4">
+            <label class="form-label small text-uppercase text-muted" for="regular-current-semester">
+                Your Current Semester
+            </label>
             <select class="form-select form-select-sm" id="regular-current-semester">
                 <option value="">- Select Semester -</option>
                 {% for value, label in current_semester_choices_regular %}
                 <option value="{{ value }}" {% if has_generated_pos and current_semester_index == value %}selected{% endif %}>{{ label }}</option>
                 {% endfor %}
             </select>
-            <button type="button" class="btn btn-sm btn-primary regular-ok-btn" id="regular-semester-ok-btn">OK</button>
+        </div>
+
+        <!-- 2nd column: With Petition? -->
+        <div class="col-md-4">
+            <label class="form-label small text-uppercase text-muted" for="regular-with-petition">
+                With Petition?
+            </label>
+            <select class="form-select form-select-sm" id="regular-with-petition">
+                <option value="yes" selected>Yes</option>
+                <option value="no">No</option>
+            </select>
+        </div>
+
+        <!-- 3rd column: OK button -->
+        <div class="col-md-2 col-12">
+            <button type="button" class="btn btn-sm btn-primary w-100 regular-ok-btn" id="regular-semester-ok-btn">
+                OK
+            </button>
         </div>
     </div>
 </div>
@@ -1315,7 +1333,7 @@
 
         initGradeDropdowns(document);
         // Custom dropdowns for irregular & regular path selects
-        ['irreg-current-sem', 'irreg-start-sem', 'irreg-with-petition', 'regular-current-semester'].forEach(function(id) {
+        ['irreg-current-sem', 'irreg-start-sem', 'irreg-with-petition', 'regular-current-semester', 'regular-with-petition'].forEach(function(id) {
             var sel = document.getElementById(id);
             if (sel) initPosSelectVisual(sel);
         });

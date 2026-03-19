@@ -259,7 +259,6 @@
         <div class="pos-section-title mb-0">Program of Study Summary</div>
     </div>
 
-    <div id="pos-preview-dynamic" style="display:none;"></div>
     <div id="pos-preview-server">
     {% for section in preview_sections %}
     <div class="mb-4">
@@ -320,6 +319,7 @@
     </div>
     {% endfor %}
     </div>
+    <div id="pos-preview-dynamic" style="display:none;"></div>
 
         <div class="mt-4 d-flex justify-content-end">
         <a href="{% url 'download_pos_pdf' %}" class="btn btn-outline-danger btn-sm" download>
@@ -332,6 +332,25 @@
 {% block extra_scripts %}
 <script>
     (function() {
+        // Mapping from solver semester_index (1-based) -> label
+        var SEM_LABELS = [
+            "First Year - First Semester",   // 1
+            "First Year - Second Semester",  // 2
+            "First Year - Midterm",          // 3
+            "Second Year - First Semester",  // 4
+            "Second Year - Second Semester", // 5
+            "Second Year - Midterm",         // 6
+            "Third Year - First Semester",   // 7
+            "Third Year - Second Semester",  // 8
+            "Third Year - Midterm",          // 9
+            "Fourth Year - First Semester",  // 10
+            "Fourth Year - Second Semester", // 11
+            "Fifth Year - First Semester",   // 12
+            "Fifth Year - Second Semester",  // 13
+            "Fifth Year - Midterm"           // 14
+            // extend if your solver uses more
+        ];
+
         function safeJsonParse(s) {
             try { return JSON.parse(s); } catch (e) { return null; }
         }
@@ -356,32 +375,49 @@
             if (!sec) return '';
             return sec[code] || '';
         }
+
         function renderDynamicPOS(res) {
             var dyn = document.getElementById('pos-preview-dynamic');
             var srv = document.getElementById('pos-preview-server');
             if (!dyn || !srv) return;
-
             if (!res || res.status !== 'ok' || !Array.isArray(res.pos)) return;
 
-            var gradesBySection = getGradesBySection();
-            var html = '';
+            var gradesBySection = getGradesBySection() || {};
+
+            // UI section index (0-based) stored from Generate POS
+            var currentSemRaw = localStorage.getItem('posCurrentSemIndex');
+            var currentUiIndex = currentSemRaw !== null && currentSemRaw !== '' ? parseInt(currentSemRaw, 10) : null;
+            if (currentUiIndex === null || isNaN(currentUiIndex)) {
+                return;
+            }
+            // Solver is 1-based; everything after currentSemSolver is "future"
+            var currentSemSolver = currentUiIndex + 1;
+
+            var html = "";
             res.pos.forEach(function(sem) {
-                var label = sem.label || ('Semester ' + sem.semester_index);
+                var solverIndex = sem.semester_index || 0;
+                if (!solverIndex || solverIndex <= currentSemSolver) {
+                    // Already represented by the server-rendered curriculum/grades tables
+                    return;
+                }
+
+                var label = SEM_LABELS[solverIndex - 1] || sem.label || ("Semester " + solverIndex);
                 var totalUnits = (sem.total_units !== undefined && sem.total_units !== null) ? sem.total_units : '—';
+
                 html += '<div class="mb-4">';
                 html +=   '<h6 class="fw-bold mb-2">' + String(label) + '</h6>';
                 html +=   '<div class="table-responsive">';
                 html +=     '<table class="table table-sm align-middle table-bordered mb-0">';
                 html +=       '<colgroup>';
-                html +=         '<col style="width:8%;">';   // Code
-                html +=         '<col style="width:32%;">';  // Title
-                html +=         '<col style="width:4%;">';   // Units
-                html +=         '<col style="width:3%;">';   // Lec
-                html +=         '<col style="width:3%;">';   // Lab
-                html +=         '<col style="width:12%;">';  // Pre-req
-                html +=         '<col style="width:12%;">';  // Co-req
-                html +=         '<col style="width:8%;">';   // Final Grade
-                html +=         '<col style="width:8%;">';   // Remarks
+                html +=         '<col style="width:8%;">';
+                html +=         '<col style="width:32%;">';
+                html +=         '<col style="width:4%;">';
+                html +=         '<col style="width:3%;">';
+                html +=         '<col style="width:3%;">';
+                html +=         '<col style="width:12%;">';
+                html +=         '<col style="width:12%;">';
+                html +=         '<col style="width:8%;">';
+                html +=         '<col style="width:8%;">';
                 html +=       '</colgroup>';
                 html +=       '<thead class="table-light">';
                 html +=         '<tr class="text-center">';
@@ -405,7 +441,8 @@
                     var code = c.code || '';
                     var title = c.title || '';
                     var units = (c.units !== undefined && c.units !== null) ? c.units : '';
-                    var grade = getGradeFor(sem.semester_index, code, gradesBySection);
+                    // For future sems, grades will usually be empty
+                    var grade = getGradeFor(solverIndex - 1, code, gradesBySection);
                     var remark = grade ? (isPassingGrade(grade) ? 'Passed' : (isFailedGrade(grade) ? 'Failed' : '')) : '';
                     var gradeClass = (grade && isFailedGrade(grade)) ? 'text-danger' : '';
                     var remarkClass = (remark === 'Passed') ? 'text-success' : ((remark === 'Failed') ? 'text-danger' : '');
@@ -434,9 +471,12 @@
                 html += '</div>';
             });
 
-            dyn.innerHTML = html;
-            dyn.style.display = '';
-            srv.style.display = 'none';
+            if (html) {
+                dyn.innerHTML = html;
+                dyn.style.display = '';
+                // IMPORTANT: keep server part visible for past semesters with grades
+                // srv.style.display = 'none';  // do NOT hide, we want append behavior
+            }
         }
 
         // Prefer fresh response passed from Generate POS
@@ -460,8 +500,8 @@
         // Fallback: if user refreshed Preview, regenerate by calling API using stored grades + semester
         var gradesBySection = getGradesBySection();
         var currentSemRaw = localStorage.getItem('posCurrentSemIndex');
-        var currentSem = currentSemRaw !== null && currentSemRaw !== '' ? parseInt(currentSemRaw, 10) : null;
-        if (!gradesBySection || currentSem === null || isNaN(currentSem)) return;
+        var currentUiIndex = currentSemRaw !== null && currentSemRaw !== '' ? parseInt(currentSemRaw, 10) : null;
+        if (!gradesBySection || currentUiIndex === null || isNaN(currentUiIndex)) return;
 
         var passed = new Set();
         var failed = new Set();
@@ -479,7 +519,7 @@
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-                current_sem: currentSem,
+                current_sem: currentUiIndex,
                 passed_courses: Array.from(passed),
                 failed_courses: Array.from(failed),
                 probation: false
