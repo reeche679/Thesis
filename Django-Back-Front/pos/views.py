@@ -458,6 +458,14 @@ def pos_generate(request):
     pos_path = request.session.get('pos_path') or 'irregular'
     is_regular = pos_path == 'regular'
 
+    # Regular path: persist "With Petition?" selection across reloads (Regular OK button reloads).
+    regular_with_petition = request.session.get('regular_with_petition', 'yes')
+    if is_regular and section_param is not None:
+        wp = (request.GET.get('with_petition') or '').strip().lower()
+        if wp in ('yes', 'no'):
+            request.session['regular_with_petition'] = wp
+            regular_with_petition = wp
+
     # Build helpers shared by both Regular and Irregular paths
     course_lookup = _course_lookup_from_curriculum()
     preview_sections = []
@@ -623,6 +631,7 @@ def pos_generate(request):
         'picker_available_by_section': picker_available_by_section,
         'is_regular': is_regular,
         'pos_path': pos_path,
+        'regular_with_petition': regular_with_petition,
         'irreg_configured': irreg_configured if not is_regular else True,
         'irreg_start_index': irreg_start_index if not is_regular else 0,
         'irreg_current_sem': irreg_current_sem if not is_regular else 0,

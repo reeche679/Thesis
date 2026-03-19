@@ -686,7 +686,7 @@
             <select class="form-select form-select-sm" id="regular-current-semester">
                 <option value="">- Select Semester -</option>
                 {% for value, label in current_semester_choices_regular %}
-                <option value="{{ value }}" {% if has_generated_pos and current_semester_index == value %}selected{% endif %}>{{ label }}</option>
+                <option value="{{ value }}" {% if current_semester_index == value %}selected{% endif %}>{{ label }}</option>
                 {% endfor %}
             </select>
         </div>
@@ -697,8 +697,8 @@
                 With Petition?
             </label>
             <select class="form-select form-select-sm" id="regular-with-petition">
-                <option value="yes" selected>Yes</option>
-                <option value="no">No</option>
+                <option value="yes" {% if regular_with_petition != 'no' %}selected{% endif %}>Yes</option>
+                <option value="no" {% if regular_with_petition == 'no' %}selected{% endif %}>No</option>
             </select>
         </div>
 
@@ -1345,11 +1345,16 @@
             if (regSelect && regOkBtn) {
                 regOkBtn.addEventListener('click', function() {
                     var v = regSelect.value;
+                    var withPetitionSel = document.getElementById('regular-with-petition');
+                    var wp = withPetitionSel ? withPetitionSel.value : 'yes';
                     var url = new URL(window.location.href);
                     if (v !== '') {
                         url.searchParams.set('section', v);
                     } else {
                         url.searchParams.delete('section');
+                    }
+                    if (wp !== '') {
+                        url.searchParams.set('with_petition', wp);
                     }
                     window.location.href = url.toString();
                 });
@@ -1606,6 +1611,11 @@
             if (!IS_REGULAR) {
                 var petitionSel = document.getElementById('irreg-with-petition');
                 if (petitionSel && petitionSel.value === 'yes') {
+                    withPetition = true;
+                }
+            } else {
+                var regularPetitionSel = document.getElementById('regular-with-petition');
+                if (regularPetitionSel && regularPetitionSel.value === 'yes') {
                     withPetition = true;
                 }
             }
