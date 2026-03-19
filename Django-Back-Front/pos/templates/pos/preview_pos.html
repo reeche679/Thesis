@@ -346,9 +346,10 @@
             "Third Year - Midterm",          // 9
             "Fourth Year - First Semester",  // 10
             "Fourth Year - Second Semester", // 11
-            "Fifth Year - First Semester",   // 12
-            "Fifth Year - Second Semester",  // 13
-            "Fifth Year - Midterm"           // 14
+            "Fourth Year - Midterm",         // 12
+            "Fifth Year - First Semester",   // 13
+            "Fifth Year - Second Semester",  // 14
+            "Fifth Year - Midterm"           // 15
             // extend if your solver uses more
         ];
 
@@ -418,6 +419,16 @@
                     maxSolverIndexWithCourses = solverIndex;
                 }
             });
+
+            // Ensure "Fourth Year - Midterm" table is shown even if it has no courses,
+            // since the solver still outputs it in the semester sequence.
+            var expectedFourthYearMidtermSolverIndex = 12; // (4th year, term 3) in solver numbering
+            var hasFourthYearMidtermEntry = res.pos.some(function(sem) {
+                return (sem && sem.semester_index) === expectedFourthYearMidtermSolverIndex;
+            });
+            if (hasFourthYearMidtermEntry) {
+                maxSolverIndexWithCourses = Math.max(maxSolverIndexWithCourses, expectedFourthYearMidtermSolverIndex);
+            }
 
             var html = "";
             res.pos.forEach(function(sem) {

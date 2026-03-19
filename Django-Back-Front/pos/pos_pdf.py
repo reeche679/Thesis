@@ -1372,6 +1372,21 @@ def build_preview_pos_pdf(
             if max_solver_semester_index_with_courses is None or solver_sem_index_int > max_solver_semester_index_with_courses:
                 max_solver_semester_index_with_courses = solver_sem_index_int
 
+    # Ensure "Fourth Year - Midterm" table is shown even if it has no courses,
+    # since the solver still outputs it in the semester sequence.
+    expected_fourth_year_midterm_solver_index = 12  # (4th year, term 3) in solver numbering
+    has_fourth_year_midterm_entry = any(
+        isinstance(sem, dict) and sem.get("semester_index") == expected_fourth_year_midterm_solver_index
+        for sem in (future_pos or [])
+    )
+    if has_fourth_year_midterm_entry and max_solver_semester_index_with_courses is not None:
+        max_solver_semester_index_with_courses = max(
+            max_solver_semester_index_with_courses,
+            expected_fourth_year_midterm_solver_index,
+        )
+    elif has_fourth_year_midterm_entry and max_solver_semester_index_with_courses is None:
+        max_solver_semester_index_with_courses = expected_fourth_year_midterm_solver_index
+
     for sem in (future_pos or []):
         if not isinstance(sem, dict):
             continue
