@@ -18,6 +18,7 @@ from .views import (
     save_pos_grades,
     set_academic_term,
     delete_pos_record,
+    delete_all_pos_records,
     delete_pos_data,
     validate_pos,
     generate_pos_api,
@@ -49,6 +50,7 @@ urlpatterns = [
         name="download_pos_pdf_record",
     ),
     path("history/", pos_history, name="pos_history"),
+    path("history/delete-all/", delete_all_pos_records, name="delete_all_pos_records"),
     path("about/", pos_about, name="pos_about"),
 
     path("register/", register_view, name="register"),

@@ -39,6 +39,18 @@ document.addEventListener('DOMContentLoaded', function() {
             form.submit();
         });
     });
+
+    document.querySelectorAll('.history-delete-all-form').forEach(function(form) {
+        form.addEventListener('submit', function(e) {
+            if (form._deleteAllConfirmed) return;
+            e.preventDefault();
+            if (!confirm('Delete ALL history records?')) return;
+            form._deleteAllConfirmed = true;
+            var btn = form.querySelector('button[type="submit"]');
+            if (btn) btn.disabled = true;
+            form.submit();
+        });
+    });
 });
 </script>
 {% endblock %}
@@ -96,6 +108,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 {% endfor %}
             </tbody>
         </table>
+    </div>
+
+    <div class="d-flex justify-content-end mt-3">
+        <form method="post" action="{% url 'delete_all_pos_records' %}" class="history-delete-all-form">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline-danger btn-sm">
+                <i class="bi bi-trash"></i> Delete All History
+            </button>
+        </form>
     </div>
 </div>
 </div>

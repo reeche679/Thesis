@@ -412,7 +412,12 @@ def pos_generate(request):
     curriculum_sections = _curriculum_for_irregular()
 
     section_param = request.GET.get('section')
+    pos_reset = bool(request.session.get('pos_reset', False))
     if section_param is not None:
+        # If user clicked Regular OK after a POS delete, they are intentionally resetting the form.
+        if pos_reset:
+            request.session.pop('pos_reset', None)
+            pos_reset = False
         try:
             idx = int(section_param)
             if 0 <= idx < len(_INDEX_TO_YEAR_SEM):
@@ -438,11 +443,16 @@ def pos_generate(request):
         next_section_index = _year_semester_to_section_index(year_level, semester)
 
     if next_section_index is None:
-        next_section_index = 0
-        if next_section_index < len(_INDEX_TO_YEAR_SEM):
-            yl, sem = _INDEX_TO_YEAR_SEM[next_section_index]
-            request.session['year_level'] = yl
-            request.session['semester'] = sem
+        # After POS delete, we want "no input" state (no default to 1st semester).
+        # When reset is active, avoid writing default year/semester into the session.
+        if pos_reset:
+            next_section_index = -1
+        else:
+            next_section_index = 0
+            if next_section_index < len(_INDEX_TO_YEAR_SEM):
+                yl, sem = _INDEX_TO_YEAR_SEM[next_section_index]
+                request.session['year_level'] = yl
+                request.session['semester'] = sem
     year_level = request.session.get('year_level') or ''
     semester = request.session.get('semester') or ''
     pos_path = request.session.get('pos_path') or 'irregular'
@@ -498,6 +508,9 @@ def pos_generate(request):
         irreg_current_sem = _safe_int(current_sem_param, _safe_int(request.session.get('irreg_current_sem')))
 
         irreg_configured = irreg_start_index is not None and irreg_current_sem is not None
+        if pos_reset and irreg_configured:
+            request.session.pop('pos_reset', None)
+            pos_reset = False
 
         if irreg_configured:
             if irreg_start_index is not None:
@@ -585,6 +598,9 @@ def pos_generate(request):
                 picker_available_by_section[si] = candidates
 
     has_generated_pos = POSRecord.objects.filter(student=student).exists()
+    # POS delete should reset Generate/Preview back to "no input" even if History exists.
+    if pos_reset:
+        has_generated_pos = False
 
     context = {
         'student': student,
@@ -666,7 +682,9 @@ def save_pos_grades(request):
             grades_snapshot=grades_by_section,
         )
         _prune_old_pos_records(student)
-        request.session['pos_path'] = 'irregular'
+        # Preserve the user's selected path (Regular vs Irregular).
+        # The UI will always redirect to Preview after generation, but the
+        # Generate page should stay on whichever path the user started with.
     return JsonResponse({'ok': True})
 
 
@@ -679,6 +697,7 @@ def delete_pos_data(request):
     StudentGrade.objects.filter(student=student).delete()
 
     # Reset session selections so Generate/Preview return to "no input" state
+    request.session['pos_reset'] = True
     for k in (
         'year_level',
         'semester',
@@ -690,6 +709,14 @@ def delete_pos_data(request):
             request.session.pop(k, None)
         except Exception:
             pass
+
+    # Clear cached solver output so Preview/PDF won't show future semesters again
+    # after the user deletes current POS data.
+    try:
+        request.session.pop('last_generated_pos', None)
+        request.session.pop('last_generated_payload', None)
+    except Exception:
+        pass
 
     return JsonResponse({'ok': True})
 
@@ -818,9 +845,24 @@ def pos_preview(request):
     student = get_logged_in_student(request)
     grades_by_section = _saved_grades_by_section(student)
     preview_sections = _preview_sections_from_curriculum(grades_by_section)
+    # For solver-generated future semesters we only get course codes back.
+    # Provide a lookup so the preview tables can still show lec/lab/pre/core fields.
+    course_lookup_tuple = _course_lookup_from_curriculum()
+    course_lookup = {
+        code: {
+            "title": info[0],
+            "units": info[1],
+            "lec": info[2],
+            "lab": info[3],
+            "prereq": info[4],
+            "coreq": info[5],
+        }
+        for code, info in course_lookup_tuple.items()
+    }
     context = {
         'student': student,
         'preview_sections': preview_sections,
+        'course_lookup': course_lookup,
         'session_academic_year': request.session.get('academic_year', ''),
         'session_semester': request.session.get('semester', ''),
     }
@@ -836,18 +878,34 @@ def download_pos_pdf(request):
     grades_by_section = _saved_grades_by_section(student)
     academic_year = request.session.get('academic_year', '') or student.academic_year or ''
 
-    from .pos_pdf import build_pos_pdf
+    # Preview cut-off determines where grades stop (and where solver future semesters begin).
+    preview_boundary_section_index = _year_semester_to_section_index(
+        request.session.get('year_level'),
+        request.session.get('semester'),
+    )
+
+    # Match Preview exactly: past/current semesters come from `preview_sections`,
+    # while future semesters are appended from the last solver-generated POS.
+    preview_sections = _preview_sections_from_curriculum(grades_by_section)
+    generated_pos = request.session.get("last_generated_pos") or []
+
+    from .pos_pdf import build_preview_pos_pdf
     logo_path = os.path.abspath(os.path.normpath(os.path.join(str(settings.BASE_DIR), 'static', 'img', 'BSU_Logo.png')))
     if not os.path.isfile(logo_path):
         logo_path = None
-    pdf_bytes = build_pos_pdf(
+    academic_year_safe = (academic_year or '').replace("–", "-").replace(" ", "_")
+    sr_code_safe = student.sr_code or 'SR'
+    pdf_bytes = build_preview_pos_pdf(
         student_name=student.full_name or '',
         sr_code=student.sr_code or '',
         academic_year=academic_year,
-        grades_by_section=grades_by_section,
+        boundary_section_index=preview_boundary_section_index,
+        preview_sections=preview_sections,
+        future_pos=generated_pos,
         logo_path=logo_path,
     )
-    filename = f"POS_{student.sr_code or 'POS'}.pdf"
+    # Keep filename format requested: `academic_year sr code`.
+    filename = f"{academic_year_safe} {sr_code_safe}.pdf"
     response = HttpResponse(pdf_bytes, content_type='application/pdf')
     response['Content-Disposition'] = f'attachment; filename="{filename}"'
     return response
@@ -868,6 +926,15 @@ def download_generated_pos_pdf(request):
     if not isinstance(generated_pos, list) or not generated_pos:
         return HttpResponseBadRequest("No generated POS found. Please generate a POS first.")
 
+    # Use the current preview selection (year_level + semester) as the cut-off:
+    # - For semesters up to this point: show grade + remarks from saved grades.
+    # - For future semesters: show course metadata only (lec/lab/pre/co), with blank grade/remarks.
+    preview_boundary_section_index = _year_semester_to_section_index(
+        request.session.get('year_level'),
+        request.session.get('semester'),
+    )
+    grades_by_section = _saved_grades_by_section(student)
+
     from .pos_pdf import build_generated_pos_pdf
     logo_path = os.path.abspath(os.path.normpath(os.path.join(str(settings.BASE_DIR), 'static', 'img', 'BSU_Logo.png')))
     if not os.path.isfile(logo_path):
@@ -877,6 +944,8 @@ def download_generated_pos_pdf(request):
         sr_code=student.sr_code or '',
         academic_year=academic_year,
         pos=generated_pos,
+        grades_by_section=grades_by_section,
+        boundary_section_index=preview_boundary_section_index,
         logo_path=logo_path,
     )
     filename = f"POS_Generated_{student.sr_code or 'POS'}.pdf"
@@ -934,6 +1003,15 @@ def delete_pos_record(request, record_id):
     student = get_logged_in_student(request)
     record = get_object_or_404(POSRecord, pk=record_id, student=student)
     record.delete()
+    return redirect('pos_history')
+
+
+@_require_student
+@require_POST
+def delete_all_pos_records(request):
+    """Delete ALL POS history records for the logged-in student (keeps current grades)."""
+    student = get_logged_in_student(request)
+    POSRecord.objects.filter(student=student).delete()
     return redirect('pos_history')
 
 

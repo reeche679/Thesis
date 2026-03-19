@@ -415,12 +415,26 @@ def _course_lookup_from_curriculum():
     return lookup
 
 
-def build_pos_pdf(student_name, sr_code, academic_year, grades_by_section=None, grades_dict=None, eval_date=None, logo_path=None):
+def build_pos_pdf(
+    student_name,
+    sr_code,
+    academic_year,
+    grades_by_section=None,
+    grades_dict=None,
+    eval_date=None,
+    logo_path=None,
+    boundary_section_index=None,
+    max_section_index=None,
+):
     """
     Build POS PDF. Use grades_by_section (dict section_index -> {course_code: grade}) so each section table
     shows that section's grades. Each section lists all courses with a grade in that section (same course
     can appear in multiple sections, e.g. MATH 102 failed in 1st sem and midterm; user-added courses appear).
     If grades_by_section is None, falls back to grades_dict for all sections (backward compat).
+
+    - `boundary_section_index` is the cut-off for showing grades/remarks (if provided).
+    - `max_section_index` extends which semester tables are included (course metadata only) up to a
+      later semester (e.g. so future semester tables appear in the PDF like the Preview page).
     """
     if eval_date is None:
         eval_date = date.today()
@@ -525,14 +539,15 @@ def build_pos_pdf(student_name, sr_code, academic_year, grades_by_section=None, 
     story.append(Spacer(1, 0.25 * inch))
 
     col_widths = [
-        0.88 * inch,
-        2.35 * inch,
-        0.57 * inch,
-        0.39 * inch,
-        0.39 * inch,
-        1.08 * inch,
-        1.01 * inch,
-        0.53 * inch,
+        0.88 * inch,  # Course Code
+        2.15 * inch,  # Course Title
+        0.57 * inch,  # Credit Units
+        0.39 * inch,  # Lec
+        0.39 * inch,  # Lab
+        1.00 * inch,  # Prerequisite(s)
+        0.95 * inch,  # Co-requisite(s)
+        0.50 * inch,  # Grade
+        0.67 * inch,  # Remarks
     ]
 
     course_lookup = _course_lookup_from_curriculum()
@@ -550,16 +565,49 @@ def build_pos_pdf(student_name, sr_code, academic_year, grades_by_section=None, 
             pass
         return grade_str
 
+    def _remark_cell(grade_str):
+        """Render remarks based on grade; blank when grade is blank."""
+        if not grade_str:
+            return ""
+        try:
+            gv = float(grade_str)
+            if gv <= 3.00:
+                return Paragraph(
+                    '<font color="green">Passed</font>',
+                    ParagraphStyle(
+                        name="RemarkPass",
+                        parent=normal,
+                        fontName="Times-Roman",
+                        fontSize=10,
+                        alignment=1,
+                    ),
+                )
+            if gv == 5.0:
+                return Paragraph(
+                    '<font color="red">Failed</font>',
+                    ParagraphStyle(
+                        name="RemarkFail",
+                        parent=normal,
+                        fontName="Times-Roman",
+                        fontSize=10,
+                        alignment=1,
+                    ),
+                )
+        except (ValueError, TypeError):
+            pass
+        return ""
+
     for section_index, (title1, title2, total_units, lec_total, lab_total, rows) in enumerate(POS_CURRICULUM):
         section_grades = {}
         if grades_by_section is not None:
             section_grades = grades_by_section.get(section_index) or grades_by_section.get(str(section_index)) or {}
         else:
             section_grades = grades_dict or {}
-        title_year_para = Paragraph("<b>" + title1 + "</b>", ParagraphStyle(
+        section_label = f"{title1.title()} - {title2.title()}"
+        title_year_para = Paragraph("<b>" + section_label + "</b>", ParagraphStyle(
             name="YearTitle", parent=normal, alignment=1, fontName="Times-Bold", fontSize=10,
         ))
-        title_sem_para = Paragraph("<b>" + title2 + "</b>", ParagraphStyle(
+        title_sem_para = Paragraph("", ParagraphStyle(
             name="SemTitle", parent=normal, alignment=1, fontName="Times-Bold", fontSize=10,
         ))
         # Table: rows 0-1 = Year/Semester; rows 2-3 = two-row header (No. of hour/s only above Lec+Lab)
@@ -575,20 +623,39 @@ def build_pos_pdf(student_name, sr_code, academic_year, grades_by_section=None, 
                 Paragraph("Prerequisite(s)", header_cell_style),
                 Paragraph("Co-requisite(s)", header_cell_style),
                 Paragraph("Grade", header_cell_style),
+                Paragraph("Remarks", header_cell_style),
             ],
-            ["", "", "", Paragraph("Lec", header_cell_style), Paragraph("Lab", header_cell_style), "", "", ""],
+            ["", "", "", Paragraph("Lec", header_cell_style), Paragraph("Lab", header_cell_style), "", "", "", ""],
         ]
         curriculum_codes_this_section = {r[0] for r in rows}
         section_rows = []
         seen_codes = set()
+
+        # Show full curriculum course metadata up to `max_section_index` (even without grades),
+        # but only show grades up to `boundary_section_index`.
+        if max_section_index is not None:
+            include_empty_curriculum_courses = section_index <= max_section_index
+        else:
+            include_empty_curriculum_courses = (
+                boundary_section_index is not None and section_index <= boundary_section_index
+            )
+
         for code, title, units, lec, lab, prereq, coreq in rows:
             grade = (section_grades or {}).get(code, "").strip() or ""
-            if grade:
+            if boundary_section_index is not None and section_index > boundary_section_index:
+                grade = ""
+            if include_empty_curriculum_courses:
                 seen_codes.add(code)
                 section_rows.append((code, title, units, lec, lab, prereq or "", coreq or "", grade))
+            else:
+                if grade:
+                    seen_codes.add(code)
+                    section_rows.append((code, title, units, lec, lab, prereq or "", coreq or "", grade))
         for code, grade in (section_grades or {}).items():
             if not code or not (grade or "").strip():
                 continue
+            if boundary_section_index is not None and section_index > boundary_section_index:
+                grade = ""
             if code in seen_codes:
                 continue
             seen_codes.add(code)
@@ -613,8 +680,9 @@ def build_pos_pdf(student_name, sr_code, academic_year, grades_by_section=None, 
                 Paragraph(_requisite_display_text(prereq).replace("&", "&amp;") or " ", cell_style_center),
                 Paragraph(_requisite_display_text(coreq).replace("&", "&amp;") or " ", cell_style_center),
                 _grade_cell(grade),
+                _remark_cell(grade),
             ])
-        table_data.append(["Total", "", str(sum_units), str(sum_lec), str(sum_lab), "", "", ""])
+        table_data.append(["Total", "", str(sum_units), str(sum_lec), str(sum_lab), "", "", "", ""])
 
         t = Table(table_data, colWidths=col_widths, repeatRows=0)
         ncols = len(col_widths)
@@ -641,6 +709,7 @@ def build_pos_pdf(student_name, sr_code, academic_year, grades_by_section=None, 
                 ("SPAN", (5, 2), (5, 3)),
                 ("SPAN", (6, 2), (6, 3)),
                 ("SPAN", (7, 2), (7, 3)),
+                ("SPAN", (8, 2), (8, 3)),
                 ("FONTNAME", (0, 2), (-1, 3), "Times-Bold"),
                 ("ALIGN", (0, 2), (-1, 3), "CENTER"),
                 ("VALIGN", (0, 2), (-1, 3), "MIDDLE"),
@@ -658,6 +727,7 @@ def build_pos_pdf(student_name, sr_code, academic_year, grades_by_section=None, 
                 ("ALIGN", (2, 2), (4, -1), "CENTER"),
                 ("ALIGN", (5, 2), (6, -1), "CENTER"),
                 ("ALIGN", (7, 2), (7, -1), "CENTER"),
+                ("ALIGN", (8, 2), (8, -1), "CENTER"),
                 ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
                 ("LEFTPADDING", (0, 0), (-1, -1), 4),
                 ("RIGHTPADDING", (0, 0), (-1, -1), 4),
@@ -689,12 +759,23 @@ def build_pos_pdf(student_name, sr_code, academic_year, grades_by_section=None, 
     return buffer.getvalue()
 
 
-def build_generated_pos_pdf(student_name, sr_code, academic_year, pos, eval_date=None, logo_path=None):
+def build_generated_pos_pdf(
+    student_name,
+    sr_code,
+    academic_year,
+    pos,
+    eval_date=None,
+    logo_path=None,
+    grades_by_section=None,
+    boundary_section_index=None,
+):
     """
     Build a PDF from the solver-generated POS (list of semesters with courses).
 
-    This is intentionally simpler than the curriculum template PDF: it prints the
-    generated schedule by semester using the same page header/footer styling.
+    This generates a schedule by semester (from solver output), but the PDF should still match the Preview tables:
+    - Each course row shows full curriculum metadata (lec/lab/pre/co).
+    - Grade + remarks are filled only up to `boundary_section_index`.
+    - Future semesters show blank grade/remarks (metadata only).
 
     `pos` is expected to be the solver output list:
       [{ "semester_index": int, "label": str, "total_units": int, "courses": [{code,title,units}, ...] }, ...]
@@ -716,6 +797,7 @@ def build_generated_pos_pdf(student_name, sr_code, academic_year, pos, eval_date
     styles = getSampleStyleSheet()
     normal = styles["Normal"]
     cell_style = _cell_style()
+    cell_style_center = _cell_style_center()
     header_cell_style = _header_cell_style()
 
     title_style = ParagraphStyle(
@@ -758,23 +840,121 @@ def build_generated_pos_pdf(student_name, sr_code, academic_year, pos, eval_date
         total_units = sem.get("total_units", 0) or 0
         story.append(Paragraph(f"{label} — {total_units} units", sem_style))
 
+        solver_sem_index = sem.get("semester_index")
+        try:
+            ui_section_index = int(solver_sem_index) - 1 if solver_sem_index is not None else None
+        except (ValueError, TypeError):
+            ui_section_index = None
+
+        section_grades = {}
+        if grades_by_section is not None and ui_section_index is not None:
+            section_grades = grades_by_section.get(ui_section_index) or grades_by_section.get(str(ui_section_index)) or {}
+
+        course_lookup = _course_lookup_from_curriculum()
+
+        def _grade_cell(grade_str):
+            """Render grade with red styling only for 5.00; keep blank when not entered."""
+            if not grade_str:
+                return ""
+            g = str(grade_str).strip()
+            if not g:
+                return ""
+            try:
+                if float(g) == 5.0:
+                    return Paragraph(
+                        '<font color="red">' + g.replace("&", "&amp;") + '</font>',
+                        ParagraphStyle(name="GradeRedGen", parent=normal, fontName="Times-Roman", fontSize=10, alignment=1),
+                    )
+            except (ValueError, TypeError):
+                pass
+            return g
+
+        def _remark_cell(grade_str):
+            if not grade_str:
+                return ""
+            try:
+                gv = float(grade_str)
+                if gv <= 3.00:
+                    return Paragraph('<font color="green">Passed</font>', ParagraphStyle(name="RemarkPassGen", parent=normal, fontName="Times-Roman", fontSize=10, alignment=1))
+                if gv == 5.0:
+                    return Paragraph('<font color="red">Failed</font>', ParagraphStyle(name="RemarkFailGen", parent=normal, fontName="Times-Roman", fontSize=10, alignment=1))
+            except (ValueError, TypeError):
+                pass
+            return ""
+
         table_data = [
             [
                 Paragraph("<b>Course Code</b>", header_cell_style),
                 Paragraph("<b>Course Title</b>", header_cell_style),
                 Paragraph("<b>Units</b>", header_cell_style),
+                Paragraph("<b>Lec</b>", header_cell_style),
+                Paragraph("<b>Lab</b>", header_cell_style),
+                Paragraph("<b>Pre-requisite(s)</b>", header_cell_style),
+                Paragraph("<b>Co-requisite(s)</b>", header_cell_style),
+                Paragraph("<b>Grade</b>", header_cell_style),
+                Paragraph("<b>Remarks</b>", header_cell_style),
             ]
         ]
+
         for c in (sem.get("courses") or []):
+            code = str(c.get("code", "") or "")
+            # course_lookup stores tuples (title, units, lec, lab, prereq, coreq) in pos_pdf.py
+            # but we may also receive partial solver data; prefer lookup when available.
+            if code and code in course_lookup:
+                title, units, lec, lab, prereq, coreq = course_lookup[code]
+            else:
+                title = str(c.get("title", "") or "")
+                units = c.get("units", "")
+                lec, lab, prereq, coreq = "", "", "", ""
+
+            # Determine grade only up to boundary; future semesters => blank grade/remarks
+            grade_str = ""
+            if section_grades and code:
+                grade_str = (section_grades.get(code) or "").strip()
+            if boundary_section_index is not None and ui_section_index is not None and ui_section_index > boundary_section_index:
+                grade_str = ""
+
+            remark_str = ""
+            if grade_str:
+                try:
+                    gv = float(grade_str)
+                    if gv <= 3.00:
+                        remark_str = "Passed"
+                    elif gv == 5.0:
+                        remark_str = "Failed"
+                except (ValueError, TypeError):
+                    remark_str = ""
+
             table_data.append(
                 [
-                    Paragraph(str(c.get("code", "")), cell_style),
-                    Paragraph(str(c.get("title", "")), cell_style),
-                    Paragraph(str(c.get("units", "")), cell_style),
+                    Paragraph(code.replace("&", "&amp;"), cell_style_center),
+                    Paragraph(str(title).replace("&", "&amp;"), cell_style),
+                    Paragraph(str(units).replace("&", "&amp;") if units != "" else "", cell_style_center),
+                    Paragraph(str(lec).replace("&", "&amp;") if lec != "" else "", cell_style_center),
+                    Paragraph(str(lab).replace("&", "&amp;") if lab != "" else "", cell_style_center),
+                    Paragraph(_requisite_display_text((prereq or "").replace("&", "&amp;")) if prereq else " ", cell_style_center),
+                    Paragraph(_requisite_display_text((coreq or "").replace("&", "&amp;")) if coreq else " ", cell_style_center),
+                    _grade_cell(grade_str),
+                    _remark_cell(grade_str),
                 ]
             )
 
-        t = Table(table_data, colWidths=[1.2 * inch, 5.8 * inch, 0.8 * inch], repeatRows=1)
+        # Estimated width sum should be <= available content width
+        t = Table(
+            table_data,
+            colWidths=[
+                0.8 * inch,   # code
+                2.0 * inch,   # title
+                0.5 * inch,   # units
+                0.35 * inch,  # lec
+                0.35 * inch,  # lab
+                1.0 * inch,   # prereq
+                1.0 * inch,   # coreq
+                0.5 * inch,   # grade
+                0.7 * inch,   # remarks
+            ],
+            repeatRows=1,
+        )
         t.setStyle(
             TableStyle(
                 [
@@ -782,7 +962,7 @@ def build_generated_pos_pdf(student_name, sr_code, academic_year, pos, eval_date
                     ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.black),
                     ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
                     ("ALIGN", (0, 0), (0, -1), "CENTER"),
-                    ("ALIGN", (2, 0), (2, -1), "CENTER"),
+                    ("ALIGN", (2, 0), (4, -1), "CENTER"),
                     ("BACKGROUND", (0, 0), (-1, 0), colors.whitesmoke),
                     ("LEFTPADDING", (0, 0), (-1, -1), 4),
                     ("RIGHTPADDING", (0, 0), (-1, -1), 4),
@@ -792,6 +972,468 @@ def build_generated_pos_pdf(student_name, sr_code, academic_year, pos, eval_date
             )
         )
         story.append(t)
+
+    def page_canvas(canvas, doc):
+        _page_header_canvas(canvas, logo_path)
+        _footer_canvas(canvas, doc)
+
+    doc.build(story, onFirstPage=page_canvas, onLaterPages=page_canvas)
+    buffer.seek(0)
+    return buffer.getvalue()
+
+
+def _ui_section_index_to_preview_label(ui_section_index):
+    """
+    Match Preview page labels (see `preview_pos.html` SEM_LABELS):
+    e.g. 0 -> "First Year - First Semester", 2 -> "First Year - Midterm".
+    """
+    if ui_section_index is None:
+        return ""
+    try:
+        i = int(ui_section_index)
+    except (TypeError, ValueError):
+        return ""
+    if i < 0:
+        return ""
+
+    year_ordinal_names = ["First", "Second", "Third", "Fourth", "Fifth", "Sixth", "Seventh", "Eighth", "Ninth", "Tenth"]
+    sem_names = ["First Semester", "Second Semester", "Midterm"]
+
+    year_idx = i // 3
+    sem_idx = i % 3
+    year_name = year_ordinal_names[year_idx] if 0 <= year_idx < len(year_ordinal_names) else ("Year " + str(year_idx + 1))
+    sem_name = sem_names[sem_idx] if 0 <= sem_idx < len(sem_names) else ("Semester " + str(sem_idx + 1))
+    return f"{year_name} Year - {sem_name}"
+
+
+def build_preview_pos_pdf(
+    student_name,
+    sr_code,
+    academic_year,
+    preview_sections,
+    future_pos,
+    eval_date=None,
+    logo_path=None,
+    boundary_section_index=None,
+):
+    """
+    Build POS PDF that mirrors the Preview page:
+    - Sections shown on Preview (grades up to cut-off) come from `preview_sections`.
+    - Future sections appended after the cut-off come from solver-generated `future_pos`.
+    - This prevents curriculum-only courses (e.g., PHYS 103) from appearing in past semesters
+      if they are not shown on Preview.
+    """
+    if eval_date is None:
+        eval_date = date.today()
+    date_str = eval_date.strftime("%B %d, %Y")
+
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=legal,
+        leftMargin=0.5 * inch,
+        rightMargin=0.5 * inch,
+        topMargin=2.15 * inch,
+        bottomMargin=1.0 * inch,
+    )
+
+    styles = getSampleStyleSheet()
+    normal = styles["Normal"]
+    cell_style = _cell_style()
+    cell_style_center = _cell_style_center()
+    header_cell_style = _header_cell_style()
+
+    hours_header_style = ParagraphStyle(
+        name="HoursHeader",
+        parent=normal,
+        fontName="Times-Bold",
+        fontSize=8,
+        alignment=1,
+        leading=9,
+    )
+    section_line1 = ParagraphStyle(
+        name="Section1",
+        parent=normal,
+        fontSize=10,
+        fontName="Times-Bold",
+        spaceAfter=0,
+        spaceBefore=12,
+    )
+    section_line2 = ParagraphStyle(
+        name="Section2",
+        parent=normal,
+        fontSize=10,
+        fontName="Times-Bold",
+        alignment=1,
+        spaceAfter=6,
+        spaceBefore=0,
+    )
+    evaluated_style = ParagraphStyle(
+        name="Evaluated",
+        parent=normal,
+        fontName="Times-Roman",
+        fontSize=10,
+        alignment=2,
+        spaceAfter=14,
+        spaceBefore=10,
+    )
+    sign_style = ParagraphStyle(
+        name="SignLabel",
+        parent=normal,
+        fontName="Times-Roman",
+        fontSize=10,
+        alignment=0,
+        spaceAfter=2,
+        spaceBefore=6,
+    )
+    sign_name_style = ParagraphStyle(
+        name="SignName",
+        parent=normal,
+        fontName="Times-Bold",
+        fontSize=10,
+        alignment=0,
+        spaceAfter=0,
+        spaceBefore=0,
+    )
+
+    story = []
+    story.extend(_header_flowables(logo_path))
+
+    info_cols = [
+        0.84 * inch,
+        3.50 * inch,
+        1.24 * inch,
+        1.62 * inch,
+    ]
+    info_data = [
+        ["Name:", (student_name or "—").upper(), "Date:", date_str],
+        ["SR-code:", (sr_code or "—"), "Academic Year:", (academic_year or "—")],
+    ]
+    info_tbl = Table(info_data, colWidths=info_cols)
+    info_tbl.setStyle(
+        TableStyle([
+            ("FONTNAME", (0, 0), (-1, -1), "Times-Roman"),
+            ("FONTSIZE", (0, 0), (-1, -1), 11),
+            ("BOX", (0, 0), (-1, -1), 0.5, colors.black),
+            ("INNERGRID", (0, 0), (-1, -1), 0.5, colors.black),
+            ("LEFTPADDING", (0, 0), (-1, -1), 8),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+            ("TOPPADDING", (0, 0), (-1, -1), 5),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ])
+    )
+    story.append(info_tbl)
+    story.append(Spacer(1, 0.25 * inch))
+
+    # Column widths for:
+    # Code, Title, Units, Lec, Lab, Pre-req, Co-req, Grade, Remarks
+    col_widths = [
+        0.88 * inch,  # Course Code
+        2.15 * inch,  # Course Title
+        0.57 * inch,  # Credit Units
+        0.39 * inch,  # Lec
+        0.39 * inch,  # Lab
+        1.00 * inch,  # Prerequisite(s)
+        0.95 * inch,  # Co-requisite(s)
+        0.50 * inch,  # Grade
+        0.67 * inch,  # Remarks
+    ]
+
+    course_lookup = _course_lookup_from_curriculum()
+
+    # Map solver UI section index -> total units for that semester.
+    # Solver semester_index is 1-based: 1=1st Year First Semester.
+    pos_total_units_by_ui_index = {}
+    for sem in (future_pos or []):
+        if not isinstance(sem, dict):
+            continue
+        solver_sem_index = sem.get("semester_index")
+        try:
+            ui_section_index = int(solver_sem_index) - 1 if solver_sem_index is not None else None
+        except (TypeError, ValueError):
+            ui_section_index = None
+        if ui_section_index is None:
+            continue
+        try:
+            pos_total_units_by_ui_index[ui_section_index] = int(sem.get("total_units", 0) or 0)
+        except (TypeError, ValueError):
+            pos_total_units_by_ui_index[ui_section_index] = 0
+
+    # Reverse map preview label -> UI section index, to pull solver total_units
+    # even for the preview (past/current) semesters.
+    preview_label_to_ui_index = {}
+    for ui_idx in range(len(POS_CURRICULUM)):
+        lbl = _ui_section_index_to_preview_label(ui_idx)
+        if lbl:
+            preview_label_to_ui_index[lbl] = ui_idx
+
+    def _grade_cell(grade_str):
+        if not grade_str:
+            return ""
+        try:
+            s = str(grade_str).strip()
+            if not s:
+                return ""
+            if float(s) == 5.0:
+                return Paragraph(
+                    '<font color="red">' + s.replace("&", "&amp;") + '</font>',
+                    ParagraphStyle(name="GradeRedPrev", parent=normal, fontName="Times-Roman", fontSize=10, alignment=1),
+                )
+        except (ValueError, TypeError):
+            pass
+        return str(grade_str).strip()
+
+    def _remark_cell_from_grade(grade_str):
+        if not grade_str:
+            return ""
+        try:
+            gv = float(grade_str)
+            if gv <= 3.00:
+                return Paragraph(
+                    '<font color="green">Passed</font>',
+                    ParagraphStyle(name="RemarkPassPrev", parent=normal, fontName="Times-Roman", fontSize=10, alignment=1),
+                )
+            if gv == 5.0:
+                return Paragraph(
+                    '<font color="red">Failed</font>',
+                    ParagraphStyle(name="RemarkFailPrev", parent=normal, fontName="Times-Roman", fontSize=10, alignment=1),
+                )
+        except (ValueError, TypeError):
+            pass
+        return ""
+
+    def _render_section_table(section_label, rows, total_units_value=None):
+        table_data = [
+            [Paragraph("<b>" + (section_label or "") + "</b>", ParagraphStyle(name="SectionLabelPrev", parent=normal, alignment=1, fontName="Times-Bold", fontSize=10))] + [""] * (len(col_widths) - 1),
+            [""] * len(col_widths),
+            [
+                Paragraph("Course Code", header_cell_style),
+                Paragraph("Course Title", header_cell_style),
+                Paragraph("Credit Units", header_cell_style),
+                Paragraph("No. of hour/s", hours_header_style),
+                "",
+                Paragraph("Prerequisite(s)", header_cell_style),
+                Paragraph("Co-requisite(s)", header_cell_style),
+                Paragraph("Grade", header_cell_style),
+                Paragraph("Remarks", header_cell_style),
+            ],
+            ["", "", "", Paragraph("Lec", header_cell_style), Paragraph("Lab", header_cell_style), "", "", "", ""],
+        ]
+
+        sum_units = 0
+
+        for r in (rows or []):
+            code = r.get("code", "") or ""
+            title = r.get("title", "") or ""
+            units = r.get("units", 0) or 0
+            lec = r.get("lec", 0) or 0
+            lab = r.get("lab", 0) or 0
+            prereq = r.get("prereq", "") or ""
+            coreq = r.get("coreq", "") or ""
+            grade = (r.get("grade", "") or "").strip()
+
+            try:
+                sum_units += float(units)
+            except (ValueError, TypeError):
+                pass
+
+            table_data.append([
+                Paragraph(code.replace("&", "&amp;"), cell_style),
+                Paragraph(title.replace("&", "&amp;"), cell_style),
+                str(units),
+                str(lec),
+                str(lab),
+                Paragraph(_requisite_display_text(prereq).replace("&", "&amp;") or " ", cell_style_center),
+                Paragraph(_requisite_display_text(coreq).replace("&", "&amp;") or " ", cell_style_center),
+                _grade_cell(grade),
+                _remark_cell_from_grade(grade),
+            ])
+
+        # Only show Total Units; leave Lec/Lab totals blank (matches requirement).
+        # Prefer `total_units_value` when provided (e.g., Preview server value),
+        # otherwise total from displayed course rows.
+        if total_units_value is not None:
+            try:
+                total_units_display = str(int(round(float(total_units_value))))
+            except (TypeError, ValueError):
+                total_units_display = "0"
+        else:
+            try:
+                total_units_display = str(int(round(float(sum_units))))
+            except (TypeError, ValueError):
+                total_units_display = "0"
+        table_data.append(["Total", "", total_units_display, "", "", "", "", "", ""])
+
+        t = Table(table_data, colWidths=col_widths, repeatRows=0)
+        ncols = len(col_widths)
+        t.setStyle(
+            TableStyle([
+                ("SPAN", (0, 0), (ncols - 1, 0)),
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F5F5DC")),
+                ("ALIGN", (0, 0), (-1, 0), "CENTER"),
+                ("VALIGN", (0, 0), (-1, 0), "MIDDLE"),
+                ("FONTNAME", (0, 0), (-1, 0), "Times-Bold"),
+                ("TOPPADDING", (0, 0), (-1, 0), 5),
+                ("BOTTOMPADDING", (0, 0), (-1, 0), 5),
+                ("SPAN", (0, 1), (ncols - 1, 1)),
+                ("BACKGROUND", (0, 1), (-1, 1), colors.HexColor("#E0E0E0")),
+                ("ALIGN", (0, 1), (-1, 1), "CENTER"),
+                ("VALIGN", (0, 1), (-1, 1), "MIDDLE"),
+                ("FONTNAME", (0, 1), (-1, 1), "Times-Bold"),
+                ("TOPPADDING", (0, 1), (-1, 1), 5),
+                ("BOTTOMPADDING", (0, 1), (-1, 1), 5),
+                ("SPAN", (0, 2), (0, 3)),
+                ("SPAN", (1, 2), (1, 3)),
+                ("SPAN", (2, 2), (2, 3)),
+                ("SPAN", (3, 2), (4, 2)),
+                ("SPAN", (5, 2), (5, 3)),
+                ("SPAN", (6, 2), (6, 3)),
+                ("SPAN", (7, 2), (7, 3)),
+                ("SPAN", (8, 2), (8, 3)),
+                ("FONTNAME", (0, 2), (-1, 3), "Times-Bold"),
+                ("ALIGN", (0, 2), (-1, 3), "CENTER"),
+                ("VALIGN", (0, 2), (-1, 3), "MIDDLE"),
+                ("LINEABOVE", (0, 0), (-1, 0), 0.5, colors.black),
+                ("LINEBELOW", (0, 0), (-1, 0), 0.5, colors.black),
+                ("LINEBELOW", (0, 1), (-1, 1), 0.5, colors.black),
+                ("LINEABOVE", (0, 2), (-1, 2), 0.5, colors.black),
+                ("LINEBELOW", (0, 3), (-1, 3), 0.5, colors.black),
+                ("FONTNAME", (0, 0), (-1, -1), "Times-Roman"),
+                ("FONTSIZE", (0, 0), (-1, -1), 10),
+                ("LINEBELOW", (0, -1), (-1, -1), 0.5, colors.black),
+                ("LINEABOVE", (0, -1), (-1, -1), 0.5, colors.black),
+                ("BOX", (0, 0), (-1, -1), 0.5, colors.black),
+                ("INNERGRID", (0, 2), (-1, -1), 0.5, colors.black),
+                ("ALIGN", (2, 2), (4, -1), "CENTER"),
+                ("ALIGN", (5, 2), (6, -1), "CENTER"),
+                ("ALIGN", (7, 2), (7, -1), "CENTER"),
+                ("ALIGN", (8, 2), (8, -1), "CENTER"),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 4),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+                ("TOPPADDING", (0, 2), (-1, -1), 3),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+                ("FONTNAME", (0, -1), (-1, -1), "Times-Bold"),
+            ])
+        )
+        return t
+
+    # Render server preview sections first (exact course list shown on Preview page)
+    for section in (preview_sections or []):
+        section_label = section.get("label") or ""
+        rows = section.get("rows") or []
+        ui_idx = preview_label_to_ui_index.get(section_label)
+        total_units_value = None
+        if ui_idx is not None:
+            total_units_value = pos_total_units_by_ui_index.get(ui_idx)
+        if total_units_value is None:
+            try:
+                total_units_value = int(section.get("total_units", 0) or 0)
+            except (TypeError, ValueError):
+                total_units_value = 0
+        # IMPORTANT: Preview total_units is already the correct integer total for that table.
+        # Use it to avoid any mismatch from float parsing / unit coercion.
+        try:
+            preview_total_units = int(float(section.get("total_units", 0) or 0))
+        except (TypeError, ValueError):
+            preview_total_units = None
+        story.append(
+            _render_section_table(
+                section_label,
+                rows,
+                total_units_value=preview_total_units if preview_total_units is not None else total_units_value,
+            )
+        )
+        story.append(Paragraph("Evaluated by: ______________________________", evaluated_style))
+
+    # Render future solver sections after the preview cut-off
+    try:
+        boundary_idx = int(boundary_section_index) if boundary_section_index is not None else None
+    except (TypeError, ValueError):
+        boundary_idx = None
+
+    # Mirror the Preview UI behavior: only render solver semesters up to the last
+    # semester that actually has courses (avoid trailing blank semesters).
+    max_solver_semester_index_with_courses = None
+    for sem in (future_pos or []):
+        if not isinstance(sem, dict):
+            continue
+        solver_sem_index = sem.get("semester_index")
+        try:
+            solver_sem_index_int = int(solver_sem_index)
+        except (TypeError, ValueError):
+            continue
+        courses = sem.get("courses") or []
+        has_courses = isinstance(courses, list) and any(
+            (c.get("code") or "").strip() != '' for c in courses if isinstance(c, dict)
+        )
+        if has_courses:
+            if max_solver_semester_index_with_courses is None or solver_sem_index_int > max_solver_semester_index_with_courses:
+                max_solver_semester_index_with_courses = solver_sem_index_int
+
+    for sem in (future_pos or []):
+        if not isinstance(sem, dict):
+            continue
+        solver_sem_index = sem.get("semester_index")
+        try:
+            ui_section_index = int(solver_sem_index) - 1 if solver_sem_index is not None else None
+        except (TypeError, ValueError):
+            ui_section_index = None
+        if ui_section_index is None:
+            continue
+        if boundary_idx is not None and ui_section_index <= boundary_idx:
+            continue
+        if max_solver_semester_index_with_courses is not None:
+            try:
+                if int(solver_sem_index) > max_solver_semester_index_with_courses:
+                    continue
+            except (TypeError, ValueError):
+                pass
+
+        label = _ui_section_index_to_preview_label(ui_section_index)
+        total_units_value = None
+        try:
+            total_units_value = int(sem.get("total_units", 0) or 0)
+        except (TypeError, ValueError):
+            total_units_value = 0
+        sem_courses = sem.get("courses") or []
+        future_rows = []
+        for c in sem_courses:
+            code = str(c.get("code", "") or "").strip()
+            if not code:
+                continue
+            if code in course_lookup:
+                title, units, lec, lab, prereq, coreq = course_lookup[code]
+            else:
+                title = str(c.get("title", "") or "")
+                units = c.get("units", "")
+                lec, lab, prereq, coreq = "", "", "", ""
+            future_rows.append({
+                "code": code,
+                "title": title,
+                "units": units,
+                "lec": lec,
+                "lab": lab,
+                "prereq": prereq,
+                "coreq": coreq,
+                "grade": "",
+            })
+
+        story.append(_render_section_table(label, future_rows, total_units_value=total_units_value))
+        story.append(Paragraph("Evaluated by: ______________________________", evaluated_style))
+
+    # Footer/signatories (same as build_pos_pdf)
+    story.append(Spacer(1, 0.4 * inch))
+    story.append(Paragraph("Checked and Reviewed:", sign_style))
+    story.append(Paragraph("<b>Engr. MARK JOHN FEL T. RAYOS</b>", sign_name_style))
+    story.append(Paragraph("Program Chair, CpE Program", sign_style))
+    story.append(Paragraph("Date:", sign_style))
+    story.append(Spacer(1, 0.12 * inch))
+    story.append(Paragraph("Approved by:", sign_style))
+    story.append(Paragraph("<b>Engr. RICMART V. GARBIN</b>", sign_name_style))
+    story.append(Paragraph("Department Chair, EE Department", sign_style))
+    story.append(Paragraph("Date:", sign_style))
 
     def page_canvas(canvas, doc):
         _page_header_canvas(canvas, logo_path)

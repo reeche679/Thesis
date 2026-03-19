@@ -639,7 +639,7 @@
     </p>
     <div class="row g-3 align-items-end">
         <div class="col-md-4">
-            <label class="form-label small text-uppercase text-muted" for="irreg-current-sem">Your Current Semester</label>
+            <label class="form-label small text-uppercase text-muted" for="irreg-current-sem">YOUR CURRENT SEMESTER TO TAKE</label>
             <select class="form-select form-select-sm" id="irreg-current-sem" required>
                 <option value="" {% if irreg_current_unset %}selected{% endif %}>- Select Semester -</option>
                 {% for sec in curriculum_sections_dropdown %}
@@ -679,9 +679,9 @@
     </p>
     <div class="regular-semester-row row g-3 align-items-end">
         <!-- 1st column: current semester -->
-        <div class="col-md-4">
+        <div class="col-md-3 col-12">
             <label class="form-label small text-uppercase text-muted" for="regular-current-semester">
-                Your Current Semester
+                YOUR CURRENT SEMESTER TO TAKE
             </label>
             <select class="form-select form-select-sm" id="regular-current-semester">
                 <option value="">- Select Semester -</option>
@@ -692,7 +692,7 @@
         </div>
 
         <!-- 2nd column: With Petition? -->
-        <div class="col-md-4">
+        <div class="col-md-3 col-12">
             <label class="form-label small text-uppercase text-muted" for="regular-with-petition">
                 With Petition?
             </label>
@@ -910,7 +910,7 @@
     <div class="mt-4" id="pos-action-buttons" {% if not is_regular and not irreg_configured %}style="display:none;"{% endif %}>
         <div class="d-flex align-items-center gap-2">
             <div class="dropdown">
-                <button type="button" class="btn btn-outline-secondary btn-sm pos-gear-btn dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" title="Options">
+                <button type="button" class="btn btn-outline-secondary btn-sm pos-gear-btn" data-bs-toggle="dropdown" aria-expanded="false" title="Options" aria-label="Options">
                     <i class="bi bi-gear"></i>
                 </button>
                 <ul class="dropdown-menu">
@@ -1516,6 +1516,13 @@
             alert('Please select your current semester and when you became irregular above, then click OK to proceed.');
             return;
         }
+        if (IS_REGULAR) {
+            var regSel = document.getElementById('regular-current-semester');
+            if (!regSel || !regSel.value) {
+                alert('Please select your current semester and click OK to proceed.');
+                return;
+            }
+        }
         var sections = document.querySelectorAll('[id^="main-sem-"]');
         if (!IS_REGULAR && sections.length === 0) {
             alert('Please select your current semester and when you became irregular above, then click OK to proceed.');
@@ -1665,28 +1672,11 @@
         }
 
         function showGeneratedPosModal(result) {
-            var errEl = document.getElementById('generated-pos-error');
-            if (errEl) errEl.classList.add('d-none');
-
-            if (!result || result.status !== 'ok') {
-                var msg = (result && (result.message || result.error)) || 'Solver could not generate a POS.';
-                if (errEl) {
-                    errEl.textContent = msg;
-                    errEl.classList.remove('d-none');
-                } else {
-                    alert(msg);
-                }
-            } else {
-                renderGeneratedPos(result.pos || []);
-            }
-
-            var modalEl = document.getElementById('generated-pos-modal');
-            if (modalEl && typeof bootstrap !== 'undefined' && bootstrap.Modal) {
-                new bootstrap.Modal(modalEl).show();
-            } else if (modalEl) {
-                modalEl.classList.add('show');
-                modalEl.style.display = 'block';
-            }
+            // No popup: always go directly to the Preview POS page.
+            // Preview page will render from sessionStorage if the solver returned status "ok".
+            // Otherwise it will fall back to regenerating dynamically from saved grades.
+            var previewUrl = "{% url 'pos_preview' %}?t=" + Date.now();
+            window.location.href = previewUrl;
         }
 
         saveGradesToServer(gradesBySection, true, function(data) {
@@ -2077,7 +2067,7 @@
                 }
                 // Current semester must be the same or ahead of when they became irregular
                 if (currentIdx < startIdx) {
-                    alert('Invalid selection: "Your Current Semester" must be the same as or ahead of "When you became irregular".');
+                    alert('Invalid selection: "YOUR CURRENT SEMESTER TO TAKE" must be the same as or ahead of "When you became irregular".');
                     return;
                 }
                 var params = [];

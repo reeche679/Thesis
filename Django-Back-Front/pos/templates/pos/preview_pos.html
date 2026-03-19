@@ -284,7 +284,7 @@
                         <th colspan="2" class="hours-header" style="width: 6%;">No. of hour/s</th>
                         <th rowspan="2" style="width: 12%;">Pre-requisite(s)</th>
                         <th rowspan="2" style="width: 12%;">Co-requisite(s)</th>
-                        <th rowspan="2" style="width: 9%;">Final Grade</th>
+                        <th rowspan="2" style="width: 9%;">Grade</th>
                         <th rowspan="2" style="width: 9%;">Remarks</th>
                     </tr>
                     <tr class="text-center">
@@ -302,8 +302,8 @@
                         <td class="text-center">{{ row.lab }}</td>
                         <td class="small text-muted text-center">{{ row.prereq }}</td>
                         <td class="small text-muted text-center">{{ row.coreq }}</td>
-                        <td class="text-center grade-display {% if row.grade == '5.00' %}text-danger{% endif %}" data-course-code="{{ row.code }}">{% if row.grade %}{{ row.grade }}{% else %}—{% endif %}</td>
-                        <td class="text-center remarks-display {% if row.remark == 'Passed' %}text-success{% elif row.remark == 'Failed' %}text-danger{% endif %}" data-course-code="{{ row.code }}">{% if row.remark %}{{ row.remark }}{% else %}—{% endif %}</td>
+                        <td class="text-center grade-display {% if row.grade == '5.00' %}text-danger{% endif %}" data-course-code="{{ row.code }}">{% if row.grade %}{{ row.grade }}{% endif %}</td>
+                        <td class="text-center remarks-display {% if row.remark == 'Passed' %}text-success{% elif row.remark == 'Failed' %}text-danger{% endif %}" data-course-code="{{ row.code }}">{% if row.remark %}{{ row.remark }}{% endif %}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -330,6 +330,7 @@
 {% endblock %}
 
 {% block extra_scripts %}
+{{ course_lookup|json_script:"course-lookup" }}
 <script>
     (function() {
         // Mapping from solver semester_index (1-based) -> label
@@ -369,6 +370,15 @@
             var raw = localStorage.getItem('posGrades');
             return raw ? safeJsonParse(raw) : null;
         }
+
+        var courseLookupEl = document.getElementById('course-lookup');
+        var courseLookup = null;
+        try {
+            if (courseLookupEl && courseLookupEl.textContent) {
+                courseLookup = safeJsonParse(courseLookupEl.textContent);
+            }
+        } catch (e) {}
+
         function getGradeFor(semesterIndex, code, gradesBySection) {
             if (!gradesBySection) return '';
             var sec = gradesBySection[String(semesterIndex)] || gradesBySection[semesterIndex];
@@ -393,11 +403,31 @@
             // Solver is 1-based; everything after currentSemSolver is "future"
             var currentSemSolver = currentUiIndex + 1;
 
+            // Only render solver semesters up to the last semester that actually has courses.
+            // Solver output may include trailing semesters with blank/empty course lists; we don't want
+            // those tables to appear on Preview/PDF.
+            var maxSolverIndexWithCourses = currentSemSolver;
+            res.pos.forEach(function(sem) {
+                var solverIndex = sem.semester_index || 0;
+                if (!solverIndex) return;
+                var hasCourses = Array.isArray(sem.courses) && sem.courses.some(function(c) {
+                    var code = c && (c.code || '');
+                    return String(code).trim() !== '';
+                });
+                if (hasCourses && solverIndex > maxSolverIndexWithCourses) {
+                    maxSolverIndexWithCourses = solverIndex;
+                }
+            });
+
             var html = "";
             res.pos.forEach(function(sem) {
                 var solverIndex = sem.semester_index || 0;
                 if (!solverIndex || solverIndex <= currentSemSolver) {
                     // Already represented by the server-rendered curriculum/grades tables
+                    return;
+                }
+                if (solverIndex > maxSolverIndexWithCourses) {
+                    // Trailing empty semesters from solver output; stop rendering further tables.
                     return;
                 }
 
@@ -427,7 +457,7 @@
                 html +=           '<th colspan="2" class="hours-header" style="width: 6%;">No. of hour/s</th>';
                 html +=           '<th rowspan="2" style="width: 12%;">Pre-requisite(s)</th>';
                 html +=           '<th rowspan="2" style="width: 12%;">Co-requisite(s)</th>';
-                html +=           '<th rowspan="2" style="width: 9%;">Final Grade</th>';
+                    html +=           '<th rowspan="2" style="width: 9%;">Grade</th>';
                 html +=           '<th rowspan="2" style="width: 9%;">Remarks</th>';
                 html +=         '</tr>';
                 html +=         '<tr class="text-center">';
@@ -439,8 +469,14 @@
 
                 (sem.courses || []).forEach(function(c) {
                     var code = c.code || '';
-                    var title = c.title || '';
-                    var units = (c.units !== undefined && c.units !== null) ? c.units : '';
+                    var info = (courseLookup && code) ? courseLookup[code] : null;
+                    var title = (info && info.title) ? info.title : (c.title || '');
+                    var units = (info && info.units !== undefined && info.units !== null) ? info.units : ((c.units !== undefined && c.units !== null) ? c.units : '');
+                    var lec = (info && info.lec !== undefined && info.lec !== null) ? info.lec : '';
+                    var lab = (info && info.lab !== undefined && info.lab !== null) ? info.lab : '';
+                    var prereq = (info && info.prereq) ? info.prereq : '';
+                    var coreq = (info && info.coreq) ? info.coreq : '';
+
                     // For future sems, grades will usually be empty
                     var grade = getGradeFor(solverIndex - 1, code, gradesBySection);
                     var remark = grade ? (isPassingGrade(grade) ? 'Passed' : (isFailedGrade(grade) ? 'Failed' : '')) : '';
@@ -451,12 +487,12 @@
                     html +=   '<td class="text-center">' + String(code) + '</td>';
                     html +=   '<td class="course-title-cell">' + String(title) + '</td>';
                     html +=   '<td class="text-center">' + String(units) + '</td>';
-                    html +=   '<td class="text-center">—</td>';
-                    html +=   '<td class="text-center">—</td>';
-                    html +=   '<td class="small text-muted text-center">—</td>';
-                    html +=   '<td class="small text-muted text-center">—</td>';
-                    html +=   '<td class="text-center grade-display ' + gradeClass + '">' + (grade ? String(grade) : '—') + '</td>';
-                    html +=   '<td class="text-center remarks-display ' + remarkClass + '">' + (remark ? String(remark) : '—') + '</td>';
+                    html +=   '<td class="text-center">' + (lec !== '' ? String(lec) : '') + '</td>';
+                    html +=   '<td class="text-center">' + (lab !== '' ? String(lab) : '') + '</td>';
+                    html +=   '<td class="small text-muted text-center">' + (prereq !== '' ? String(prereq) : '') + '</td>';
+                    html +=   '<td class="small text-muted text-center">' + (coreq !== '' ? String(coreq) : '') + '</td>';
+                    html +=   '<td class="text-center grade-display ' + gradeClass + '">' + (grade ? String(grade) : '') + '</td>';
+                    html +=   '<td class="text-center remarks-display ' + remarkClass + '">' + (remark ? String(remark) : '') + '</td>';
                     html += '</tr>';
                 });
 
