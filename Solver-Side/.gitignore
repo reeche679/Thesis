@@ -1,0 +1,6 @@
+# Python caches (applies only under Solver-Side/)
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
