@@ -179,7 +179,7 @@ def create_semester_variables(model, current_sem, passed_courses):
 
 # Single algorithm selection: change this name to swap the thesis algorithm.
 # Must be a key in algorithms_and_helpers.algorithms.ALGORITHMS.
-ALGORITHM_NAME = "algo3_capped_trio_weighted"
+ALGORITHM_NAME = "algo1_modulo3_baseline"
 
 
 

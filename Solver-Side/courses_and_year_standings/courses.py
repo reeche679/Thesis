@@ -53,7 +53,7 @@ courses = {
     "AI 101":   {"course_title": "Linear Algebra for AI", "units": 3, "pre-requisites": [], "co-requisites": [], "orig_sem": 4, "category": "Rigid", "year_level": 2},
     "MATH 103": {"course_title": "Differential Equations", "units": 3, "pre-requisites": ["MATH 102"], "co-requisites": [], "orig_sem": 4, "category": "Bottleneck", "year_level": 2},
     "PATHFit 3": {"course_title": "Choice of dance, sports, Martial Arts, etc 1", "units": 2, "pre-requisites": ["PATHFit 1", "PATHFit 2"], "co-requisites": [], "orig_sem": 4, "category": "Rigid", "year_level": 2},
-    "GEdE 102":  {"course_title": "The Entrepreneurial Mind", "units": 3, "pre-requisites": [], "co-requisites": [], "orig_sem": 4, "category": "Rigid", "year_level": 2},
+    "GEdE 101":  {"course_title": "The Entrepreneurial Mind", "units": 3, "pre-requisites": [], "co-requisites": [], "orig_sem": 4, "category": "Rigid", "year_level": 2},
 
     # --- SECOND YEAR: 2nd Semester ---
     "CpE 204":  {"course_title": "Advance Engineering Mathematics for CpE", "units": 3, "pre-requisites": ["2nd Year Standing"], "co-requisites": [], "orig_sem": 5, "category": "Rigid", "year_level": 2},
