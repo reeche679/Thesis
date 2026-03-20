@@ -151,3 +151,33 @@ def validate_pos_via_solver(payload: dict, with_petition: bool, forced_semester_
         p["forced_semester_map"] = forced_semester_map
     return generate_pos(p)
 
+
+def get_solver_metadata() -> dict:
+    """
+    Return solver-side static metadata needed for typed violation heuristics.
+
+    This avoids fragile sys.path imports in Django by reusing the same CP-SAT
+    namespace loaded by `_get_solver_namespace()`.
+
+    Returns:
+      - courses: solver-side `courses` dict (code -> info)
+      - year_standing_rules: solver-side `YEAR_STANDING_RULES`
+      - max_units_for_sem: callable max_units_for_sem(sem_index) -> int
+    """
+    ns = _get_solver_namespace()
+    courses = ns.get("courses") or {}
+    year_standing_rules = ns.get("YEAR_STANDING_RULES") or {}
+    u = ns.get("u")
+    max_units_for_sem = None
+    try:
+        if u is not None and hasattr(u, "max_units_for_sem"):
+            max_units_for_sem = u.max_units_for_sem
+    except Exception:
+        max_units_for_sem = None
+
+    return {
+        "courses": courses,
+        "year_standing_rules": year_standing_rules,
+        "max_units_for_sem": max_units_for_sem,
+    }
+

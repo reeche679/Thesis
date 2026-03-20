@@ -199,6 +199,19 @@
     .pos-dnd-semester.pos-dnd-locked {
         opacity: 0.95;
     }
+
+    /* Feasible-move highlight (computed per course; not just "draggable") */
+    .pos-course-row.pos-feasible-move td {
+        box-shadow: inset 0 0 0 2px rgba(25, 135, 84, 0.7);
+        background-color: rgba(25, 135, 84, 0.03);
+    }
+
+    /* Feasible destination semester highlight (computed for the dragged course) */
+    .pos-dnd-semester.pos-feasible-target-sem {
+        box-shadow: inset 0 0 0 2px rgba(25, 135, 84, 0.85);
+        background-color: rgba(25, 135, 84, 0.02);
+        border-radius: 0.25rem;
+    }
 </style>
 {% endblock %}
 
@@ -358,18 +371,31 @@
     <div id="pos-preview-dynamic" style="display:none;"></div>
 
         <div class="mt-4 d-flex justify-content-between align-items-center">
-        <button id="pos-edit-toggle" type="button" class="btn btn-outline-secondary btn-sm" style="min-width: 110px;" title="Edit and drag ungraded courses">
-            <span id="pos-edit-toggle-icon" class="me-1" aria-hidden="true">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
-                </svg>
-            </span>
-            <span id="pos-edit-toggle-label">Edit</span>
-        </button>
-        <a href="{% url 'download_pos_pdf' %}" class="btn btn-outline-danger btn-sm" download>
-            Download PDF
-        </a>
-    </div>
+            <div class="d-flex align-items-center">
+                <button id="pos-edit-toggle" type="button" class="btn btn-outline-secondary btn-sm" style="min-width: 110px;" title="Edit and drag ungraded courses">
+                    <span id="pos-edit-toggle-icon" class="me-1" aria-hidden="true">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+                        </svg>
+                    </span>
+                    <span id="pos-edit-toggle-label">Edit</span>
+                </button>
+                <div class="ms-3">
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" role="switch" id="pos-feasible-move-toggle">
+                        <label class="form-check-label small text-muted" for="pos-feasible-move-toggle">Show feasible move targets (may be slow)</label>
+                        <span id="pos-feasible-move-spinner"
+                              class="spinner-border spinner-border-sm ms-2 align-middle"
+                              role="status"
+                              aria-hidden="true"
+                              style="display:none;"></span>
+                    </div>
+                </div>
+            </div>
+            <a href="{% url 'download_pos_pdf' %}" class="btn btn-outline-danger btn-sm" download>
+                Download PDF
+            </a>
+        </div>
 </div>
 {% endblock %}
 
@@ -449,6 +475,9 @@
             editing: false,
             saving: false,
             validating: false,
+            feasibleComputing: false,
+            dragFeasibleTargetsRequestId: 0,
+            dragCourseCode: null,
             lastValidDomHtml: '',
             sortablesBySem: {} // solver_semester_index (string) -> Sortable instance
         };
@@ -471,6 +500,22 @@
                 } catch (e) {}
             });
             posEditState.sortablesBySem = {};
+
+            // Remove any UI highlight classes when leaving edit mode.
+            try {
+                var dyn = document.getElementById('pos-preview-dynamic');
+                if (dyn) {
+                    dyn.querySelectorAll('tr.pos-course-row.pos-dnd-draggable').forEach(function(tr) {
+                        tr.classList.remove('pos-dnd-draggable');
+                    });
+                    dyn.querySelectorAll('tr.pos-course-row.pos-feasible-move').forEach(function(tr) {
+                        tr.classList.remove('pos-feasible-move');
+                    });
+                    dyn.querySelectorAll('.pos-dnd-semester.pos-dnd-locked').forEach(function(el) {
+                        el.classList.remove('pos-dnd-locked');
+                    });
+                }
+            } catch (e) {}
         }
 
         function recomputeSemesterTotalUnits(semesterEl) {
@@ -513,10 +558,18 @@
 
                 if (hasAnyGrade) {
                     semEl.classList.add('pos-dnd-locked');
+                    // Ensure locked semester rows are not highlighted as draggable.
+                    semEl.querySelectorAll('tr.pos-course-row.pos-dnd-draggable').forEach(function(tr) {
+                        tr.classList.remove('pos-dnd-draggable');
+                    });
                     return;
                 }
 
                 // Enable cross-semester drag only for ungraded semesters.
+                // Highlight draggable rows in edit mode.
+                tbody.querySelectorAll('tr.pos-course-row').forEach(function(tr) {
+                    tr.classList.add('pos-dnd-draggable');
+                });
                 var sortable = new Sortable(tbody, {
                     group: { name: 'pos-semester-group', pull: true, put: true },
                     animation: 150,
@@ -525,16 +578,37 @@
                     ghostClass: 'pos-dnd-ghost',
                     chosenClass: 'pos-dnd-chosen',
                     // onEnd fires after drop completes (including cross-list moves)
+                    onStart: function(evt) {
+                        if (!posEditState.editing) return;
+                        if (!isFeasibleMoveToggleEnabled()) return;
+                        if (!evt || !evt.item || typeof evt.item.getAttribute !== 'function') return;
+                        var code = String(evt.item.getAttribute('data-course-code') || '').trim();
+                        if (!code) return;
+                        computeFeasibleTargetSemestersForCourse(code);
+                    },
                     onEnd: function(evt) {
                         if (!evt || !evt.from || !evt.to) return;
+                        // Clear destination highlights immediately after drop.
+                        clearFeasibleTargetSemesterHighlights();
+                        posEditState.dragCourseCode = null;
+                        posEditState.dragFeasibleTargetsRequestId += 1; // invalidate any in-flight "drag targets" requests
                         var fromSem = evt.from.closest('.pos-dnd-semester');
                         var toSem = evt.to.closest('.pos-dnd-semester');
+                        var latestMovedCode = null;
+                        try {
+                            if (evt.item && typeof evt.item.getAttribute === 'function') {
+                                latestMovedCode = evt.item.getAttribute('data-course-code');
+                            }
+                        } catch (e) {}
                         window.requestAnimationFrame(function() {
                             recomputeSemesterTotalUnits(fromSem);
                             if (toSem && toSem !== fromSem) {
                                 recomputeSemesterTotalUnits(toSem);
                                 if (posEditState.editing && !posEditState.saving && !posEditState.validating) {
-                                    validateCurrentTunedPosAndRevert();
+                                    var latestMovedCodes = latestMovedCode
+                                        ? new Set([String(latestMovedCode).trim()])
+                                        : null;
+                                    validateCurrentTunedPosAndRevert(latestMovedCodes);
                                 }
                             }
                         });
@@ -581,7 +655,160 @@
             });
         }
 
-        function validateCurrentTunedPosAndRevert() {
+        function clearFeasibleMoveHighlights() {
+            var dyn = document.getElementById('pos-preview-dynamic');
+            if (!dyn) return;
+            dyn.querySelectorAll('tr.pos-course-row.pos-feasible-move').forEach(function(tr) {
+                tr.classList.remove('pos-feasible-move');
+            });
+        }
+
+        function clearFeasibleTargetSemesterHighlights() {
+            var dyn = document.getElementById('pos-preview-dynamic');
+            if (!dyn) return;
+            dyn.querySelectorAll('.pos-dnd-semester.pos-feasible-target-sem').forEach(function(semEl) {
+                semEl.classList.remove('pos-feasible-target-sem');
+            });
+        }
+
+        function applyFeasibleTargetSemesterHighlights(feasibleTargetIndices) {
+            var dyn = document.getElementById('pos-preview-dynamic');
+            if (!dyn) return;
+            var targetSet = new Set(Array.isArray(feasibleTargetIndices) ? feasibleTargetIndices.map(function(x) { return Number(x); }) : []);
+            dyn.querySelectorAll('.pos-dnd-semester[data-semester-index]').forEach(function(semEl) {
+                var idxRaw = semEl.getAttribute('data-semester-index');
+                var idx = Number(idxRaw);
+                if (!isNaN(idx) && targetSet.has(idx)) {
+                    semEl.classList.add('pos-feasible-target-sem');
+                }
+            });
+        }
+
+        function isFeasibleMoveToggleEnabled() {
+            var toggle = document.getElementById('pos-feasible-move-toggle');
+            return !!(toggle && toggle.checked);
+        }
+
+        function applyFeasibleMoveHighlights(feasibleCourses) {
+            var dyn = document.getElementById('pos-preview-dynamic');
+            if (!dyn) return;
+            var feasibleSet = new Set(Array.isArray(feasibleCourses) ? feasibleCourses : []);
+
+            dyn.querySelectorAll('tr.pos-course-row[data-course-code]').forEach(function(tr) {
+                var code = String(tr.getAttribute('data-course-code') || '').trim();
+                if (!code) return;
+                if (feasibleSet.has(code)) {
+                    tr.classList.add('pos-feasible-move');
+                }
+            });
+        }
+
+        function computeFeasibleTargetSemestersForCourse(courseCodeUi) {
+            if (!feasibleMoveMarksUrl) return;
+            if (!posEditState.editing) return;
+            if (!isFeasibleMoveToggleEnabled()) {
+                clearFeasibleTargetSemesterHighlights();
+                return;
+            }
+            if (!courseCodeUi) {
+                clearFeasibleTargetSemesterHighlights();
+                return;
+            }
+
+            clearFeasibleTargetSemesterHighlights();
+
+            posEditState.dragCourseCode = courseCodeUi;
+            posEditState.dragFeasibleTargetsRequestId += 1;
+            var requestId = posEditState.dragFeasibleTargetsRequestId;
+
+            var dyn = document.getElementById('pos-preview-dynamic');
+            if (!dyn) return;
+
+            var overrides = collectPosOverridesFromDOM();
+            var mode = getSelectedPetitionMode();
+
+            fetch(feasibleMoveMarksUrl, {
+                method: 'POST',
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ mode: mode, pos_overrides: overrides, course_code: courseCodeUi })
+            }).then(function(r) { return r.json(); })
+              .then(function(data) {
+                  // Ignore stale responses.
+                  if (requestId !== posEditState.dragFeasibleTargetsRequestId) return;
+                  if (!posEditState.editing) return;
+                  if (!isFeasibleMoveToggleEnabled()) return;
+
+                  if (data && data.ok && Array.isArray(data.feasible_targets)) {
+                      applyFeasibleTargetSemesterHighlights(data.feasible_targets);
+                      return;
+                  }
+
+                  // Safety fallback: remove highlights when we can't compute.
+                  clearFeasibleTargetSemesterHighlights();
+              }).catch(function() {
+                  if (requestId !== posEditState.dragFeasibleTargetsRequestId) return;
+                  clearFeasibleTargetSemesterHighlights();
+              });
+        }
+
+        function markFeasibleMovesFromDOM() {
+            if (!feasibleMoveMarksUrl) return;
+            if (!posEditState.editing) return;
+            if (posEditState.feasibleComputing) return;
+            if (!isFeasibleMoveToggleEnabled()) {
+                clearFeasibleMoveHighlights();
+                return;
+            }
+
+            var dyn = document.getElementById('pos-preview-dynamic');
+            if (!dyn) return;
+
+            clearFeasibleMoveHighlights();
+            posEditState.feasibleComputing = true;
+
+            // Buffer UX: show a loading spinner while computing row-level feasible-move highlights.
+            var feasibleToggleEl = document.getElementById('pos-feasible-move-toggle');
+            if (feasibleToggleEl) feasibleToggleEl.disabled = true;
+            var spinEl = document.getElementById('pos-feasible-move-spinner');
+            if (spinEl) spinEl.style.display = '';
+
+            var overrides = collectPosOverridesFromDOM();
+            var mode = getSelectedPetitionMode();
+
+            var wasEnabledAtRequestStart = isFeasibleMoveToggleEnabled();
+
+            fetch(feasibleMoveMarksUrl, {
+                method: 'POST',
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ mode: mode, pos_overrides: overrides })
+            }).then(function(r) { return r.json(); })
+              .then(function(data) {
+                  if (!wasEnabledAtRequestStart || !isFeasibleMoveToggleEnabled()) {
+                      // User turned the toggle off while request was in-flight.
+                      return;
+                  }
+
+                  if (data && data.ok && Array.isArray(data.feasible_courses)) {
+                      applyFeasibleMoveHighlights(data.feasible_courses);
+                      return;
+                  }
+
+                  // Solver-backed hints failed; for correctness, clear highlights.
+                  clearFeasibleMoveHighlights();
+              }).catch(function() {
+                  // Network/parse errors: for correctness, clear highlights.
+                  clearFeasibleMoveHighlights();
+              }).finally(function() {
+                  posEditState.feasibleComputing = false;
+
+                var feasibleToggleEl2 = document.getElementById('pos-feasible-move-toggle');
+                if (feasibleToggleEl2) feasibleToggleEl2.disabled = false;
+                var spinEl2 = document.getElementById('pos-feasible-move-spinner');
+                if (spinEl2) spinEl2.style.display = 'none';
+              });
+        }
+
+        function validateCurrentTunedPosAndRevert(latestMovedCodes) {
             if (!validateTunedPosUrl) return;
             if (posEditState.validating) return;
 
@@ -612,6 +839,7 @@
                           alertEl.style.display = 'none';
                           alertEl.innerHTML = '';
                       }
+                      markFeasibleMovesFromDOM();
                       return;
                   }
 
@@ -621,10 +849,20 @@
                       var moved = (data && data.moved_courses && Array.isArray(data.moved_courses))
                           ? data.moved_courses
                           : [];
+                      var movedAll = moved.slice();
+                      if (latestMovedCodes && latestMovedCodes.size) {
+                          moved = moved.filter(function(mc) {
+                              var code = mc && mc.code ? String(mc.code).trim() : '';
+                              return code && latestMovedCodes.has(code);
+                          });
+                          // If filtering removes everything, fall back to the full list.
+                          if (!moved.length) moved = movedAll;
+                      }
 
                       var movedLis = moved.map(function(mc) {
                           if (!mc) return '';
                           var code = escapeHtml(mc.code || '');
+                          var rawCode = mc.code || '';
                           var fromSi = mc.from_semester_index;
                           var toSi = mc.to_semester_index;
                           var toSiNum = parseInt(toSi, 10);
@@ -634,13 +872,74 @@
                           } else {
                               semLabel = 'Semester ' + String(toSi || '');
                           }
-                          var howArr = (mc.how && Array.isArray(mc.how)) ? mc.how : [];
-                          var howTxt = howArr.slice(0, 4).filter(Boolean).join(' · ');
                           var subtitle = code + ' (' + escapeHtml(String(fromSi || '')) + ' → ' + escapeHtml(String(toSi || '')) + ')';
-                          if (howTxt) {
-                              return '<li><b>' + subtitle + '</b>: ' + escapeHtml(semLabel) + ' — ' + escapeHtml(howTxt) + '</li>';
+                          var violationsArr = (mc.violations && Array.isArray(mc.violations)) ? mc.violations : [];
+                          var primaryType = mc.primary_violation_type || '';
+
+                          function violationTermTypeLabel(t) {
+                              // term types: 1=1st semester, 2=2nd semester, 0=midterm/summer
+                              if (t === 0 || t === '0') return 'Midterm/Summer';
+                              if (t === 1 || t === '1') return '1st Semester';
+                              if (t === 2 || t === '2') return '2nd Semester';
+                              return 'Term ' + String(t);
                           }
-                          return '<li><b>' + subtitle + '</b>: ' + escapeHtml(semLabel) + '</li>';
+
+                          function formatViolation(v) {
+                              if (!v) return '';
+                              var vtype = v.type || '';
+                              var ev = v.evidence || {};
+                              if (vtype === 'unit_cap') {
+                                  var cap = ev.cap;
+                                  var total = ev.total_units;
+                                  var si = ev.semester_index || toSiNum;
+                                  return 'Unit cap exceeded: semester ' + String(si) + ' total ' + String(total) + ' > cap ' + String(cap);
+                              }
+                              if (vtype === 'unknown') {
+                                  var detail = ev.reason_detail || '';
+                                  if (detail) {
+                                      return 'Constraint conflict: ' + escapeHtml(detail);
+                                  }
+                                  return 'Constraint conflict';
+                              }
+                              if (vtype === 'offering_window') {
+                                  var cat = ev.course_category || '';
+                                  var origSem = ev.orig_semester_index || '';
+                                  var origType = ev.orig_term_type;
+                                  var destType = ev.destination_term_type;
+                                  var withPet = ev.with_petition ? 'with' : 'no';
+                                  return 'Offering window mismatch: ' + String(cat) + ' course (orig sem ' + String(origSem) + ') placed in ' + violationTermTypeLabel(destType) + ' (original term-type ' + violationTermTypeLabel(origType) + '; petition: ' + withPet + ')';
+                              }
+                              if (vtype === 'prereq') {
+                                  var pre = ev.prereq_course || '';
+                                  return 'Prerequisite ordering: ' + String(pre) + ' must be before ' + String(rawCode);
+                              }
+                              if (vtype === 'co_req') {
+                                  var co = ev.coreq_course || '';
+                                  return 'Co-requisite ordering: ' + String(co) + ' must be same/earlier than ' + String(rawCode);
+                              }
+                              if (vtype === 'year_standing') {
+                                  var schedBefore = ev.scheduled_before_units;
+                                  var remaining = ev.remaining_needed_units;
+                                  return 'Year standing: 90% prefix-units not satisfied (scheduled ' + String(schedBefore) + ' < remaining ' + String(remaining) + ')';
+                              }
+                              return v.label || 'Constraint conflict';
+                          }
+
+                          if (!violationsArr.length) {
+                              return '<li><b>' + subtitle + '</b>: ' + escapeHtml(semLabel) + '</li>';
+                          }
+
+                          var primary = violationsArr.find(function(v) { return v.type === primaryType; }) || violationsArr[0];
+                          var primaryTxt = formatViolation(primary);
+                          var others = violationsArr.filter(function(v) { return v !== primary; });
+                          var otherTxt = others.map(function(v) { return formatViolation(v); }).filter(Boolean);
+
+                          var outTxt = escapeHtml(semLabel) + ': ' + escapeHtml(primaryTxt);
+                          if (otherTxt.length) {
+                              outTxt += ' (Also: ' + escapeHtml(otherTxt.join(' · ')) + ')';
+                          }
+
+                          return '<li><b>' + subtitle + '</b>: ' + outTxt + '</li>';
                       }).filter(function(s) { return s; }).join('');
 
                       var movedUl = movedLis ? ('<ul class=\"mb-0 mt-2\">' + movedLis + '</ul>') : '';
@@ -657,6 +956,7 @@
                   // Infeasible: revert to the last known-good arrangement.
                   dyn.innerHTML = posEditState.lastValidDomHtml || '';
                   initPosSortables();
+                  markFeasibleMovesFromDOM();
                   setSortablesDisabled(true);
               }).catch(function() {
                   if (alertEl) {
@@ -665,6 +965,7 @@
                   }
                   dyn.innerHTML = posEditState.lastValidDomHtml || '';
                   initPosSortables();
+                  markFeasibleMovesFromDOM();
                   setSortablesDisabled(true);
               }).finally(function() {
                   posEditState.validating = false;
@@ -700,6 +1001,8 @@
                     var dyn = document.getElementById('pos-preview-dynamic');
                     if (dyn) posEditState.lastValidDomHtml = dyn.innerHTML;
                     initPosSortables();
+                    // Compute feasible-move highlights for all movable courses.
+                    markFeasibleMovesFromDOM();
                 }
             } else {
                 destroyPosSortables();
@@ -708,8 +1011,33 @@
         }
 
         var validateTunedPosUrl = "{% url 'validate_tuned_pos' %}";
+        var feasibleMoveMarksUrl = "{% url 'feasible_move_marks' %}";
         var saveTunedPosUrl = "{% url 'save_tuned_pos' %}";
         var editBtn = document.getElementById('pos-edit-toggle');
+
+        // Feasible-move toggle (may be slow): only compute highlights when enabled.
+        var feasibleToggleEl = document.getElementById('pos-feasible-move-toggle');
+        if (feasibleToggleEl) {
+            feasibleToggleEl.addEventListener('change', function() {
+                if (!posEditState.editing) {
+                    clearFeasibleMoveHighlights();
+                    clearFeasibleTargetSemesterHighlights();
+                    var spinEl0 = document.getElementById('pos-feasible-move-spinner');
+                    if (spinEl0) spinEl0.style.display = 'none';
+                    return;
+                }
+                if (feasibleToggleEl.checked) {
+                    markFeasibleMovesFromDOM();
+                } else {
+                    clearFeasibleMoveHighlights();
+                    clearFeasibleTargetSemesterHighlights();
+                    posEditState.dragCourseCode = null;
+                    posEditState.dragFeasibleTargetsRequestId += 1; // invalidate in-flight responses
+                    var spinEl1 = document.getElementById('pos-feasible-move-spinner');
+                    if (spinEl1) spinEl1.style.display = 'none';
+                }
+            });
+        }
         if (editBtn) {
             editBtn.addEventListener('click', function() {
                 if (!posEditState.editing) {
@@ -787,6 +1115,11 @@
                         maxSolverIndexWithCourses = solverIndex;
                     }
                 });
+
+                // The feasible-move horizon should match the "generated POS" horizon:
+                // i.e., the latest solver semester that actually has courses.
+                // (Earlier we experimented with a fixed cap, but that can under/over-highlight
+                // depending on the student's graduation length.)
 
                 var html = "";
                 posList.forEach(function(sem) {
