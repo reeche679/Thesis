@@ -426,7 +426,26 @@
             var html = "";
             res.pos.forEach(function(sem) {
                 var solverIndex = sem.semester_index || 0;
-                if (!solverIndex || solverIndex <= currentSemSolver) {
+                if (!solverIndex) return;
+
+                // The server-rendered part only includes semesters where there are
+                // saved grades. If the user didn't enter grades for a "past" semester,
+                // that section can disappear on Preview, and we should let the solver
+                // overlay fill it in (metadata + blank grade/remark).
+                //
+                // Skip solver semesters <= boundary ONLY if that UI section already has
+                // at least one non-empty grade saved.
+                var uiIndexForServer = solverIndex - 1; // solverIndex=1 -> uiIndex=0
+                var serverSectionGrades = (gradesBySection && (gradesBySection[String(uiIndexForServer)] || gradesBySection[uiIndexForServer])) ? (gradesBySection[String(uiIndexForServer)] || gradesBySection[uiIndexForServer]) : null;
+                var serverHasAnyGrade = false;
+                if (serverSectionGrades) {
+                    Object.keys(serverSectionGrades).some(function(code) {
+                        if (serverSectionGrades[code]) { serverHasAnyGrade = true; return true; }
+                        return false;
+                    });
+                }
+
+                if (solverIndex <= currentSemSolver && serverHasAnyGrade) {
                     // Already represented by the server-rendered curriculum/grades tables
                     return;
                 }

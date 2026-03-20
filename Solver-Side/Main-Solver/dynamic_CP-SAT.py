@@ -145,39 +145,22 @@ def gather_irregular_history():
     )
     while True:
         try:
-            raw = input(f"Enter irregular-start semester index (1-{current_sem}): ").strip()
+            raw = input(
+                f"Enter irregular-start semester index (1-{current_sem}), or press Enter for regular path: "
+            ).strip()
+            # If user doesn't provide an irregular start semester, treat it as if the
+            # student "became irregular" in their current semester (so there are no completed
+            # irregular semesters). That matches the regular/CP-SAT behavior.
+            if raw == "":
+                irregular_start_sem = current_sem
+                break
+
             irregular_start_sem = int(raw)
             if 1 <= irregular_start_sem <= current_sem:
                 break
         except ValueError:
             pass
         print(f"  Invalid input. Please enter an integer between 1 and {current_sem}.")
-
-    # Special case: current_sem=2 and irregular_start_sem=1
-    # This is effectively the same as the static solver behavior:
-    # only semester 1 is in the past and follows the base curriculum.
-    # In this case, delegate directly to the main static solver and exit.
-    if current_sem == 2 and irregular_start_sem == 1:
-        print(
-            "\nNote: You are starting Semester 2 and became irregular in Semester 1.\n"
-            "This is equivalent to the static mode case where only Semester 1 is\n"
-            "completed. The system will therefore just collect grades for all\n"
-            "1st Year 1st Sem curriculum courses using the main static solver.\n"
-        )
-        _run_static_model()
-        return current_sem, irregular_start_sem, {}, [], []
-
-    # Special case: current_sem == irregular_start_sem
-    # All completed semesters are before the irregular semester, so we only need
-    # curriculum-based grades for 1..current_sem-1 — same as static mode.
-    if current_sem == irregular_start_sem:
-        print(
-            "\nNote: Your current semester is the same as when you became irregular.\n"
-            "All completed semesters follow the base curriculum. The system will\n"
-            "use the main static solver to collect grades and generate your POS.\n"
-        )
-        _run_static_model()
-        return current_sem, irregular_start_sem, {}, [], []
 
     attempts_by_sem: dict[int, list[tuple[str, str]]] = {}
 
@@ -215,37 +198,59 @@ def gather_irregular_history():
             "up to the last COMPLETED semester (one before your current semester),\n"
             "enter the courses you actually took and their outcomes.\n"
         )
+        # If irregular starts at Semester 1, we can mirror the normal CP-SAT behavior
+        # by collecting curriculum-based grades for all past semesters (instead of asking
+        # the user to manually specify course codes).
+        use_curriculum_based_for_all_past = irregular_start_sem == 1
         for s in range(irregular_start_sem, current_sem):
             label = _sem_label(s)
             print(f"\n=== {label} (global index {s}) ===")
-            raw_codes = input(
-                "Enter course codes taken this semester (comma-separated), "
-                "or press Enter if none: "
-            ).strip()
-            if not raw_codes:
-                continue
 
-            codes = [c.strip() for c in raw_codes.split(",") if c.strip()]
-            for raw_code in codes:
-                norm = _normalize_code(raw_code)
-                canonical = COURSE_CODE_INDEX.get(norm)
-                if canonical is None:
-                    print(
-                        f"  ! Skipping unknown course code '{raw_code}'. "
-                        "Please ensure it matches a curriculum code (case-insensitive, letters/numbers exact)."
-                    )
+            if use_curriculum_based_for_all_past:
+                sem_courses = [
+                    (code, info)
+                    for code, info in courses.items()
+                    if _first_semester(info) == s
+                ]
+                if not sem_courses:
                     continue
-                grade_str = input(
-                    f"  Outcome/grade for {canonical} "
-                    "(e.g., 1.75, 3.00, 5.00, INC; leave blank if unsure): "
-                ).strip().upper()
-                attempts_by_sem.setdefault(s, []).append((canonical, grade_str))
+                for code, info in sorted(sem_courses, key=lambda x: x[0]):
+                    title = info.get("course_title", "Course")
+                    grade_input = input(
+                        f"  Grade for {code} ({title}) "
+                        "(1.00-3.00: Pass | 5.00/INC: Fail | Enter: Not Taken): "
+                    ).strip().upper()
+                    if not grade_input:
+                        continue
+                    attempts_by_sem.setdefault(s, []).append((code, grade_input))
+            else:
+                raw_codes = input(
+                    "Enter course codes taken this semester (comma-separated), "
+                    "or press Enter if none: "
+                ).strip()
+                if not raw_codes:
+                    continue
+
+                codes = [c.strip() for c in raw_codes.split(",") if c.strip()]
+                for raw_code in codes:
+                    norm = _normalize_code(raw_code)
+                    canonical = COURSE_CODE_INDEX.get(norm)
+                    if canonical is None:
+                        print(
+                            f"  ! Skipping unknown course code '{raw_code}'. "
+                            "Please ensure it matches a curriculum code (case-insensitive, letters/numbers exact)."
+                        )
+                        continue
+                    grade_str = input(
+                        f"  Outcome/grade for {canonical} "
+                        "(e.g., 1.75, 3.00, 5.00, INC; leave blank if unsure): "
+                    ).strip().upper()
+                    attempts_by_sem.setdefault(s, []).append((canonical, grade_str))
     else:
         print(
             "\nNote: Irregular-start semester is the same as your current semester.\n"
             "There are no COMPLETED irregular semesters to encode; only the\n"
             "curriculum-based history before this point applies.\n"
-            "Please proceed to static POS solver."
         )
 
     print("\n--- Summary of entered irregular history (normalized codes) ---")
