@@ -295,7 +295,7 @@
                 <tbody>
                     {% for row in section.rows %}
                     <tr>
-                        <td class="text-center">{{ row.code }}</td>
+                        <td class="{% if row.display_code|default:row.code != row.code %}elective-course-cell text-start{% else %}text-center{% endif %}">{{ row.display_code|default:row.code }}</td>
                         <td class="course-title-cell">{{ row.title }}</td>
                         <td class="text-center">{{ row.units }}</td>
                         <td class="text-center">{{ row.lec }}</td>
@@ -355,6 +355,9 @@
 
         function safeJsonParse(s) {
             try { return JSON.parse(s); } catch (e) { return null; }
+        }
+        function displayPosCourseCode(code) {
+            return code || '';
         }
         function isFailedGrade(grade) {
             if (!grade) return false;
@@ -419,16 +422,6 @@
                     maxSolverIndexWithCourses = solverIndex;
                 }
             });
-
-            // Ensure "Fourth Year - Midterm" table is shown even if it has no courses,
-            // since the solver still outputs it in the semester sequence.
-            var expectedFourthYearMidtermSolverIndex = 12; // (4th year, term 3) in solver numbering
-            var hasFourthYearMidtermEntry = res.pos.some(function(sem) {
-                return (sem && sem.semester_index) === expectedFourthYearMidtermSolverIndex;
-            });
-            if (hasFourthYearMidtermEntry) {
-                maxSolverIndexWithCourses = Math.max(maxSolverIndexWithCourses, expectedFourthYearMidtermSolverIndex);
-            }
 
             var html = "";
             res.pos.forEach(function(sem) {
@@ -495,7 +488,7 @@
                     var remarkClass = (remark === 'Passed') ? 'text-success' : ((remark === 'Failed') ? 'text-danger' : '');
 
                     html += '<tr>';
-                    html +=   '<td class="text-center">' + String(code) + '</td>';
+                    html +=   '<td class="text-center">' + String(displayPosCourseCode(code)) + '</td>';
                     html +=   '<td class="course-title-cell">' + String(title) + '</td>';
                     html +=   '<td class="text-center">' + String(units) + '</td>';
                     html +=   '<td class="text-center">' + (lec !== '' ? String(lec) : '') + '</td>';

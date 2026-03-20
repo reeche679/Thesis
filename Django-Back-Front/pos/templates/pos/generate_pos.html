@@ -643,7 +643,9 @@
             <select class="form-select form-select-sm" id="irreg-current-sem" required>
                 <option value="" {% if irreg_current_unset %}selected{% endif %}>- Select Semester -</option>
                 {% for sec in curriculum_sections_dropdown %}
+                {% if forloop.counter0 != 0 %}
                 <option value="{{ forloop.counter0 }}" {% if not irreg_current_unset and irreg_current_sem == forloop.counter0 %}selected{% endif %}>{{ sec.label }}</option>
+                {% endif %}
                 {% endfor %}
             </select>
         </div>
@@ -681,10 +683,10 @@
         <!-- 1st column: current semester -->
         <div class="col-md-3 col-12">
             <label class="form-label small text-uppercase text-muted" for="regular-current-semester">
-                YOUR CURRENT SEMESTER TO TAKE
+                LAST SEMESTER ENROLLED
             </label>
             <select class="form-select form-select-sm" id="regular-current-semester">
-                <option value="">- Select Semester -</option>
+                <option value="" {% if current_semester_index is none or current_semester_index < 0 %}selected{% endif %}>- Select Semester -</option>
                 {% for value, label in current_semester_choices_regular %}
                 <option value="{{ value }}" {% if current_semester_index == value %}selected{% endif %}>{{ label }}</option>
                 {% endfor %}
@@ -853,7 +855,7 @@
                 <tbody>
                     {% for cg in item.courses_with_grades %}
                     <tr data-course-code="{{ cg.course.code }}" data-units="{{ cg.course.units }}">
-                        <td class="text-center">{{ cg.course.code }}</td>
+                        <td class="{% if cg.course.display_code|default:cg.course.code != cg.course.code %}elective-course-cell text-start{% else %}text-center{% endif %}">{{ cg.course.display_code|default:cg.course.code }}</td>
                         <td class="course-title-cell">{{ cg.course.title }}</td>
                         <td class="text-center">{{ cg.course.units }}</td>
                         <td class="text-center">{{ cg.course.lec }}</td>
@@ -1259,6 +1261,25 @@
     function mergedGradesForSave() {
         var base = getServerGradesForMerge();
         if (typeof base !== 'object' || base === null) base = {};
+        // IMPORTANT: trim server grades to the user-selected "current semester to take".
+        // Otherwise, previously-saved grades from invisible future semester tables would
+        // still be included in the solver payload and saved back to the DB.
+        var cutOffIndex = null;
+        try {
+            if (IS_REGULAR) {
+                var regSel = document.getElementById('regular-current-semester');
+                if (regSel && regSel.value !== '') cutOffIndex = parseInt(regSel.value, 10);
+            } else {
+                var irSel = document.getElementById('irreg-current-sem');
+                if (irSel && irSel.value !== '') cutOffIndex = parseInt(irSel.value, 10);
+            }
+        } catch (e) {}
+        if (cutOffIndex !== null && !isNaN(cutOffIndex)) {
+            Object.keys(base).forEach(function(secKey) {
+                var si = parseInt(secKey, 10);
+                if (!isNaN(si) && si > cutOffIndex) delete base[secKey];
+            });
+        }
         var fromForm = collectGradesFromAllSections();
         for (var sec in fromForm) {
             if (!base[sec]) base[sec] = {};
@@ -1516,6 +1537,10 @@
         return { ok: true };
     }
 
+    function displayPosCourseCodeGlobal(code) {
+        return code || '';
+    }
+
     document.getElementById('generatePosBtn').addEventListener('click', function() {
         if (!IS_REGULAR && !IRREG_CONFIGURED) {
             alert('Please select your current semester and when you became irregular above, then click OK to proceed.');
@@ -1669,8 +1694,9 @@
                 var tbody = table.querySelector('tbody');
                 (sem.courses || []).forEach(function(c) {
                     var tr = document.createElement('tr');
+                    var codeShown = displayPosCourseCodeGlobal(c.code || '');
                     tr.innerHTML =
-                        '<td class="text-center">' + (c.code || '') + '</td>' +
+                        '<td class="text-center">' + codeShown + '</td>' +
                         '<td class="course-title-cell">' + (c.title || '') + '</td>' +
                         '<td class="text-center">' + (c.units != null ? c.units : '') + '</td>';
                     tbody.appendChild(tr);
@@ -1713,6 +1739,9 @@
     });
 
     (function() {
+        function displayPosCourseCode(code) {
+            return code || '';
+        }
         var curriculum = [];
         var pickerAvailableBySection = {};
         var el = document.getElementById('curriculum-data');
@@ -1870,7 +1899,8 @@
                 var tr = document.createElement('tr');
                 tr.className = 'irregular-picker-row';
                 tr.setAttribute('data-course-code', c.code);
-                tr.innerHTML = '<td class="text-center">' + c.code + '</td><td class="course-title-cell">' + c.title + '</td>' +
+                var codeCell = (c.display_code || displayPosCourseCode(c.code));
+                tr.innerHTML = '<td class="text-center">' + codeCell + '</td><td class="course-title-cell">' + c.title + '</td>' +
                     '<td class="text-center">' + c.units + '</td><td class="text-center">' + c.lec + '</td><td class="text-center">' + c.lab + '</td>' +
                     '<td class="small text-muted text-center">' + (c.prereq || '') + '</td><td class="small text-muted text-center">' + (c.coreq || '') + '</td>';
                 tr.addEventListener('click', function() {
@@ -2001,7 +2031,8 @@
                 gradeSel.title = 'Choose grade after adding';
                 tdGrade.appendChild(gradeSel);
                 initGradeDropdowns(tdGrade);
-                row.innerHTML = '<td class="text-center">' + c.code + '</td><td class="course-title-cell">' + c.title + '</td>' +
+                var showCode = (c.display_code || displayPosCourseCode(c.code));
+                row.innerHTML = '<td class="text-center">' + showCode + '</td><td class="course-title-cell">' + c.title + '</td>' +
                     '<td class="text-center">' + c.units + '</td><td class="text-center">' + c.lec + '</td><td class="text-center">' + c.lab + '</td>' +
                     '<td class="small text-muted text-center">' + (c.prereq || '') + '</td><td class="small text-muted text-center">' + (c.coreq || '') + '</td>';
                 row.appendChild(tdGrade);

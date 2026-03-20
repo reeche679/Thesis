@@ -15,6 +15,37 @@ from reportlab.platypus import (
     SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image,
 )
 
+# Course table column widths (inches). Student info table is scaled to the same total width for alignment.
+_POS_COURSE_COL_WIDTHS_INCH = (
+    0.88,  # Course Code
+    2.15,  # Course Title
+    0.57,  # Credit Units
+    0.39,  # Lec
+    0.39,  # Lab
+    1.00,  # Prerequisite(s)
+    0.95,  # Co-requisite(s)
+    0.50,  # Grade
+    0.67,  # Remarks
+)
+_POS_COURSE_TABLE_TOTAL_INCH = sum(_POS_COURSE_COL_WIDTHS_INCH)
+# Original info block label/value proportions (sum 7.2 in); scaled to match course table width.
+_POS_INFO_COL_BASE_INCH = (0.84, 3.50, 1.24, 1.62)
+
+
+def _info_table_col_widths():
+    """Widths for Name/Date and SR-code/Academic Year table — same span as semester course tables."""
+    base_sum = sum(_POS_INFO_COL_BASE_INCH)
+    scale = _POS_COURSE_TABLE_TOTAL_INCH / base_sum
+    return [w * scale * inch for w in _POS_INFO_COL_BASE_INCH]
+
+
+def display_pos_course_code(code):
+    """Return the course code as-is for display in the Course Code column."""
+    if code is None:
+        return ""
+    return str(code).strip()
+
+
 # Curriculum: (section_title_line1, section_title_line2, total_units, lec_total, lab_total, rows).
 # Each row: (course_code, course_title, units, lec, lab, prereq, coreq)
 POS_CURRICULUM = [
@@ -75,7 +106,7 @@ POS_CURRICULUM = [
         ("CpE 305", "Fundamentals of Mixed Signals and Sensors", 3, 3, 0, "ECE 405", ""),
         ("CpE 306", "Feedback and Control Systems", 3, 3, 0, "CpE 206; EE 212", ""),
         ("ENGG 116", "Methods of Research", 3, 3, 0, "AI 102, 3rd Year Standing", ""),
-        ("CpEE 402", "Elective Course 2", 3, 2, 3, "CpEE 402", ""),
+        ("CpEE 402", "Elective Course 2", 3, 2, 3, "CpEE 401", ""),
     ]),
     ("THIRD YEAR", "SECOND SEMESTER", 23, 17, 18, [
         ("CpE 308", "Microprocessors", 4, 3, 3, "CpE 302", ""),
@@ -97,7 +128,7 @@ POS_CURRICULUM = [
         ("CpE 404", "CpE Practice and Design 1", 1, 0, 3, "ENGG 116, CpE 308", ""),
         ("ENGG 106", "Engineering Management", 2, 2, 0, "4th Year Standing", ""),
         ("ENGG 105", "Technopreneurship", 3, 3, 0, "4th Year Standing", ""),
-        ("CpEE 403", "Elective Course 3", 3, 2, 3, "CpEE 403", ""),
+        ("CpEE 403", "Elective Course 3", 3, 2, 3, "CpEE 402", ""),
     ]),
     ("FOURTH YEAR", "SECOND SEMESTER", 8, 0, 12, [
         ("ENGG 117", "OJT/Internship (320 hrs)", 4, 4, 0, "4th Year Standing", ""),
@@ -511,12 +542,7 @@ def build_pos_pdf(
     story = []
     story.extend(_header_flowables(logo_path))
 
-    info_cols = [
-        0.84 * inch,
-        3.50 * inch,
-        1.24 * inch,
-        1.62 * inch,
-    ]
+    info_cols = _info_table_col_widths()
     info_data = [
         ["Name:", (student_name or "—").upper(), "Date:", date_str],
         ["SR-code:", (sr_code or "—"), "Academic Year:", (academic_year or "—")],
@@ -538,17 +564,7 @@ def build_pos_pdf(
     story.append(info_tbl)
     story.append(Spacer(1, 0.25 * inch))
 
-    col_widths = [
-        0.88 * inch,  # Course Code
-        2.15 * inch,  # Course Title
-        0.57 * inch,  # Credit Units
-        0.39 * inch,  # Lec
-        0.39 * inch,  # Lab
-        1.00 * inch,  # Prerequisite(s)
-        0.95 * inch,  # Co-requisite(s)
-        0.50 * inch,  # Grade
-        0.67 * inch,  # Remarks
-    ]
+    col_widths = [w * inch for w in _POS_COURSE_COL_WIDTHS_INCH]
 
     course_lookup = _course_lookup_from_curriculum()
 
@@ -672,7 +688,7 @@ def build_pos_pdf(
         sum_lab = sum(r[4] for r in section_rows)
         for code, title, units, lec, lab, prereq, coreq, grade in section_rows:
             table_data.append([
-                Paragraph(code.replace("&", "&amp;"), cell_style),
+                Paragraph(display_pos_course_code(code).replace("&", "&amp;"), cell_style),
                 Paragraph(title.replace("&", "&amp;"), cell_style),
                 str(units),
                 str(lec),
@@ -927,7 +943,7 @@ def build_generated_pos_pdf(
 
             table_data.append(
                 [
-                    Paragraph(code.replace("&", "&amp;"), cell_style_center),
+                    Paragraph(display_pos_course_code(code).replace("&", "&amp;"), cell_style_center),
                     Paragraph(str(title).replace("&", "&amp;"), cell_style),
                     Paragraph(str(units).replace("&", "&amp;") if units != "" else "", cell_style_center),
                     Paragraph(str(lec).replace("&", "&amp;") if lec != "" else "", cell_style_center),
@@ -1099,12 +1115,7 @@ def build_preview_pos_pdf(
     story = []
     story.extend(_header_flowables(logo_path))
 
-    info_cols = [
-        0.84 * inch,
-        3.50 * inch,
-        1.24 * inch,
-        1.62 * inch,
-    ]
+    info_cols = _info_table_col_widths()
     info_data = [
         ["Name:", (student_name or "—").upper(), "Date:", date_str],
         ["SR-code:", (sr_code or "—"), "Academic Year:", (academic_year or "—")],
@@ -1128,17 +1139,7 @@ def build_preview_pos_pdf(
 
     # Column widths for:
     # Code, Title, Units, Lec, Lab, Pre-req, Co-req, Grade, Remarks
-    col_widths = [
-        0.88 * inch,  # Course Code
-        2.15 * inch,  # Course Title
-        0.57 * inch,  # Credit Units
-        0.39 * inch,  # Lec
-        0.39 * inch,  # Lab
-        1.00 * inch,  # Prerequisite(s)
-        0.95 * inch,  # Co-requisite(s)
-        0.50 * inch,  # Grade
-        0.67 * inch,  # Remarks
-    ]
+    col_widths = [w * inch for w in _POS_COURSE_COL_WIDTHS_INCH]
 
     course_lookup = _course_lookup_from_curriculum()
 
@@ -1225,6 +1226,7 @@ def build_preview_pos_pdf(
 
         for r in (rows or []):
             code = r.get("code", "") or ""
+            disp_code = display_pos_course_code(code)
             title = r.get("title", "") or ""
             units = r.get("units", 0) or 0
             lec = r.get("lec", 0) or 0
@@ -1239,7 +1241,7 @@ def build_preview_pos_pdf(
                 pass
 
             table_data.append([
-                Paragraph(code.replace("&", "&amp;"), cell_style),
+                Paragraph(disp_code.replace("&", "&amp;"), cell_style),
                 Paragraph(title.replace("&", "&amp;"), cell_style),
                 str(units),
                 str(lec),
@@ -1371,21 +1373,6 @@ def build_preview_pos_pdf(
         if has_courses:
             if max_solver_semester_index_with_courses is None or solver_sem_index_int > max_solver_semester_index_with_courses:
                 max_solver_semester_index_with_courses = solver_sem_index_int
-
-    # Ensure "Fourth Year - Midterm" table is shown even if it has no courses,
-    # since the solver still outputs it in the semester sequence.
-    expected_fourth_year_midterm_solver_index = 12  # (4th year, term 3) in solver numbering
-    has_fourth_year_midterm_entry = any(
-        isinstance(sem, dict) and sem.get("semester_index") == expected_fourth_year_midterm_solver_index
-        for sem in (future_pos or [])
-    )
-    if has_fourth_year_midterm_entry and max_solver_semester_index_with_courses is not None:
-        max_solver_semester_index_with_courses = max(
-            max_solver_semester_index_with_courses,
-            expected_fourth_year_midterm_solver_index,
-        )
-    elif has_fourth_year_midterm_entry and max_solver_semester_index_with_courses is None:
-        max_solver_semester_index_with_courses = expected_fourth_year_midterm_solver_index
 
     for sem in (future_pos or []):
         if not isinstance(sem, dict):

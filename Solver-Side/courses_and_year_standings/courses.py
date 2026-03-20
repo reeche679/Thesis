@@ -13,6 +13,7 @@ YEAR_STANDING_RULES = {
 PREREQ_ALIASES = {
     "CpEE 401": ["Elective Course 1"],
     "CpEE 402": ["Elective Course 2"],
+    "CpEE 403": ["Elective Course 3"],
 }
 
 courses = {

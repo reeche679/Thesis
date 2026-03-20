@@ -174,7 +174,7 @@ def set_academic_term(request):
 
 def _curriculum_for_irregular():
     """Build curriculum sections list for irregular POS picker (year, semester, section_label, courses)."""
-    from .pos_pdf import POS_CURRICULUM
+    from .pos_pdf import POS_CURRICULUM, display_pos_course_code
     sections = []
     for title1, title2, _tu, _lec, _lab, rows in POS_CURRICULUM:
         section_label = "{} - {}".format(
@@ -182,7 +182,16 @@ def _curriculum_for_irregular():
             title2.replace(" ", " ").title()
         )
         courses = [
-            {"code": r[0], "title": r[1], "units": r[2], "lec": r[3], "lab": r[4], "prereq": r[5], "coreq": r[6]}
+            {
+                "code": r[0],
+                "display_code": display_pos_course_code(r[0]),
+                "title": r[1],
+                "units": r[2],
+                "lec": r[3],
+                "lab": r[4],
+                "prereq": r[5],
+                "coreq": r[6],
+            }
             for r in rows
         ]
         sections.append({"year": title1, "semester": title2, "label": section_label, "courses": courses})
@@ -232,11 +241,19 @@ CURRENT_SEMESTER_CHOICES = [
 SECTION_INDEX_MAX_DROPDOWN = 10  # 0..10 = 1st Year through 4th Year Second Semester (incl. 2nd Year Midterm)
 CURRENT_SEMESTER_CHOICES_YEAR4_ONLY = [c for c in CURRENT_SEMESTER_CHOICES if c[0] <= SECTION_INDEX_MAX_DROPDOWN]
 
+# Regular POS dropdown may include 1st Year - First Semester, but the page should
+# show no semester tables until the user explicitly selects a value.
+FIRST_YEAR_FIRST_SEM_INDEX = 0
+
 # For Regular path on Generate POS: allow selection up to 5th Year Second Semester (index 12 after adding 2nd Year Midterm)
 CURRENT_SEMESTER_CHOICES_UPTO_5YEAR2 = [c for c in CURRENT_SEMESTER_CHOICES if c[0] <= 12]
 # Regular path dropdown: exclude 2nd Year Midterm (index 5) - add-course only, not a valid "current semester" for regular
 SECOND_YEAR_MIDTERM_INDEX = 5
-CURRENT_SEMESTER_CHOICES_REGULAR = [c for c in CURRENT_SEMESTER_CHOICES_UPTO_5YEAR2 if c[0] != SECOND_YEAR_MIDTERM_INDEX]
+CURRENT_SEMESTER_CHOICES_REGULAR = [
+    c
+    for c in CURRENT_SEMESTER_CHOICES_UPTO_5YEAR2
+    if c[0] != SECOND_YEAR_MIDTERM_INDEX
+]
 
 
 def _year_semester_to_section_index(year_level, semester):
@@ -272,7 +289,7 @@ def _is_passing_grade(grade):
 
 def _flexible_courses_for_section(section_index):
     """Return list of course dicts for flexible subjects offered in this section (with EE Dept note if applicable)."""
-    from .pos_pdf import FLEXIBLE_SUBJECTS
+    from .pos_pdf import FLEXIBLE_SUBJECTS, display_pos_course_code
     out = []
     for row in FLEXIBLE_SUBJECTS:
         code, title, units, lec, lab, prereq, coreq = row[0], row[1], row[2], row[3], row[4], row[5], row[6]
@@ -283,6 +300,7 @@ def _flexible_courses_for_section(section_index):
             display_title = title + (" (" + dept_note + ")" if dept_note else "")
             out.append({
                 "code": code,
+                "display_code": display_pos_course_code(code),
                 "title": display_title,
                 "units": units,
                 "lec": lec,
@@ -332,7 +350,7 @@ def _course_lookup_from_curriculum():
 
 def _preview_sections_from_curriculum(grades_by_section):
     """Build sections for POS preview from grades_by_section. Each section shows all courses with a grade in that section (same course can appear in multiple sections, e.g. MATH 102 failed in 1st sem and midterm). User-added courses (e.g. MATH 102 in midterm) replace curriculum-only slots in display."""
-    from .pos_pdf import POS_CURRICULUM
+    from .pos_pdf import POS_CURRICULUM, display_pos_course_code
     course_lookup = _course_lookup_from_curriculum()
     sections = []
     for section_index, (title1, title2, total_units, _lec_t, _lab_t, rows) in enumerate(POS_CURRICULUM):
@@ -356,6 +374,7 @@ def _preview_sections_from_curriculum(grades_by_section):
                     remark = ""
                 course_rows.append({
                     "code": code,
+                    "display_code": display_pos_course_code(code),
                     "title": title,
                     "units": units,
                     "lec": lec,
@@ -383,6 +402,7 @@ def _preview_sections_from_curriculum(grades_by_section):
                 remark = ""
             course_rows.append({
                 "code": code,
+                "display_code": display_pos_course_code(code),
                 "title": title,
                 "units": units,
                 "lec": lec,
@@ -413,6 +433,7 @@ def pos_generate(request):
 
     section_param = request.GET.get('section')
     pos_reset = bool(request.session.get('pos_reset', False))
+    section_param_provided = section_param is not None
     if section_param is not None:
         # If user clicked Regular OK after a POS delete, they are intentionally resetting the form.
         if pos_reset:
@@ -442,6 +463,17 @@ def pos_generate(request):
         semester = request.session.get('semester') or ''
         next_section_index = _year_semester_to_section_index(year_level, semester)
 
+    # If the user hasn't selected a semester yet (no ?section=...), do not
+    # default to 1st Year - First Semester. New users should see no semester
+    # tables until they choose a value. After POS deletion we already set
+    # `pos_reset`, which keeps this logic inactive.
+    has_any_grades = any(bool(gdict) for gdict in (saved_grades_by_section or {}).values())
+    # If the user didn't explicitly choose a semester in the URL and we're not
+    # in a reset state, only show "no selection" when there are no saved grades.
+    # This preserves valid index 0 (1st Year - First Semester) when grades exist.
+    if (not section_param_provided) and (not pos_reset) and (not has_any_grades):
+        next_section_index = -1
+
     if next_section_index is None:
         # After POS delete, we want "no input" state (no default to 1st semester).
         # When reset is active, avoid writing default year/semester into the session.
@@ -467,6 +499,7 @@ def pos_generate(request):
             regular_with_petition = wp
 
     # Build helpers shared by both Regular and Irregular paths
+    from .pos_pdf import display_pos_course_code
     course_lookup = _course_lookup_from_curriculum()
     preview_sections = []
     display_sections = []
@@ -514,6 +547,12 @@ def pos_generate(request):
 
         irreg_start_index = _safe_int(irreg_start_param, _safe_int(request.session.get('irreg_start_index')))
         irreg_current_sem = _safe_int(current_sem_param, _safe_int(request.session.get('irreg_current_sem')))
+
+        # 1st Year - First Semester is no longer a valid "current semester to take".
+        # If older session/query state still holds 0, treat it as unset so we don't
+        # render semesters that users can no longer select from the UI.
+        if irreg_current_sem == FIRST_YEAR_FIRST_SEM_INDEX:
+            irreg_current_sem = None
 
         irreg_configured = irreg_start_index is not None and irreg_current_sem is not None
         if pos_reset and irreg_configured:
@@ -586,7 +625,16 @@ def pos_generate(request):
                     else:
                         title, units, lec, lab, prereq, coreq = code, 0, 0, 0, "", ""
                     courses_with_grades.append({
-                        'course': {'code': code, 'title': title, 'units': units, 'lec': lec, 'lab': lab, 'prereq': prereq, 'coreq': coreq},
+                        'course': {
+                            'code': code,
+                            'display_code': display_pos_course_code(code),
+                            'title': title,
+                            'units': units,
+                            'lec': lec,
+                            'lab': lab,
+                            'prereq': prereq,
+                            'coreq': coreq,
+                        },
                         'grade': grade,
                     })
                 total_units = sum(cg['course'].get('units', 0) or 0 for cg in courses_with_grades)
@@ -782,6 +830,17 @@ def validate_pos(request):
 
 
 
+# Elective course code translation: the solver uses "Elective Course 1/2/3" as its
+# internal course keys, while the Django UI uses "CpEE 401/402/403". These maps
+# convert between the two representations at the API boundary.
+_UI_TO_SOLVER_ELECTIVE = {
+    "CpEE 401": "Elective Course 1",
+    "CpEE 402": "Elective Course 2",
+    "CpEE 403": "Elective Course 3",
+}
+_SOLVER_TO_UI_ELECTIVE = {v: k for k, v in _UI_TO_SOLVER_ELECTIVE.items()}
+
+
 @csrf_exempt
 def generate_pos_api(request):
     """
@@ -806,10 +865,14 @@ def generate_pos_api(request):
     if not isinstance(data, dict):
         return JsonResponse({"error": "Expected JSON object"}, status=400)
 
+    # Translate UI elective codes (CpEE 401/402/403) → solver course keys
+    # (Elective Course 1/2/3) so the solver correctly recognises passed/failed electives.
+    raw_passed = data.get("passed_courses") or []
+    raw_failed = data.get("failed_courses") or []
     payload = {
         "current_sem": data.get("current_sem"),
-        "passed_courses": data.get("passed_courses") or [],
-        "failed_courses": data.get("failed_courses") or [],
+        "passed_courses": [_UI_TO_SOLVER_ELECTIVE.get(c, c) for c in raw_passed],
+        "failed_courses": [_UI_TO_SOLVER_ELECTIVE.get(c, c) for c in raw_failed],
         "with_petition": data.get("with_petition", False),
     }
 
@@ -819,6 +882,15 @@ def generate_pos_api(request):
         return JsonResponse({"error": str(e)}, status=400)
     except RuntimeError as e:
         return JsonResponse({"error": str(e)}, status=500)
+
+    # Translate solver course keys back to UI codes in the returned POS so the
+    # Django course_lookup, display_code, and PDF generation all work correctly.
+    if isinstance(result, dict) and result.get("pos"):
+        for sem in result["pos"]:
+            for course in (sem.get("courses") or []):
+                solver_code = course.get("code", "")
+                if solver_code in _SOLVER_TO_UI_ELECTIVE:
+                    course["code"] = _SOLVER_TO_UI_ELECTIVE[solver_code]
 
     # If called from the authenticated app UI, cache the last generated solver output in session
     # so we can generate a PDF from it on demand.
