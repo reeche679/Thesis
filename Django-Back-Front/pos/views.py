@@ -255,6 +255,11 @@ CURRENT_SEMESTER_CHOICES_REGULAR = [
     if c[0] != SECOND_YEAR_MIDTERM_INDEX
 ]
 
+# Irregular path dropdowns (Generate POS): allow selection up to 5th Year Second Semester.
+# This dropdown is used for both "LAST SEMESTER ENROLLED" and "WHEN YOU BECAME IRREGULAR"
+# in the Irregular section of the Generate POS page.
+SECTION_INDEX_MAX_DROPDOWN_GENERATE = 12  # includes 5th Year First Sem (11) + 5th Year Second Sem (12)
+
 
 def _year_semester_to_section_index(year_level, semester):
     """Return curriculum section index for (year_level, semester), or None if invalid."""
@@ -422,6 +427,7 @@ def _preview_sections_from_curriculum(grades_by_section):
     return sections
 
 
+@ensure_csrf_cookie
 @_require_student
 def pos_generate(request):
     """Generate POS page. Current semester is set by ?section=N or from session (year_level + semester)."""
@@ -536,6 +542,10 @@ def pos_generate(request):
         # irreg_start = semester index when user became irregular (curriculum listed up to here)
         # current_sem = user's current semester (add-course sections stop here)
         def _safe_int(val, default=None):
+            # Important for dropdowns that intentionally send an empty string:
+            # treat '' as an explicit "unset" (None) rather than falling back to session.
+            if val == '':
+                return None
             try:
                 return int(val)
             except (TypeError, ValueError):
@@ -548,24 +558,39 @@ def pos_generate(request):
         irreg_start_index = _safe_int(irreg_start_param, _safe_int(request.session.get('irreg_start_index')))
         irreg_current_sem = _safe_int(current_sem_param, _safe_int(request.session.get('irreg_current_sem')))
 
-        irreg_configured = irreg_start_index is not None and irreg_current_sem is not None
+        # Irregular generation only needs CURRENT semester. If IRREG_START is left empty,
+        # we'll treat it as "effective start = current semester" for curriculum display/constraints.
+        irreg_configured = irreg_current_sem is not None
         if pos_reset and irreg_configured:
             request.session.pop('pos_reset', None)
             pos_reset = False
 
         if irreg_configured:
-            if irreg_start_index is not None:
-                request.session['irreg_start_index'] = irreg_start_index
+            # If user explicitly set IRREG_START via the URL (including leaving it blank),
+            # update/clear the session accordingly so the dropdown doesn't revert later.
+            if irreg_start_param is not None:
+                if irreg_start_index is not None:
+                    request.session['irreg_start_index'] = irreg_start_index
+                else:
+                    request.session.pop('irreg_start_index', None)
             if irreg_current_sem is not None:
                 request.session['irreg_current_sem'] = irreg_current_sem
             if with_petition in ('yes', 'no'):
                 request.session['irreg_with_petition'] = with_petition
 
             max_si = len(curriculum_sections) - 1
-            irreg_start_index = max(0, min(irreg_start_index, max_si))
+            # Effective start: if user left it unset, it starts at current semester.
+            effective_irreg_start_index = irreg_start_index
+            if effective_irreg_start_index is None:
+                effective_irreg_start_index = irreg_current_sem
+
+            effective_irreg_start_index = max(0, min(effective_irreg_start_index, max_si))
             irreg_current_sem = max(0, min(irreg_current_sem, max_si))
-            if irreg_current_sem < irreg_start_index:
-                irreg_current_sem = irreg_start_index
+            if irreg_current_sem < effective_irreg_start_index:
+                irreg_current_sem = effective_irreg_start_index
+
+            # Keep irreg_start_index as-is (None if user left it empty) for dropdown UI.
+            # Use effective_irreg_start_index for all semester-table logic below.
 
             yl, sem = _INDEX_TO_YEAR_SEM[irreg_current_sem]
             request.session['year_level'] = yl
@@ -583,8 +608,8 @@ def pos_generate(request):
                     if _is_passing_grade(grade):
                         all_passed_codes.add(code)
 
-            # Sections 0..irreg_start_index: show all curriculum courses (like regular path)
-            for si in range(irreg_start_index + 1):
+            # Sections 0..effective_irreg_start_index: show all curriculum courses (like regular path)
+            for si in range(effective_irreg_start_index + 1):
                 sec = curriculum_sections[si]
                 section_grades = saved_grades_by_section.get(si, {})
                 courses_with_grades = []
@@ -599,8 +624,8 @@ def pos_generate(request):
                     'is_curriculum_locked': True,
                 })
 
-            # Sections (irreg_start_index+1)..irreg_current_sem: add-course sections
-            for si in range(irreg_start_index + 1, irreg_current_sem + 1):
+            # Sections (effective_irreg_start_index+1)..irreg_current_sem: add-course sections
+            for si in range(effective_irreg_start_index + 1, irreg_current_sem + 1):
                 sec = curriculum_sections[si]
                 section_grades = saved_grades_by_section.get(si, {})
                 courses_with_grades = []
@@ -638,11 +663,13 @@ def pos_generate(request):
                     'is_curriculum_locked': False,
                 })
 
-            editable_section_index = irreg_current_sem if irreg_current_sem > irreg_start_index else None
+            editable_section_index = (
+                irreg_current_sem if irreg_current_sem > effective_irreg_start_index else None
+            )
 
             # Rebuild picker_available_by_section filtering out passed courses
             picker_available_by_section = {}
-            for si in range(irreg_start_index + 1, irreg_current_sem + 1):
+            for si in range(effective_irreg_start_index + 1, irreg_current_sem + 1):
                 candidates = _picker_available_for_next_section(si, curriculum_sections, saved_grades_by_section)
                 candidates = [c for c in candidates if c['code'] not in all_passed_codes]
                 picker_available_by_section[si] = candidates
@@ -662,7 +689,7 @@ def pos_generate(request):
         'session_semester': request.session.get('semester', ''),
         'session_year_level': year_level,
         'curriculum_sections': curriculum_sections,
-        'curriculum_sections_dropdown': curriculum_sections[:SECTION_INDEX_MAX_DROPDOWN + 1],
+        'curriculum_sections_dropdown': curriculum_sections[:SECTION_INDEX_MAX_DROPDOWN_GENERATE + 1],
         'current_semester_choices_regular': CURRENT_SEMESTER_CHOICES_REGULAR,
         'current_semester_index': next_section_index,
         'preview_sections': preview_sections,

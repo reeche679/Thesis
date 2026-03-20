@@ -89,6 +89,38 @@
         opacity: 1 !important;
     }
 
+    /* Irregular "WHEN YOU BECAME IRREGULAR" dropdown: keep black border/text/arrow
+       even when still on "- Select Semester -" for new users. */
+    #irreg-start-sem {
+        border-color: #000 !important;
+        color: #000 !important;
+        box-shadow: none !important;
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23000' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2.5 5.5l5.5 5.5 5.5-5.5'/%3e%3c/svg%3e") !important;
+        background-repeat: no-repeat !important;
+        background-position: right 0.65rem center !important;
+        background-size: 12px 10px !important;
+    }
+    #irreg-start-sem:focus {
+        border-color: #000 !important;
+        box-shadow: none !important;
+    }
+
+    /* If Bootstrap/browser marks it as invalid, keep it black */
+    #irreg-start-sem:invalid,
+    #irreg-start-sem.is-invalid {
+        border-color: #000 !important;
+        color: #000 !important;
+        box-shadow: none !important;
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23000' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2.5 5.5l5.5 5.5 5.5-5.5'/%3e%3c/svg%3e") !important;
+        background-repeat: no-repeat !important;
+        background-position: right 0.65rem center !important;
+        background-size: 12px 10px !important;
+    }
+
+    #irreg-start-sem option[value=""] {
+        color: #adb5bd !important;
+    }
+
     /* Hover: keep it light gray (not dark) */
     .grade-display-btn:hover,
     .pos-select-display-btn:hover {
@@ -141,6 +173,21 @@
     .grade-display-btn:not(.has-grade):focus,
     .pos-select-display-btn:not(.has-value):focus {
         box-shadow: 0 0 0 0.15rem rgba(176, 42, 55, 0.22) !important;
+    }
+
+    /* Irregular "WHEN YOU BECAME IRREGULAR" dropdown: keep black when empty.
+       The red outline above is for all empty semester dropdown display buttons;
+       we override it only for this specific dropdown. */
+    .pos-select-display-btn.irreg-sem-black-empty:not(.has-value) {
+        border-color: #000 !important;
+        color: #000 !important;
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23000' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e") !important;
+        background-repeat: no-repeat !important;
+        background-position: right 0.15rem center !important;
+        background-size: 12px 10px !important;
+    }
+    .pos-select-display-btn.irreg-sem-black-empty:not(.has-value):focus {
+        box-shadow: 0 0 0 0.15rem rgba(0, 0, 0, 0.15) !important;
     }
 
     @media (max-width: 575.98px) {
@@ -685,7 +732,7 @@
     <div class="row g-3 align-items-end">
         <div class="col-md-4">
             <label class="form-label small text-uppercase text-muted" for="irreg-current-sem">LAST SEMESTER ENROLLED</label>
-            <select class="form-select form-select-sm" id="irreg-current-sem" required>
+            <select class="form-select form-select-sm" id="irreg-current-sem">
                 <option value="" {% if irreg_current_unset %}selected{% endif %}>- Select Semester -</option>
                 {% for sec in curriculum_sections_dropdown %}
                 <option value="{{ forloop.counter0 }}" {% if not irreg_current_unset and irreg_current_sem == forloop.counter0 %}selected{% endif %}>{{ sec.label }}</option>
@@ -1183,6 +1230,8 @@
         var label = (selectedOption && selectedOption.value) ? selectedOption.textContent.trim() : '';
         btn.textContent = label || '- Select Semester -';
         if (label) btn.classList.add('has-value');
+        // Only this irregular dropdown should stay black when empty.
+        if (selectEl.id === 'irreg-start-sem') btn.classList.add('irreg-sem-black-empty');
         btn.addEventListener('click', function() {
             if (selectEl.disabled) return;
             openGenericMenuForSelect(selectEl, btn);
@@ -1654,19 +1703,19 @@
 
     document.getElementById('generatePosBtn').addEventListener('click', function() {
         if (!IS_REGULAR && !IRREG_CONFIGURED) {
-            showGeneratedPosErrorPopup('Select your current semester to proceed.', 'infeasible');
+            showGeneratedPosErrorPopup('Please select your Last Semester Enrolled to proceed.', 'infeasible');
             return;
         }
         if (IS_REGULAR) {
             var regSel = document.getElementById('regular-current-semester');
             if (!regSel || !regSel.value) {
-                showGeneratedPosErrorPopup('Select your last semester enrolled to proceed.', 'infeasible');
+                showGeneratedPosErrorPopup('Please select your Last Semester Enrolled to proceed.', 'infeasible');
                 return;
             }
         }
         var sections = document.querySelectorAll('[id^="main-sem-"]');
         if (!IS_REGULAR && sections.length === 0) {
-            showGeneratedPosErrorPopup('Select your current semester to proceed.', 'infeasible');
+            showGeneratedPosErrorPopup('Please select your Last Semester Enrolled to proceed.', 'infeasible');
             return;
         }
         var validation = validateAllSectionsForGenerate();
@@ -2318,23 +2367,28 @@
                 var startSem = document.getElementById('irreg-start-sem').value;
                 var petition = document.getElementById('irreg-with-petition').value;
                 if (currentSem === '') {
-                    showGeneratedPosErrorPopup('Please select your current semester to proceed.', 'infeasible');
+                    showGeneratedPosErrorPopup('Please select your Last Semester Enrolled to proceed.', 'infeasible');
                     return;
                 }
-                // Optional: if "When you became irregular" is blank, treat it as current semester.
-                if (startSem === '') {
-                    startSem = currentSem;
-                }
                 var currentIdx = parseInt(currentSem, 10);
-                var startIdx = parseInt(startSem, 10);
-                if (!Number.isFinite(currentIdx) || !Number.isFinite(startIdx)) {
+                if (!Number.isFinite(currentIdx)) {
                     showGeneratedPosErrorPopup('Please select valid semesters to proceed.', 'infeasible');
                     return;
                 }
-                // Current semester must be the same or ahead of when they became irregular
-                if (currentIdx < startIdx) {
-                    showGeneratedPosErrorPopup('Invalid semester selection. Please check your current semester and irregular start.', 'infeasible');
-                    return;
+
+                // If "When you became irregular" is left blank, keep it blank.
+                // Backend will treat it as effective start = current semester.
+                if (startSem !== '') {
+                    var startIdx = parseInt(startSem, 10);
+                    if (!Number.isFinite(startIdx)) {
+                        showGeneratedPosErrorPopup('Please select valid semesters to proceed.', 'infeasible');
+                        return;
+                    }
+                    // Current semester must be the same or ahead of when they became irregular
+                    if (currentIdx < startIdx) {
+                        showGeneratedPosErrorPopup('Invalid semester selection. Please check your current semester and irregular start.', 'infeasible');
+                        return;
+                    }
                 }
                 var params = [];
                 params.push('current_sem=' + encodeURIComponent(currentSem));
