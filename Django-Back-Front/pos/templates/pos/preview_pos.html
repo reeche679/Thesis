@@ -405,7 +405,7 @@
                 return;
             }
             // Solver is 1-based; everything after currentSemSolver is "future"
-            var currentSemSolver = currentUiIndex + 1;
+            var currentSemSolver = currentUiIndex + 2;
 
             // Only render solver semesters up to the last semester that actually has courses.
             // Solver output may include trailing semesters with blank/empty course lists; we don't want
@@ -559,7 +559,9 @@
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-                current_sem: currentUiIndex,
+                // UI stores "last semester enrolled" as a 0-based index.
+                // Solver expects "current_sem" as the next semester (1-based).
+                current_sem: currentUiIndex + 2,
                 passed_courses: Array.from(passed),
                 failed_courses: Array.from(failed),
                 probation: false

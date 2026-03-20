@@ -1625,7 +1625,10 @@
                     var currentSectionIdx = parseInt(irSel.value, 10);
                     if (!isNaN(currentSectionIdx)) {
                         // Irregular: dropdown is CURRENT semester section (UI index).
-                        currentSemInt = currentSectionIdx + 1;
+                        // UI dropdown stores "last semester enrolled" (0-based).
+                        // Solver expects "current_sem" as the next semester index to schedule from (1-based),
+                        // so add +2 to move from last enrolled -> next semester.
+                        currentSemInt = currentSectionIdx + 2;
                     }
                 }
             }
