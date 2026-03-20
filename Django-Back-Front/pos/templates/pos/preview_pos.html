@@ -182,6 +182,23 @@
             text-align: left;
         }
     }
+
+    /* SortableJS drag-and-drop visuals for POS edit mode */
+    .pos-course-row {
+        cursor: grab;
+    }
+    .pos-editing .pos-course-row {
+        cursor: grabbing;
+    }
+    .pos-dnd-ghost {
+        opacity: 0.6;
+    }
+    .pos-dnd-chosen {
+        background-color: #f8f9fa;
+    }
+    .pos-dnd-semester.pos-dnd-locked {
+        opacity: 0.95;
+    }
 </style>
 {% endblock %}
 
@@ -259,6 +276,25 @@
         <div class="pos-section-title mb-0">Program of Study Summary</div>
     </div>
 
+    <div id="pos-option-toggle" class="mb-3" style="display:none;">
+        <div class="d-flex justify-content-between align-items-start gap-2 mb-2 flex-wrap">
+            <div class="pos-section-title mb-0">Solver Output Options</div>
+            <div class="small text-muted text-end" id="pos-option-reason"></div>
+        </div>
+        <div class="d-flex gap-3 flex-wrap align-items-center">
+            <div class="form-check">
+                <input class="form-check-input" type="radio" name="petitionMode" id="petition-mode-no" value="no_petition">
+                <label class="form-check-label" for="petition-mode-no">No Petition</label>
+            </div>
+            <div class="form-check">
+                <input class="form-check-input" type="radio" name="petitionMode" id="petition-mode-yes" value="with_petition">
+                <label class="form-check-label" for="petition-mode-yes">With Petition</label>
+            </div>
+        </div>
+    </div>
+
+    <div id="pos-validation-alert" class="alert alert-danger mb-3" style="display:none;"></div>
+
     <div id="pos-preview-server">
     {% for section in preview_sections %}
     <div class="mb-4">
@@ -321,7 +357,15 @@
     </div>
     <div id="pos-preview-dynamic" style="display:none;"></div>
 
-        <div class="mt-4 d-flex justify-content-end">
+        <div class="mt-4 d-flex justify-content-between align-items-center">
+        <button id="pos-edit-toggle" type="button" class="btn btn-outline-secondary btn-sm" style="min-width: 110px;" title="Edit and drag ungraded courses">
+            <span id="pos-edit-toggle-icon" class="me-1" aria-hidden="true">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+                </svg>
+            </span>
+            <span id="pos-edit-toggle-label">Edit</span>
+        </button>
         <a href="{% url 'download_pos_pdf' %}" class="btn btn-outline-danger btn-sm" download>
             Download PDF
         </a>
@@ -330,6 +374,7 @@
 {% endblock %}
 
 {% block extra_scripts %}
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
 {{ course_lookup|json_script:"course-lookup" }}
 <script>
     (function() {
@@ -355,6 +400,15 @@
 
         function safeJsonParse(s) {
             try { return JSON.parse(s); } catch (e) { return null; }
+        }
+        function escapeHtml(s) {
+            if (s === null || s === undefined) return '';
+            return String(s)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
         }
         function displayPosCourseCode(code) {
             return code || '';
@@ -390,11 +444,314 @@
             return sec[code] || '';
         }
 
-        function renderDynamicPOS(res) {
+        // ===== POS Manual Fine-Tuning (Edit mode + SortableJS) =====
+        var posEditState = {
+            editing: false,
+            saving: false,
+            validating: false,
+            lastValidDomHtml: '',
+            sortablesBySem: {} // solver_semester_index (string) -> Sortable instance
+        };
+
+        function getSelectedPetitionMode() {
+            var noRadio = document.getElementById('petition-mode-no');
+            var yesRadio = document.getElementById('petition-mode-yes');
+            if (noRadio && noRadio.checked) return 'no_petition';
+            if (yesRadio && yesRadio.checked) return 'with_petition';
+            return sessionStorage.getItem('posSelectedOptionMode') || 'no_petition';
+        }
+
+        function destroyPosSortables() {
+            Object.keys(posEditState.sortablesBySem).forEach(function(key) {
+                var sortable = posEditState.sortablesBySem[key];
+                try {
+                    if (sortable && typeof sortable.destroy === 'function') {
+                        sortable.destroy();
+                    }
+                } catch (e) {}
+            });
+            posEditState.sortablesBySem = {};
+        }
+
+        function recomputeSemesterTotalUnits(semesterEl) {
+            if (!semesterEl) return;
+            var totalCell = semesterEl.querySelector('[data-total-units-cell]');
+            if (!totalCell) return;
+            var sumUnits = 0;
+            var rows = semesterEl.querySelectorAll('tr.pos-course-row[data-course-code]');
+            rows.forEach(function(tr) {
+                var code = String(tr.getAttribute('data-course-code') || '').trim();
+                if (!code) return;
+                var info = (courseLookup && code) ? courseLookup[code] : null;
+                var units = info && info.units !== undefined && info.units !== null ? Number(info.units) : NaN;
+                if (!isNaN(units)) sumUnits += units;
+            });
+            totalCell.textContent = String(sumUnits);
+        }
+
+        function initPosSortables() {
+            if (typeof Sortable === 'undefined') return;
+            destroyPosSortables();
+
+            var dyn = document.getElementById('pos-preview-dynamic');
+            if (!dyn) return;
+
+            var semEls = dyn.querySelectorAll('.pos-dnd-semester[data-semester-index]');
+            semEls.forEach(function(semEl) {
+                var semIndex = String(semEl.getAttribute('data-semester-index') || '').trim();
+                if (!semIndex) return;
+
+                var tbody = semEl.querySelector('tbody.pos-dnd-tbody');
+                if (!tbody) return;
+
+                // Lock semesters where any grade is already present.
+                var gradeCells = semEl.querySelectorAll('td.grade-display');
+                var hasAnyGrade = Array.prototype.some.call(gradeCells, function(td) {
+                    var t = td && td.textContent ? String(td.textContent).trim() : '';
+                    return t !== '';
+                });
+
+                if (hasAnyGrade) {
+                    semEl.classList.add('pos-dnd-locked');
+                    return;
+                }
+
+                // Enable cross-semester drag only for ungraded semesters.
+                var sortable = new Sortable(tbody, {
+                    group: { name: 'pos-semester-group', pull: true, put: true },
+                    animation: 150,
+                    scroll: true,
+                    scrollSensitivity: 60,
+                    ghostClass: 'pos-dnd-ghost',
+                    chosenClass: 'pos-dnd-chosen',
+                    // onEnd fires after drop completes (including cross-list moves)
+                    onEnd: function(evt) {
+                        if (!evt || !evt.from || !evt.to) return;
+                        var fromSem = evt.from.closest('.pos-dnd-semester');
+                        var toSem = evt.to.closest('.pos-dnd-semester');
+                        window.requestAnimationFrame(function() {
+                            recomputeSemesterTotalUnits(fromSem);
+                            if (toSem && toSem !== fromSem) {
+                                recomputeSemesterTotalUnits(toSem);
+                                if (posEditState.editing && !posEditState.saving && !posEditState.validating) {
+                                    validateCurrentTunedPosAndRevert();
+                                }
+                            }
+                        });
+                    }
+                });
+
+                posEditState.sortablesBySem[semIndex] = sortable;
+            });
+        }
+
+        function collectPosOverridesFromDOM() {
+            var overrides = {};
+            var dyn = document.getElementById('pos-preview-dynamic');
+            if (!dyn) return overrides;
+
+            var semEls = dyn.querySelectorAll('.pos-dnd-semester[data-semester-index]');
+            semEls.forEach(function(semEl) {
+                var semIndex = String(semEl.getAttribute('data-semester-index') || '').trim();
+                if (!semIndex) return;
+
+                // Only collect semesters we actually allow dragging in this edit session.
+                if (!posEditState.sortablesBySem[semIndex]) return;
+
+                var codes = [];
+                var rows = semEl.querySelectorAll('tbody.pos-dnd-tbody tr.pos-course-row[data-course-code]');
+                rows.forEach(function(tr) {
+                    var code = String(tr.getAttribute('data-course-code') || '').trim();
+                    if (code) codes.push(code);
+                });
+                overrides[semIndex] = codes;
+            });
+
+            return overrides;
+        }
+
+        function setSortablesDisabled(disabled) {
+            Object.keys(posEditState.sortablesBySem).forEach(function(key) {
+                var sortable = posEditState.sortablesBySem[key];
+                try {
+                    if (sortable && typeof sortable.option === 'function') {
+                        sortable.option('disabled', !!disabled);
+                    }
+                } catch (e) {}
+            });
+        }
+
+        function validateCurrentTunedPosAndRevert() {
+            if (!validateTunedPosUrl) return;
+            if (posEditState.validating) return;
+
+            var dyn = document.getElementById('pos-preview-dynamic');
+            if (!dyn) return;
+
+            var alertEl = document.getElementById('pos-validation-alert');
+            if (alertEl) {
+                alertEl.style.display = 'none';
+                alertEl.innerHTML = '';
+            }
+
+            posEditState.validating = true;
+            setSortablesDisabled(true);
+
+            var overrides = collectPosOverridesFromDOM();
+            var mode = getSelectedPetitionMode();
+
+            fetch(validateTunedPosUrl, {
+                method: 'POST',
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ mode: mode, pos_overrides: overrides })
+            }).then(function(r) { return r.json(); })
+              .then(function(data) {
+                  if (data && data.ok) {
+                      posEditState.lastValidDomHtml = dyn.innerHTML;
+                      if (alertEl) {
+                          alertEl.style.display = 'none';
+                          alertEl.innerHTML = '';
+                      }
+                      return;
+                  }
+
+                  if (alertEl) {
+                      // data.message may contain very long solver logs; we keep the UI focused on the moved-course violations instead.
+                      var msg = (data && data.message) ? data.message : 'Invalid POS schedule.';
+                      var moved = (data && data.moved_courses && Array.isArray(data.moved_courses))
+                          ? data.moved_courses
+                          : [];
+
+                      var movedLis = moved.map(function(mc) {
+                          if (!mc) return '';
+                          var code = escapeHtml(mc.code || '');
+                          var fromSi = mc.from_semester_index;
+                          var toSi = mc.to_semester_index;
+                          var toSiNum = parseInt(toSi, 10);
+                          var semLabel = '';
+                          if (!isNaN(toSiNum) && toSiNum > 0) {
+                              semLabel = SEM_LABELS[toSiNum - 1] || ('Semester ' + toSiNum);
+                          } else {
+                              semLabel = 'Semester ' + String(toSi || '');
+                          }
+                          var howArr = (mc.how && Array.isArray(mc.how)) ? mc.how : [];
+                          var howTxt = howArr.slice(0, 4).filter(Boolean).join(' · ');
+                          var subtitle = code + ' (' + escapeHtml(String(fromSi || '')) + ' → ' + escapeHtml(String(toSi || '')) + ')';
+                          if (howTxt) {
+                              return '<li><b>' + subtitle + '</b>: ' + escapeHtml(semLabel) + ' — ' + escapeHtml(howTxt) + '</li>';
+                          }
+                          return '<li><b>' + subtitle + '</b>: ' + escapeHtml(semLabel) + '</li>';
+                      }).filter(function(s) { return s; }).join('');
+
+                      var movedUl = movedLis ? ('<ul class=\"mb-0 mt-2\">' + movedLis + '</ul>') : '';
+                      if (movedUl) {
+                          // Show only the moved-course violations (remove the long general solver message).
+                          alertEl.innerHTML = movedUl;
+                      } else {
+                          // Fallback: if we couldn't compute moved courses, show a short generic message.
+                          alertEl.innerHTML = '<strong>Invalid POS schedule.</strong>';
+                      }
+                      alertEl.style.display = '';
+                  }
+
+                  // Infeasible: revert to the last known-good arrangement.
+                  dyn.innerHTML = posEditState.lastValidDomHtml || '';
+                  initPosSortables();
+                  setSortablesDisabled(true);
+              }).catch(function() {
+                  if (alertEl) {
+                      alertEl.innerHTML = '<strong>Validation error.</strong> Could not validate the tuned POS.';
+                      alertEl.style.display = '';
+                  }
+                  dyn.innerHTML = posEditState.lastValidDomHtml || '';
+                  initPosSortables();
+                  setSortablesDisabled(true);
+              }).finally(function() {
+                  posEditState.validating = false;
+                  setSortablesDisabled(false);
+              });
+        }
+
+        var POS_PENCIL_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>';
+        var POS_CHECK_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>';
+
+        function setPosEditMode(enabled) {
+            var wasEditing = posEditState.editing;
+            posEditState.editing = enabled;
+            var btn = document.getElementById('pos-edit-toggle');
+            if (btn) {
+                var label = document.getElementById('pos-edit-toggle-label');
+                if (label) label.textContent = enabled ? 'Apply' : 'Edit';
+                var iconEl = document.getElementById('pos-edit-toggle-icon');
+                if (iconEl) iconEl.innerHTML = enabled ? POS_CHECK_SVG : POS_PENCIL_SVG;
+                btn.disabled = !!posEditState.saving || !!posEditState.validating;
+            }
+            document.body.classList.toggle('pos-editing', enabled);
+
+            // Disable petition toggle while editing to keep UI consistent.
+            var noRadio = document.getElementById('petition-mode-no');
+            var yesRadio = document.getElementById('petition-mode-yes');
+            if (noRadio) noRadio.disabled = enabled || !!posEditState.saving || !!posEditState.validating;
+            if (yesRadio) yesRadio.disabled = enabled || !!posEditState.saving || !!posEditState.validating;
+
+            if (enabled) {
+                if (!wasEditing) {
+                    posEditState.validating = false;
+                    var dyn = document.getElementById('pos-preview-dynamic');
+                    if (dyn) posEditState.lastValidDomHtml = dyn.innerHTML;
+                    initPosSortables();
+                }
+            } else {
+                destroyPosSortables();
+                posEditState.validating = false;
+            }
+        }
+
+        var validateTunedPosUrl = "{% url 'validate_tuned_pos' %}";
+        var saveTunedPosUrl = "{% url 'save_tuned_pos' %}";
+        var editBtn = document.getElementById('pos-edit-toggle');
+        if (editBtn) {
+            editBtn.addEventListener('click', function() {
+                if (!posEditState.editing) {
+                    setPosEditMode(true);
+                    return;
+                }
+
+                if (posEditState.saving) return;
+                posEditState.saving = true;
+                setSortablesDisabled(true);
+                setPosEditMode(true); // refresh disabled states (won't re-init if already editing)
+
+                var overrides = collectPosOverridesFromDOM();
+                var mode = getSelectedPetitionMode();
+                // Apply should persist tuned schedule and reflect in PDF.
+                fetch(saveTunedPosUrl, {
+                    method: 'POST',
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ mode: mode, pos_overrides: overrides })
+                }).then(function(r) { return r.json(); })
+                  .then(function(data) {
+                      if (data && data.ok) {
+                          setPosEditMode(false);
+                      } else {
+                          // If save fails, keep edit mode so user can try again.
+                          console.error('Save tuned POS failed:', data);
+                      }
+                  }).catch(function(err) {
+                      console.error('Save tuned POS error:', err);
+                  }).finally(function() {
+                      posEditState.saving = false;
+                      setSortablesDisabled(false);
+                      setPosEditMode(posEditState.editing);
+                  });
+            });
+        }
+
+        function renderDynamicPOS(res, forcedMode) {
             var dyn = document.getElementById('pos-preview-dynamic');
             var srv = document.getElementById('pos-preview-server');
             if (!dyn || !srv) return;
-            if (!res || res.status !== 'ok' || !Array.isArray(res.pos)) return;
+            if (!res) return;
 
             var gradesBySection = getGradesBySection() || {};
 
@@ -407,141 +764,218 @@
             // Solver is 1-based; everything after currentSemSolver is "future"
             var currentSemSolver = currentUiIndex + 2;
 
-            // Only render solver semesters up to the last semester that actually has courses.
-            // Solver output may include trailing semesters with blank/empty course lists; we don't want
-            // those tables to appear on Preview/PDF.
-            var maxSolverIndexWithCourses = currentSemSolver;
-            res.pos.forEach(function(sem) {
-                var solverIndex = sem.semester_index || 0;
-                if (!solverIndex) return;
-                var hasCourses = Array.isArray(sem.courses) && sem.courses.some(function(c) {
-                    var code = c && (c.code || '');
-                    return String(code).trim() !== '';
-                });
-                if (hasCourses && solverIndex > maxSolverIndexWithCourses) {
-                    maxSolverIndexWithCourses = solverIndex;
+            function renderSolverPos(posList) {
+                dyn.innerHTML = '';
+
+                if (!Array.isArray(posList) || !posList.length) {
+                    dyn.style.display = '';
+                    return;
                 }
-            });
 
-            var html = "";
-            res.pos.forEach(function(sem) {
-                var solverIndex = sem.semester_index || 0;
-                if (!solverIndex) return;
-
-                // The server-rendered part only includes semesters where there are
-                // saved grades. If the user didn't enter grades for a "past" semester,
-                // that section can disappear on Preview, and we should let the solver
-                // overlay fill it in (metadata + blank grade/remark).
-                //
-                // Skip solver semesters <= boundary ONLY if that UI section already has
-                // at least one non-empty grade saved.
-                var uiIndexForServer = solverIndex - 1; // solverIndex=1 -> uiIndex=0
-                var serverSectionGrades = (gradesBySection && (gradesBySection[String(uiIndexForServer)] || gradesBySection[uiIndexForServer])) ? (gradesBySection[String(uiIndexForServer)] || gradesBySection[uiIndexForServer]) : null;
-                var serverHasAnyGrade = false;
-                if (serverSectionGrades) {
-                    Object.keys(serverSectionGrades).some(function(code) {
-                        if (serverSectionGrades[code]) { serverHasAnyGrade = true; return true; }
-                        return false;
+                // Only render solver semesters up to the last semester that actually has courses.
+                // Solver output may include trailing semesters with blank/empty course lists; we don't want
+                // those tables to appear on Preview/PDF.
+                var maxSolverIndexWithCourses = currentSemSolver;
+                posList.forEach(function(sem) {
+                    var solverIndex = sem.semester_index || 0;
+                    if (!solverIndex) return;
+                    var hasCourses = Array.isArray(sem.courses) && sem.courses.some(function(c) {
+                        var code = c && (c.code || '');
+                        return String(code).trim() !== '';
                     });
-                }
-
-                if (solverIndex <= currentSemSolver && serverHasAnyGrade) {
-                    // Already represented by the server-rendered curriculum/grades tables
-                    return;
-                }
-                if (solverIndex > maxSolverIndexWithCourses) {
-                    // Trailing empty semesters from solver output; stop rendering further tables.
-                    return;
-                }
-
-                var label = SEM_LABELS[solverIndex - 1] || sem.label || ("Semester " + solverIndex);
-                var totalUnits = (sem.total_units !== undefined && sem.total_units !== null) ? sem.total_units : '—';
-
-                html += '<div class="mb-4">';
-                html +=   '<h6 class="fw-bold mb-2">' + String(label) + '</h6>';
-                html +=   '<div class="table-responsive">';
-                html +=     '<table class="table table-sm align-middle table-bordered mb-0">';
-                html +=       '<colgroup>';
-                html +=         '<col style="width:8%;">';
-                html +=         '<col style="width:32%;">';
-                html +=         '<col style="width:4%;">';
-                html +=         '<col style="width:3%;">';
-                html +=         '<col style="width:3%;">';
-                html +=         '<col style="width:12%;">';
-                html +=         '<col style="width:12%;">';
-                html +=         '<col style="width:8%;">';
-                html +=         '<col style="width:8%;">';
-                html +=       '</colgroup>';
-                html +=       '<thead class="table-light">';
-                html +=         '<tr class="text-center">';
-                html +=           '<th rowspan="2" style="width: 8%;">Course Code</th>';
-                html +=           '<th rowspan="2" style="width: 28%;">Course Title</th>';
-                html +=           '<th rowspan="2" style="width: 4%;">Units</th>';
-                html +=           '<th colspan="2" class="hours-header" style="width: 6%;">No. of hour/s</th>';
-                html +=           '<th rowspan="2" style="width: 12%;">Pre-requisite(s)</th>';
-                html +=           '<th rowspan="2" style="width: 12%;">Co-requisite(s)</th>';
-                    html +=           '<th rowspan="2" style="width: 9%;">Grade</th>';
-                html +=           '<th rowspan="2" style="width: 9%;">Remarks</th>';
-                html +=         '</tr>';
-                html +=         '<tr class="text-center">';
-                html +=           '<th style="width: 4%;">Lec</th>';
-                html +=           '<th style="width: 4%;">Lab</th>';
-                html +=         '</tr>';
-                html +=       '</thead>';
-                html +=       '<tbody>';
-
-                (sem.courses || []).forEach(function(c) {
-                    var code = c.code || '';
-                    var info = (courseLookup && code) ? courseLookup[code] : null;
-                    var title = (info && info.title) ? info.title : (c.title || '');
-                    var units = (info && info.units !== undefined && info.units !== null) ? info.units : ((c.units !== undefined && c.units !== null) ? c.units : '');
-                    var lec = (info && info.lec !== undefined && info.lec !== null) ? info.lec : '';
-                    var lab = (info && info.lab !== undefined && info.lab !== null) ? info.lab : '';
-                    var prereq = (info && info.prereq) ? info.prereq : '';
-                    var coreq = (info && info.coreq) ? info.coreq : '';
-
-                    // For future sems, grades will usually be empty
-                    var grade = getGradeFor(solverIndex - 1, code, gradesBySection);
-                    var remark = grade ? (isPassingGrade(grade) ? 'Passed' : (isFailedGrade(grade) ? 'Failed' : '')) : '';
-                    var gradeClass = (grade && isFailedGrade(grade)) ? 'text-danger' : '';
-                    var remarkClass = (remark === 'Passed') ? 'text-success' : ((remark === 'Failed') ? 'text-danger' : '');
-
-                    html += '<tr>';
-                    html +=   '<td class="text-center">' + String(displayPosCourseCode(code)) + '</td>';
-                    html +=   '<td class="course-title-cell">' + String(title) + '</td>';
-                    html +=   '<td class="text-center">' + String(units) + '</td>';
-                    html +=   '<td class="text-center">' + (lec !== '' ? String(lec) : '') + '</td>';
-                    html +=   '<td class="text-center">' + (lab !== '' ? String(lab) : '') + '</td>';
-                    html +=   '<td class="small text-muted text-center">' + (prereq !== '' ? String(prereq) : '') + '</td>';
-                    html +=   '<td class="small text-muted text-center">' + (coreq !== '' ? String(coreq) : '') + '</td>';
-                    html +=   '<td class="text-center grade-display ' + gradeClass + '">' + (grade ? String(grade) : '') + '</td>';
-                    html +=   '<td class="text-center remarks-display ' + remarkClass + '">' + (remark ? String(remark) : '') + '</td>';
-                    html += '</tr>';
+                    if (hasCourses && solverIndex > maxSolverIndexWithCourses) {
+                        maxSolverIndexWithCourses = solverIndex;
+                    }
                 });
 
-                html +=       '</tbody>';
-                html +=       '<tfoot><tr>';
-                html +=         '<th colspan="2" class="text-end">Total Units</th>';
-                html +=         '<th class="text-center">' + String(totalUnits) + '</th>';
-                html +=         '<th colspan="6"></th>';
-                html +=       '</tr></tfoot>';
-                html +=     '</table>';
-                html +=   '</div>';
-                html += '</div>';
-            });
+                var html = "";
+                posList.forEach(function(sem) {
+                    var solverIndex = sem.semester_index || 0;
+                    if (!solverIndex) return;
 
-            if (html) {
-                dyn.innerHTML = html;
-                dyn.style.display = '';
-                // IMPORTANT: keep server part visible for past semesters with grades
-                // srv.style.display = 'none';  // do NOT hide, we want append behavior
+                    // The server-rendered part only includes semesters where there are
+                    // saved grades. If the user didn't enter grades for a "past" semester,
+                    // that section can disappear on Preview, and we should let the solver
+                    // overlay fill it in (metadata + blank grade/remark).
+                    //
+                    // Skip solver semesters <= boundary ONLY if that UI section already has
+                    // at least one non-empty grade saved.
+                    var uiIndexForServer = solverIndex - 1; // solverIndex=1 -> uiIndex=0
+                    var serverSectionGrades = (gradesBySection && (gradesBySection[String(uiIndexForServer)] || gradesBySection[uiIndexForServer])) ? (gradesBySection[String(uiIndexForServer)] || gradesBySection[uiIndexForServer]) : null;
+                    var serverHasAnyGrade = false;
+                    if (serverSectionGrades) {
+                        Object.keys(serverSectionGrades).some(function(code) {
+                            if (serverSectionGrades[code]) { serverHasAnyGrade = true; return true; }
+                            return false;
+                        });
+                    }
+
+                    if (solverIndex <= currentSemSolver && serverHasAnyGrade) {
+                        return;
+                    }
+                    if (solverIndex > maxSolverIndexWithCourses) {
+                        return;
+                    }
+
+                    var label = SEM_LABELS[solverIndex - 1] || sem.label || ("Semester " + solverIndex);
+                    var totalUnits = (sem.total_units !== undefined && sem.total_units !== null) ? sem.total_units : '—';
+
+                    html += '<div class="mb-4 pos-dnd-semester" data-semester-index="' + String(solverIndex) + '">';
+                    html +=   '<h6 class="fw-bold mb-2">' + String(label) + '</h6>';
+                    html +=   '<div class="table-responsive">';
+                    html +=     '<table class="table table-sm align-middle table-bordered mb-0">';
+                    html +=       '<colgroup>';
+                    html +=         '<col style="width:8%;">';
+                    html +=         '<col style="width:32%;">';
+                    html +=         '<col style="width:4%;">';
+                    html +=         '<col style="width:3%;">';
+                    html +=         '<col style="width:3%;">';
+                    html +=         '<col style="width:12%;">';
+                    html +=         '<col style="width:12%;">';
+                    html +=         '<col style="width:8%;">';
+                    html +=         '<col style="width:8%;">';
+                    html +=       '</colgroup>';
+                    html +=       '<thead class="table-light">';
+                    html +=         '<tr class="text-center">';
+                    html +=           '<th rowspan="2" style="width: 8%;">Course Code</th>';
+                    html +=           '<th rowspan="2" style="width: 28%;">Course Title</th>';
+                    html +=           '<th rowspan="2" style="width: 4%;">Units</th>';
+                    html +=           '<th colspan="2" class="hours-header" style="width: 6%;">No. of hour/s</th>';
+                    html +=           '<th rowspan="2" style="width: 12%;">Pre-requisite(s)</th>';
+                    html +=           '<th rowspan="2" style="width: 12%;">Co-requisite(s)</th>';
+                    html +=           '<th rowspan="2" style="width: 9%;">Grade</th>';
+                    html +=           '<th rowspan="2" style="width: 9%;">Remarks</th>';
+                    html +=         '</tr>';
+                    html +=         '<tr class="text-center">';
+                    html +=           '<th style="width: 4%;">Lec</th>';
+                    html +=           '<th style="width: 4%;">Lab</th>';
+                    html +=         '</tr>';
+                    html +=       '</thead>';
+                    html +=       '<tbody class="pos-dnd-tbody">';
+
+                    (sem.courses || []).forEach(function(c) {
+                        var code = c.code || '';
+                        var info = (courseLookup && code) ? courseLookup[code] : null;
+                        var title = (info && info.title) ? info.title : (c.title || '');
+                        var units = (info && info.units !== undefined && info.units !== null) ? info.units : ((c.units !== undefined && c.units !== null) ? c.units : '');
+                        var lec = (info && info.lec !== undefined && info.lec !== null) ? info.lec : '';
+                        var lab = (info && info.lab !== undefined && info.lab !== null) ? info.lab : '';
+                        var prereq = (info && info.prereq) ? info.prereq : '';
+                        var coreq = (info && info.coreq) ? info.coreq : '';
+
+                        var grade = getGradeFor(solverIndex - 1, code, gradesBySection);
+                        var remark = grade ? (isPassingGrade(grade) ? 'Passed' : (isFailedGrade(grade) ? 'Failed' : '')) : '';
+                        var gradeClass = (grade && isFailedGrade(grade)) ? 'text-danger' : '';
+                        var remarkClass = (remark === 'Passed') ? 'text-success' : ((remark === 'Failed') ? 'text-danger' : '');
+
+                        html += '<tr class="pos-course-row" data-course-code="' + String(code || '').trim() + '">';
+                        html +=   '<td class="text-center">' + String(displayPosCourseCode(code)) + '</td>';
+                        html +=   '<td class="course-title-cell">' + String(title) + '</td>';
+                        html +=   '<td class="text-center">' + String(units) + '</td>';
+                        html +=   '<td class="text-center">' + (lec !== '' ? String(lec) : '') + '</td>';
+                        html +=   '<td class="text-center">' + (lab !== '' ? String(lab) : '') + '</td>';
+                        html +=   '<td class="small text-muted text-center">' + (prereq !== '' ? String(prereq) : '') + '</td>';
+                        html +=   '<td class="small text-muted text-center">' + (coreq !== '' ? String(coreq) : '') + '</td>';
+                        html +=   '<td class="text-center grade-display ' + gradeClass + '">' + (grade ? String(grade) : '') + '</td>';
+                        html +=   '<td class="text-center remarks-display ' + remarkClass + '">' + (remark ? String(remark) : '') + '</td>';
+                        html += '</tr>';
+                    });
+
+                    html +=       '</tbody>';
+                    html +=       '<tfoot><tr>';
+                    html +=         '<th colspan="2" class="text-end">Total Units</th>';
+                    html +=         '<th class="text-center pos-total-units" data-total-units-cell="' + String(solverIndex) + '">' + String(totalUnits) + '</th>';
+                    html +=         '<th colspan="6"></th>';
+                    html +=       '</tr></tfoot>';
+                    html +=     '</table>';
+                    html +=   '</div>';
+                    html += '</div>';
+                });
+
+                    if (html) {
+                        dyn.innerHTML = html;
+                        dyn.style.display = '';
+                        if (posEditState && posEditState.editing) {
+                            initPosSortables();
+                        }
+                    }
             }
+
+            // Backward compatibility: if solver response is old-format, render res.pos.
+            if (!res.pos_options || typeof res.pos_options !== 'object') {
+                renderSolverPos(res.pos || []);
+                return;
+            }
+
+            var posOptions = res.pos_options || {};
+            var reason = res.default_reason || '';
+
+            var defaultMode = forcedMode
+                || res.default_petition_mode
+                || sessionStorage.getItem('posSelectedOptionMode')
+                || 'no_petition';
+
+            function pickFeasibleMode(preferMode) {
+                var a = posOptions.no_petition;
+                var b = posOptions.with_petition;
+                if (preferMode === 'no_petition' && a && a.status === 'ok') return 'no_petition';
+                if (preferMode === 'with_petition' && b && b.status === 'ok') return 'with_petition';
+                if (a && a.status === 'ok') return 'no_petition';
+                if (b && b.status === 'ok') return 'with_petition';
+                return preferMode;
+            }
+
+            var selectedMode = pickFeasibleMode(defaultMode);
+            var selectedOpt = posOptions[selectedMode] || {};
+
+            // Setup UI toggle
+            var toggleEl = document.getElementById('pos-option-toggle');
+            var reasonEl = document.getElementById('pos-option-reason');
+            var noRadio = document.getElementById('petition-mode-no');
+            var yesRadio = document.getElementById('petition-mode-yes');
+
+            if (toggleEl && reasonEl && noRadio && yesRadio) {
+                toggleEl.style.display = '';
+                reasonEl.textContent = reason;
+
+                var noEnabled = posOptions.no_petition && posOptions.no_petition.status === 'ok';
+                var yesEnabled = posOptions.with_petition && posOptions.with_petition.status === 'ok';
+
+                noRadio.disabled = !noEnabled;
+                yesRadio.disabled = !yesEnabled;
+
+                noRadio.checked = selectedMode === 'no_petition';
+                yesRadio.checked = selectedMode === 'with_petition';
+
+                if (!renderDynamicPOS._toggleBound) {
+                    renderDynamicPOS._toggleBound = true;
+                    var setModeUrl = "{% url 'set_generated_pos_option' %}";
+                    function onModeChange(e) {
+                        var mode = e && e.target ? e.target.value : null;
+                        if (!mode) return;
+                        sessionStorage.setItem('posSelectedOptionMode', mode);
+                        fetch(setModeUrl, {
+                            method: 'POST',
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ mode: mode })
+                        }).then(function(r) { return r.json(); })
+                          .then(function(data) {
+                              if (!data || !data.ok) return;
+                              renderSolverPos(data.pos || []);
+                          }).catch(function() {});
+                    }
+                    noRadio.addEventListener('change', onModeChange);
+                    yesRadio.addEventListener('change', onModeChange);
+                }
+            }
+
+            renderSolverPos(selectedOpt.pos || []);
         }
 
         // Prefer fresh response passed from Generate POS
         var ss = sessionStorage.getItem('posGeneratedResponse');
         var ssObj = ss ? safeJsonParse(ss) : null;
-        if (ssObj && ssObj.status) {
+        if (ssObj && (ssObj.pos || ssObj.pos_options)) {
             renderDynamicPOS(ssObj);
             return;
         }

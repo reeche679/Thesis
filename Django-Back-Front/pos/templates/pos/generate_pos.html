@@ -749,13 +749,6 @@
             </select>
         </div>
         <div class="col-md-2">
-            <label class="form-label small text-uppercase text-muted" for="irreg-with-petition">With Petition?</label>
-            <select class="form-select form-select-sm" id="irreg-with-petition">
-                <option value="no" {% if irreg_with_petition == 'no' %}selected{% endif %}>No</option>
-                <option value="yes" {% if irreg_with_petition != 'no' %}selected{% endif %}>Yes</option>
-            </select>
-        </div>
-        <div class="col-md-2">
             <button type="button" class="btn btn-sm btn-primary w-100" id="irreg-ok-btn">OK</button>
         </div>
     </div>
@@ -780,17 +773,6 @@
                 {% for value, label in current_semester_choices_regular %}
                 <option value="{{ value }}" {% if current_semester_index == value %}selected{% endif %}>{{ label }}</option>
                 {% endfor %}
-            </select>
-        </div>
-
-        <!-- 2nd column: With Petition? -->
-        <div class="col-md-3 col-12">
-            <label class="form-label small text-uppercase text-muted" for="regular-with-petition">
-                With Petition?
-            </label>
-            <select class="form-select form-select-sm" id="regular-with-petition">
-                <option value="yes" {% if regular_with_petition != 'no' %}selected{% endif %}>Yes</option>
-                <option value="no" {% if regular_with_petition == 'no' %}selected{% endif %}>No</option>
             </select>
         </div>
 
@@ -1514,7 +1496,7 @@
 
         initGradeDropdowns(document);
         // Custom dropdowns for irregular & regular path selects
-        ['irreg-current-sem', 'irreg-start-sem', 'irreg-with-petition', 'regular-current-semester', 'regular-with-petition'].forEach(function(id) {
+        ['irreg-current-sem', 'irreg-start-sem', 'regular-current-semester'].forEach(function(id) {
             var sel = document.getElementById(id);
             if (sel) initPosSelectVisual(sel);
         });
@@ -1526,16 +1508,11 @@
             if (regSelect && regOkBtn) {
                 regOkBtn.addEventListener('click', function() {
                     var v = regSelect.value;
-                    var withPetitionSel = document.getElementById('regular-with-petition');
-                    var wp = withPetitionSel ? withPetitionSel.value : 'yes';
                     var url = new URL(window.location.href);
                     if (v !== '') {
                         url.searchParams.set('section', v);
                     } else {
                         url.searchParams.delete('section');
-                    }
-                    if (wp !== '') {
-                        url.searchParams.set('with_petition', wp);
                     }
                     window.location.href = url.toString();
                 });
@@ -1795,24 +1772,10 @@
                 }
             }
 
-            var withPetition = false;
-            if (!IS_REGULAR) {
-                var petitionSel = document.getElementById('irreg-with-petition');
-                if (petitionSel && petitionSel.value === 'yes') {
-                    withPetition = true;
-                }
-            } else {
-                var regularPetitionSel = document.getElementById('regular-with-petition');
-                if (regularPetitionSel && regularPetitionSel.value === 'yes') {
-                    withPetition = true;
-                }
-            }
-
             return {
                 current_sem: currentSemInt,
                 passed_courses: Array.from(passed),
-                failed_courses: Array.from(failed),
-                with_petition: withPetition
+                failed_courses: Array.from(failed)
             };
         }
 
@@ -2365,7 +2328,6 @@
             irregOkBtn.addEventListener('click', function() {
                 var currentSem = document.getElementById('irreg-current-sem').value;
                 var startSem = document.getElementById('irreg-start-sem').value;
-                var petition = document.getElementById('irreg-with-petition').value;
                 if (currentSem === '') {
                     showGeneratedPosErrorPopup('Please select your Last Semester Enrolled to proceed.', 'infeasible');
                     return;
@@ -2393,7 +2355,6 @@
                 var params = [];
                 params.push('current_sem=' + encodeURIComponent(currentSem));
                 params.push('irreg_start=' + encodeURIComponent(startSem));
-                if (petition) params.push('with_petition=' + encodeURIComponent(petition));
                 window.location.href = window.location.pathname + '?' + params.join('&');
             });
         }

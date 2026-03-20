@@ -424,7 +424,30 @@ def _solve_and_collect(model, semester, passed_courses, failed_courses, current_
         return {"status": "infeasible", "message": buf.getvalue().strip(), "pos": []}
 
 
-def _run_core(current_sem, passed_courses, failed_courses, with_petition: bool):
+def _apply_forced_semester_assignments(model, semester, passed_courses, forced_semester_map):
+    """
+    If provided, force specific courses to be scheduled in specific semesters.
+
+    forced_semester_map: { "<course_code>": <semester_index_int> }
+    """
+    if not forced_semester_map or not isinstance(forced_semester_map, dict):
+        return
+
+    for code, forced_sem in forced_semester_map.items():
+        if not isinstance(code, str):
+            continue
+        if code in passed_courses:
+            continue
+        if code not in semester:
+            continue
+        try:
+            si = int(forced_sem)
+        except (ValueError, TypeError):
+            continue
+        model.Add(semester[code] == si)
+
+
+def _run_core(current_sem, passed_courses, failed_courses, with_petition: bool, forced_semester_map=None):
     """
     Internal pipeline that runs the full model and returns a structured result dict.
     Shared by CLI and external callers.
@@ -443,6 +466,9 @@ def _run_core(current_sem, passed_courses, failed_courses, with_petition: bool):
 
     # 3. Variable Initialization
     semester = create_semester_variables(model, current_sem, passed_courses)
+
+    # Optional: force semester assignments from a user-edited POS.
+    _apply_forced_semester_assignments(model, semester, passed_courses, forced_semester_map)
 
     # 4. Constraints
     add_offering_constraints(model, semester, passed_courses, current_sem, with_petition)
@@ -477,6 +503,7 @@ def generate_pos(payload: dict) -> dict:
       - passed_courses (list of course codes)
       - failed_courses (list of course codes)
       - with_petition (bool, optional)
+      - forced_semester_map (dict, optional) forcing course->semester
     """
     if payload is None:
         raise ValueError("payload must be a dict")
@@ -489,8 +516,15 @@ def generate_pos(payload: dict) -> dict:
     passed_courses = list(payload.get("passed_courses") or [])
     failed_courses = list(payload.get("failed_courses") or [])
     with_petition = bool(payload.get("with_petition", False))
+    forced_semester_map = payload.get("forced_semester_map") or None
 
-    return _run_core(current_sem, passed_courses, failed_courses, with_petition=with_petition)
+    return _run_core(
+        current_sem,
+        passed_courses,
+        failed_courses,
+        with_petition=with_petition,
+        forced_semester_map=forced_semester_map,
+    )
 
 
 def run_pos_with_state(current_sem, passed_courses, failed_courses, with_petition: bool = False):

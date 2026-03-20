@@ -4,6 +4,7 @@ Views for POS templates and auth (register, login, session).
 import json
 import re
 import os
+import copy
 from django.conf import settings
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
@@ -13,7 +14,7 @@ from django.views.decorators.csrf import ensure_csrf_cookie, csrf_exempt
 
 from django.utils import timezone
 from accounts.models import Student, StudentGrade, POSRecord
-from .solver_bridge import generate_pos_via_solver
+from .solver_bridge import generate_pos_via_solver, validate_pos_via_solver
 
 SR_CODE_REGEX = re.compile(r'^\d{2}-\d{5}$')
 EMAIL_REGEX = re.compile(r'^\d{2}-\d{5}@g\.batstate-u\.edu\.ph$')
@@ -904,26 +905,599 @@ def generate_pos_api(request):
     except RuntimeError as e:
         return JsonResponse({"error": str(e)}, status=500)
 
-    # Translate solver course keys back to UI codes in the returned POS so the
-    # Django course_lookup, display_code, and PDF generation all work correctly.
-    if isinstance(result, dict) and result.get("pos"):
-        for sem in result["pos"]:
+    # Translate solver course keys back to UI codes so Django course_lookup,
+    # display_code, and PDF generation work correctly.
+    def _translate_pos_courses(pos_list):
+        if not isinstance(pos_list, list):
+            return
+        for sem in pos_list:
             for course in (sem.get("courses") or []):
                 solver_code = course.get("code", "")
                 if solver_code in _SOLVER_TO_UI_ELECTIVE:
                     course["code"] = _SOLVER_TO_UI_ELECTIVE[solver_code]
 
+    if isinstance(result, dict):
+        _translate_pos_courses(result.get("pos"))
+        pos_options = result.get("pos_options")
+        if isinstance(pos_options, dict):
+            for _mode, opt in pos_options.items():
+                if isinstance(opt, dict) and opt.get("pos") is not None:
+                    _translate_pos_courses(opt.get("pos"))
+
     # If called from the authenticated app UI, cache the last generated solver output in session
     # so we can generate a PDF from it on demand.
     try:
         student = get_logged_in_student(request)
-        if student is not None and isinstance(result, dict) and result.get("status") == "ok":
+        if student is not None and isinstance(result, dict):
             request.session["last_generated_pos"] = result.get("pos") or []
+            if isinstance(result.get("pos_options"), dict):
+                request.session["last_generated_pos_options"] = result.get("pos_options")
+            if result.get("default_petition_mode"):
+                request.session["last_selected_petition_mode"] = result.get("default_petition_mode")
             request.session["last_generated_payload"] = payload
     except Exception:
         pass
 
     return JsonResponse(result)
+
+
+@csrf_exempt
+@require_POST
+def set_generated_pos_option(request):
+    """
+    Set which solver-generated POS option (no-petition vs with-petition) should be used
+    for Preview/PDF downloads. This only updates session state; it does not re-run the solver.
+
+    Expected JSON body:
+      - mode: "no_petition" | "with_petition"
+    """
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"ok": False, "error": "Invalid JSON"}, status=400)
+
+    if not isinstance(data, dict):
+        return JsonResponse({"ok": False, "error": "Expected JSON object"}, status=400)
+
+    mode = data.get("mode")
+    if mode not in ("no_petition", "with_petition"):
+        return JsonResponse({"ok": False, "error": "Invalid mode"}, status=400)
+
+    options = request.session.get("last_generated_pos_options")
+    if not isinstance(options, dict) or not options:
+        return JsonResponse({"ok": False, "error": "No generated POS options found in session."}, status=400)
+
+    opt = options.get(mode)
+    if not isinstance(opt, dict):
+        return JsonResponse({"ok": False, "error": "Requested mode is not available."}, status=400)
+
+    pos = opt.get("pos") or []
+    request.session["last_generated_pos"] = pos
+    request.session["last_selected_petition_mode"] = mode
+    return JsonResponse({"ok": True, "mode": mode, "pos": pos})
+
+
+def _rebuild_tuned_pos_and_forced_map(base_pos, pos_overrides, preview_boundary_section_index):
+    """
+    Apply UI pos_overrides onto the solver-generated base_pos and return:
+      - updated_pos: list suitable for session/PDF
+      - forced_semester_map: { "<solver_course_code>": <semester_index_int> }
+    """
+    # Work on a deep copy so validation failures don't mutate cached session options.
+    updated_pos = copy.deepcopy(base_pos)
+
+    course_lookup = _course_lookup_from_curriculum()
+
+    def _fallback_course_obj(code):
+        if not code:
+            return {"code": "", "title": "", "units": ""}
+        info = course_lookup.get(code)
+        if not info:
+            return {"code": code, "title": "", "units": ""}
+        title, units, _lec, _lab, _prereq, _coreq = info
+        return {"code": code, "title": title, "units": units}
+
+    sem_by_idx = {}
+    for sem in updated_pos:
+        try:
+            si = int(sem.get("semester_index"))
+        except (ValueError, TypeError):
+            continue
+        sem_by_idx[si] = sem
+
+    modified_any = False
+    for sem_idx_raw, codes in pos_overrides.items():
+        try:
+            solver_sem_idx = int(sem_idx_raw)
+        except (ValueError, TypeError):
+            continue
+
+        sem = sem_by_idx.get(solver_sem_idx)
+        if not sem:
+            continue
+
+        # Enforce "future/ungraded only" based on preview boundary.
+        # In the preview/PDF mapping: ui_section_index = solver_sem_idx - 1
+        if preview_boundary_section_index is not None:
+            ui_section_index = solver_sem_idx - 1
+            if ui_section_index <= preview_boundary_section_index:
+                continue
+
+        if not isinstance(codes, list):
+            continue
+
+        # Keep existing course objects when possible (preserve any extra fields solver returned).
+        code_to_course = {}
+        for c in (sem.get("courses") or []):
+            if isinstance(c, dict):
+                c_code = c.get("code")
+                if c_code:
+                    code_to_course[str(c_code).strip()] = c
+
+        new_courses = []
+        for code in codes:
+            code_s = str(code).strip()
+            if not code_s:
+                continue
+            course_obj = code_to_course.get(code_s) or _fallback_course_obj(code_s)
+            new_courses.append(course_obj)
+
+        sem["courses"] = new_courses
+
+        # Recompute total units for edited semester(s).
+        total_units = 0.0
+        for c in new_courses:
+            if not isinstance(c, dict):
+                continue
+            u = c.get("units")
+            try:
+                total_units += float(u)
+            except (ValueError, TypeError):
+                code_s = c.get("code")
+                if code_s and code_s in course_lookup:
+                    total_units += float(course_lookup[code_s][1])
+
+        sem["total_units"] = int(round(total_units))
+        modified_any = True
+
+    # Build forced_semester_map for all non-passed courses in tuned schedule.
+    forced_semester_map = {}
+    for sem in updated_pos:
+        try:
+            solver_sem_idx = int(sem.get("semester_index"))
+        except (ValueError, TypeError):
+            continue
+        for c in (sem.get("courses") or []):
+            if not isinstance(c, dict):
+                continue
+            code = c.get("code") or ""
+            code_s = str(code).strip()
+            if not code_s:
+                continue
+            solver_code = _UI_TO_SOLVER_ELECTIVE.get(code_s, code_s)
+            forced_semester_map[solver_code] = solver_sem_idx
+
+    return updated_pos, forced_semester_map, modified_any
+
+
+@csrf_exempt
+@require_POST
+def validate_tuned_pos(request):
+    """
+    Validate the user-edited tuned POS (manual fine-tuning) for feasibility using CP-SAT.
+
+    Expected JSON body:
+      - mode: "no_petition" | "with_petition"
+      - pos_overrides: { "<solver_semester_index>": ["COURSE_CODE", ...], ... }
+    """
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"ok": False, "error": "Invalid JSON"}, status=400)
+
+    if not isinstance(data, dict):
+        return JsonResponse({"ok": False, "error": "Expected JSON object"}, status=400)
+
+    mode = data.get("mode")
+    if mode not in ("no_petition", "with_petition"):
+        return JsonResponse({"ok": False, "error": "Invalid mode"}, status=400)
+
+    pos_overrides = data.get("pos_overrides") or {}
+    if not isinstance(pos_overrides, dict):
+        return JsonResponse({"ok": False, "error": "pos_overrides must be an object"}, status=400)
+
+    options = request.session.get("last_generated_pos_options")
+    if not isinstance(options, dict) or not options:
+        return JsonResponse({"ok": False, "error": "No generated POS options found in session."}, status=400)
+
+    opt = options.get(mode)
+    if not isinstance(opt, dict):
+        return JsonResponse({"ok": False, "error": "Requested mode is not available."}, status=400)
+
+    base_pos = opt.get("pos") or []
+    if not isinstance(base_pos, list):
+        return JsonResponse({"ok": False, "error": "Base POS is not a list."}, status=400)
+
+    base_payload = request.session.get("last_generated_payload") or {}
+    if not isinstance(base_payload, dict) or not base_payload.get("current_sem"):
+        return JsonResponse({"ok": False, "error": "No solver payload found in session."}, status=400)
+
+    preview_boundary_section_index = _year_semester_to_section_index(
+        request.session.get("year_level"),
+        request.session.get("semester"),
+    )
+
+    updated_pos, forced_semester_map, _modified_any = _rebuild_tuned_pos_and_forced_map(
+        base_pos=base_pos,
+        pos_overrides=pos_overrides,
+        preview_boundary_section_index=preview_boundary_section_index,
+    )
+
+    with_petition = mode == "with_petition"
+    solver_payload = dict(base_payload)
+    # Ensure the solver matches the requested mode.
+    solver_payload["with_petition"] = bool(with_petition)
+
+    result = validate_pos_via_solver(
+        payload=solver_payload,
+        with_petition=with_petition,
+        forced_semester_map=forced_semester_map,
+    )
+
+    status = result.get("status")
+    if status == "ok":
+        return JsonResponse({"ok": True})
+
+    # Treat probation/infeasible as invalid for UI editing.
+    # Provide best-effort diagnostics explaining HOW moved courses likely made it infeasible.
+    message = result.get("message") or "Schedule is infeasible."
+
+    MAX_MOVED_COURSES = 8
+
+    # Unit caps mirror solver-side units_and_year_standings.MAX_UNITS_BY_YEAR_TERM
+    MAX_UNITS_BY_YEAR_TERM = {
+        (1, 1): 24,
+        (1, 2): 26,
+        (1, 3): 9,
+        (2, 1): 27,
+        (2, 2): 23,
+        (2, 3): 9,
+        (3, 1): 21,
+        (3, 2): 23,
+        (3, 3): 5,
+        (4, 1): 19,
+        (4, 2): 21,
+        (4, 3): 9,
+        (5, 1): 21,
+        (5, 2): 23,
+        (5, 3): 9,
+        (6, 1): 21,
+        (6, 2): 23,
+        (6, 3): 9,
+    }
+
+    def _year_and_term_from_sem(sem_index: int):
+        # sem_index is global semester index starting at 1.
+        year_level = (sem_index - 1) // 3 + 1
+        term_in_year = ((sem_index - 1) % 3) + 1
+        return year_level, term_in_year
+
+    def _max_units_for_sem(sem_index: int) -> int:
+        yl, ti = _year_and_term_from_sem(sem_index)
+        return MAX_UNITS_BY_YEAR_TERM.get((yl, ti), 0)
+
+    def _build_sem_map(pos_list):
+        out = {}
+        for sem in (pos_list or []):
+            try:
+                si = int(sem.get("semester_index"))
+            except (ValueError, TypeError):
+                continue
+            for c in (sem.get("courses") or []):
+                if isinstance(c, dict):
+                    code = c.get("code") or ""
+                    code_s = str(code).strip()
+                    if code_s:
+                        out[code_s] = si
+        return out
+
+    moved_input_codes = set()
+    for _sem_idx_raw, codes in (pos_overrides or {}).items():
+        if not isinstance(codes, list):
+            continue
+        for code in codes:
+            code_s = str(code).strip()
+            if code_s:
+                moved_input_codes.add(code_s)
+
+    base_sem_map_ui = _build_sem_map(base_pos)
+    tuned_sem_map_ui = _build_sem_map(updated_pos)
+    sem_by_idx_tuned = {}
+    for sem in (updated_pos or []):
+        try:
+            si = int(sem.get("semester_index"))
+        except (ValueError, TypeError):
+            continue
+        sem_by_idx_tuned[si] = sem
+
+    # Load solver-side course metadata for category/orig_sem and prerequisites.
+    # We import lazily to avoid affecting startup behavior.
+    try:
+        import sys
+        import math
+        from pathlib import Path as _Path
+
+        project_root = _Path(settings.BASE_DIR).parent
+        solver_root = project_root / "Solver-Side"
+        solver_root_str = str(solver_root)
+        if solver_root_str not in sys.path:
+            sys.path.insert(0, solver_root_str)
+
+        from courses_and_year_standings.courses import courses as solver_courses
+        from courses_and_year_standings.units_and_year_standings import YEAR_STANDING_RULES
+    except Exception:
+        solver_courses = {}
+        YEAR_STANDING_RULES = {}
+
+    # Solver-semester map keyed by solver course codes (not UI codes)
+    def _ui_to_solver_code(code_ui: str) -> str:
+        return _UI_TO_SOLVER_ELECTIVE.get(code_ui, code_ui)
+
+    tuned_sem_map_solver = {
+        _ui_to_solver_code(code_ui): si for code_ui, si in tuned_sem_map_ui.items()
+    }
+    base_sem_map_solver = {
+        _ui_to_solver_code(code_ui): si for code_ui, si in base_sem_map_ui.items()
+    }
+
+    passed_courses_solver = []
+    try:
+        passed_courses_solver = list(base_payload.get("passed_courses") or [])
+    except Exception:
+        passed_courses_solver = []
+
+    moved_courses_details = []
+
+    def _first_semester_from_solver_info(info: dict):
+        if not isinstance(info, dict):
+            return None
+        if info.get("orig_sem") is not None:
+            try:
+                return int(info.get("orig_sem"))
+            except (ValueError, TypeError):
+                return None
+        offered = info.get("offered_sems")
+        if offered is not None:
+            if isinstance(offered, (list, tuple)):
+                try:
+                    vals = [int(x) for x in offered if x is not None]
+                    return min(vals) if vals else None
+                except Exception:
+                    return None
+            try:
+                return int(offered)
+            except (ValueError, TypeError):
+                return None
+        return None
+
+    for code_ui in moved_input_codes:
+        base_si = base_sem_map_ui.get(code_ui)
+        tuned_si = tuned_sem_map_ui.get(code_ui)
+        if not base_si or not tuned_si or base_si == tuned_si:
+            continue
+
+        solver_code = _ui_to_solver_code(code_ui)
+        how = []
+
+        # 1) Unit cap hint for destination semester
+        tuned_sem = sem_by_idx_tuned.get(tuned_si)
+        total_units_dest = 0
+        if isinstance(tuned_sem, dict):
+            try:
+                total_units_dest = float(tuned_sem.get("total_units", 0) or 0)
+            except (ValueError, TypeError):
+                total_units_dest = 0
+        cap = _max_units_for_sem(tuned_si)
+        if cap and total_units_dest > cap:
+            how.append(f"Unit cap exceeded: {total_units_dest} > {cap} in semester {tuned_si}")
+
+        # 2) Offering-window / term-type hint using solver category + orig_sem
+        cinfo = solver_courses.get(solver_code) if isinstance(solver_courses, dict) else None
+        if cinfo:
+            category = cinfo.get("category", "Rigid")
+            orig_sem = _first_semester_from_solver_info(cinfo)
+            if orig_sem:
+                sem_type = tuned_si % 3
+                orig_type = int(orig_sem) % 3
+
+                if category == "Rigid":
+                    if sem_type != orig_type:
+                        how.append("Offering window mismatch (Rigid course term-type)")
+                elif category == "Flexible":
+                    allowed = (
+                        (orig_type in [1, 2] and sem_type in [1, 2])
+                        or (orig_type == 0 and sem_type == 0)
+                    )
+                    if not allowed:
+                        how.append("Offering window mismatch (Flexible course term-type)")
+                elif category == "Bottleneck":
+                    if not bool(mode == "with_petition") and sem_type != orig_type:
+                        how.append("Offering window mismatch (Bottleneck course, no petition)")
+
+        # 3) Prerequisite & co-requisite ordering hints
+        if cinfo:
+            pre_list = cinfo.get("pre-requisites") or []
+            for pre in pre_list:
+                if not isinstance(pre, str):
+                    continue
+                if pre in YEAR_STANDING_RULES:
+                    continue
+                if pre in tuned_sem_map_solver:
+                    if tuned_si <= tuned_sem_map_solver.get(pre, 0):
+                        how.append(f"Prerequisite ordering: {pre} must be before {code_ui}")
+
+            co_list = cinfo.get("co-requisites") or []
+            for co in co_list:
+                if not isinstance(co, str):
+                    continue
+                if co in tuned_sem_map_solver:
+                    # solver: semester[c] >= semester[coreq]
+                    if tuned_si < tuned_sem_map_solver.get(co, 0):
+                        how.append(f"Co-requisite ordering: {co} must be same/earlier than {code_ui}")
+
+            # 4) Year-standing hint (if course has any year-standing prerequisite token)
+            for pre in pre_list:
+                if not isinstance(pre, str):
+                    continue
+                if pre not in YEAR_STANDING_RULES:
+                    continue
+
+                orig_sem_c = _first_semester_from_solver_info(cinfo)
+                if not orig_sem_c:
+                    continue
+
+                prefix_codes = []
+                total_units = 0.0
+                earned_fixed = 0.0
+                for pc, pinfo in solver_courses.items():
+                    p_first = _first_semester_from_solver_info(pinfo)
+                    if p_first is None or p_first >= orig_sem_c:
+                        continue
+                    units = float(pinfo.get("units", 0) or 0)
+                    prefix_codes.append((pc, units))
+                    total_units += units
+                    if pc in passed_courses_solver:
+                        earned_fixed += units
+
+                if total_units <= 0:
+                    continue
+
+                req_units = int(math.ceil(0.9 * total_units))
+                remaining_needed = req_units - earned_fixed
+                if remaining_needed <= 0:
+                    break
+
+                scheduled_before_units = 0.0
+                for pc, units in prefix_codes:
+                    if pc in passed_courses_solver:
+                        continue
+                    pc_sem = tuned_sem_map_solver.get(pc)
+                    if pc_sem is None:
+                        continue
+                    if pc_sem < tuned_si:
+                        scheduled_before_units += units
+
+                if scheduled_before_units < remaining_needed:
+                    how.append("Year-standing not satisfied (90% prefix-units before this course)")
+                break
+
+        if not how:
+            how = ["This move likely violates solver constraints (offering/prereq/unit-cap)."]
+
+        moved_courses_details.append(
+            {
+                "code": code_ui,
+                "from_semester_index": base_si,
+                "to_semester_index": tuned_si,
+                "how": how[:4],  # keep it readable
+            }
+        )
+
+    # Cap/truncate for performance + readability.
+    moved_courses_details = moved_courses_details[:MAX_MOVED_COURSES]
+
+    # Heuristic likely-culprits: top moved courses by hint count.
+    likely_culprits = [mc.get("code") for mc in sorted(moved_courses_details, key=lambda x: len(x.get("how") or []), reverse=True)[:3]]
+
+    return JsonResponse(
+        {
+            "ok": False,
+            "status": status,
+            "message": message,
+            "moved_courses": moved_courses_details,
+            "likely_culprits": likely_culprits,
+        }
+    )
+
+
+@csrf_exempt
+@require_POST
+def save_tuned_pos(request):
+    """
+    Persist POS course order overrides from the Preview page edit mode.
+
+    Expected JSON body:
+      - mode: "no_petition" | "with_petition"
+      - pos_overrides: { "<solver_semester_index>": ["COURSE_CODE", ...], ... }
+
+    This updates request.session['last_generated_pos'] so Download PDF uses the tuned schedule.
+    """
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"ok": False, "error": "Invalid JSON"}, status=400)
+
+    if not isinstance(data, dict):
+        return JsonResponse({"ok": False, "error": "Expected JSON object"}, status=400)
+
+    mode = data.get("mode")
+    if mode not in ("no_petition", "with_petition"):
+        return JsonResponse({"ok": False, "error": "Invalid mode"}, status=400)
+
+    pos_overrides = data.get("pos_overrides") or {}
+    if not isinstance(pos_overrides, dict):
+        return JsonResponse({"ok": False, "error": "pos_overrides must be an object"}, status=400)
+
+    options = request.session.get("last_generated_pos_options")
+    if not isinstance(options, dict) or not options:
+        return JsonResponse({"ok": False, "error": "No generated POS options found in session."}, status=400)
+
+    opt = options.get(mode)
+    if not isinstance(opt, dict):
+        return JsonResponse({"ok": False, "error": "Requested mode is not available."}, status=400)
+
+    base_pos = opt.get("pos") or []
+    if not isinstance(base_pos, list):
+        return JsonResponse({"ok": False, "error": "Base POS is not a list."}, status=400)
+
+    # Allow editing only "future/ungraded" solver semesters (past semesters should keep saved grades).
+    preview_boundary_section_index = _year_semester_to_section_index(
+        request.session.get("year_level"),
+        request.session.get("semester"),
+    )
+
+    updated_pos, forced_semester_map, modified_any = _rebuild_tuned_pos_and_forced_map(
+        base_pos=base_pos,
+        pos_overrides=pos_overrides,
+        preview_boundary_section_index=preview_boundary_section_index,
+    )
+
+    base_payload = request.session.get("last_generated_payload") or {}
+    with_petition = mode == "with_petition"
+    solver_payload = dict(base_payload)
+    solver_payload["with_petition"] = bool(with_petition)
+
+    # Defense-in-depth: reject persistence if CP-SAT says infeasible.
+    result = validate_pos_via_solver(
+        payload=solver_payload,
+        with_petition=with_petition,
+        forced_semester_map=forced_semester_map,
+    )
+    status = result.get("status")
+    if status != "ok":
+        return JsonResponse(
+            {
+                "ok": False,
+                "status": status,
+                "message": result.get("message") or "Schedule is infeasible.",
+            }
+        )
+
+    if modified_any:
+        request.session["last_generated_pos"] = updated_pos
+        request.session["last_selected_petition_mode"] = mode
+
+    return JsonResponse({"ok": True, "mode": mode, "pos": updated_pos})
 
 
 MAX_POS_RECORDS_PER_USER = 50

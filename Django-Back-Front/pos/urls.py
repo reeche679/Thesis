@@ -22,6 +22,9 @@ from .views import (
     delete_pos_data,
     validate_pos,
     generate_pos_api,
+    set_generated_pos_option,
+    validate_tuned_pos,
+    save_tuned_pos,
 )
 
 urlpatterns = [
@@ -40,6 +43,9 @@ urlpatterns = [
     path("generate/api/", generate_pos_api, name="generate_pos_api"),
 
     path("preview/", pos_preview, name="pos_preview"),
+    path("preview/set-option/", set_generated_pos_option, name="set_generated_pos_option"),
+    path("preview/validate-tuned-pos/", validate_tuned_pos, name="validate_tuned_pos"),
+    path("preview/save-tuned-pos/", save_tuned_pos, name="save_tuned_pos"),
     path("preview/download-pdf/", download_pos_pdf, name="download_pos_pdf"),
     path("preview/download-generated-pdf/", download_generated_pos_pdf, name="download_generated_pos_pdf"),
 
