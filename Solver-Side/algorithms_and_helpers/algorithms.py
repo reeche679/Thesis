@@ -26,7 +26,7 @@ DEFAULT_COURSE_WEIGHTS = {
     "MATH 103": 8,
     "CpE 304": 8,
     "CpE 306": 8,
-    "CpE 401": 8,
+    "CpE 401": 10,
     "CpE 402": 8,
     "CpE 404": 8,
     "Elective Course 3": 8,

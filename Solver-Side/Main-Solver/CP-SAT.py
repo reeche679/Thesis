@@ -99,42 +99,28 @@ def check_probation(current_sem, passed_courses, failed_courses):
         pct = round(ratio * 100)
         label = _sem_label(s)
         entry = (s, label, failed_in_sem, total, pct)
-        if ratio > 0.75:
+        # Treat exactly-75% cases as the 75% bucket too.
+        if ratio >= 0.75:
             over_75.append(entry)
-        elif ratio > 0.50:
+        elif ratio >= 0.50:
             over_50.append(entry)
     if over_75:
         lines = [
-            "--- Probation: Program of Study cannot be generated ---",
-            "",
-            "You have failed too many units in at least one past semester.",
-            "University policy does not allow automatic POS generation in this case.",
-            "",
-            "Semester(s) with failure rate above 75%:",
+            "Probation: POS cannot be generated.",
+            "Failure rate is 75% or higher in:",
         ]
         for _, label, failed, total, pct in over_75:
             lines.append(f"  • {label}: {pct}% failed ({failed} of {total} courses graded)")
-        lines.extend([
-            "",
-            "Program of Study cannot be generated because you have failed too many units.",
-            "Please contact your Department Head or academic advisor for manual evaluation.",
-        ])
+        lines.append("Please proceed to the Department Head for manual evaluation.")
         return "\n".join(lines)
     if over_50:
         lines = [
-            "--- Probation: Manual evaluation required ---",
-            "",
-            "You have a high failure rate in at least one past semester (above 50%).",
-            "Automatic POS generation is not available; your case must be reviewed in person.",
-            "",
-            "Semester(s) with failure rate above 50%:",
+            "Probation: Manual evaluation required.",
+            "Failure rate is 50% or higher in:",
         ]
         for _, label, failed, total, pct in over_50:
             lines.append(f"  • {label}: {pct}% failed ({failed} of {total} courses graded)")
-        lines.extend([
-            "",
-            "Please proceed to the Department Head for Manual Evaluation.",
-        ])
+        lines.append("Please proceed to the Department Head for manual evaluation.")
         return "\n".join(lines)
     return None
 
@@ -179,7 +165,7 @@ def create_semester_variables(model, current_sem, passed_courses):
 
 # Single algorithm selection: change this name to swap the thesis algorithm.
 # Must be a key in algorithms_and_helpers.algorithms.ALGORITHMS.
-ALGORITHM_NAME = "algo1_modulo3_baseline"
+ALGORITHM_NAME = "algo2_modulo3_weighted_priority"
 
 
 
@@ -202,7 +188,7 @@ def add_offering_constraints(model, semester, passed_courses, current_sem, with_
 GRADUATION_TRIO = ("CpE 405", "CpE 406", "ENGG 117")
 
 # Toggle this off when you *don't* want to force a "trio-only" semester.
-ENFORCE_GRADUATION_TRIO_ONLY_SEMESTER = False
+ENFORCE_GRADUATION_TRIO_ONLY_SEMESTER = True
 
 
 def add_graduation_semester_constraint(model, semester, passed_courses):

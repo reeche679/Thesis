@@ -39,7 +39,7 @@ MAX_UNITS_BY_YEAR_TERM = {
     (3, TERM_SUMMER): 5,
 
     (4, TERM_1): 19,
-    (4, TERM_2): 16,
+    (4, TERM_2): 21,
     (4, TERM_SUMMER): 9,
 
     (5, TERM_1): 21,

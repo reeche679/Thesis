@@ -639,19 +639,17 @@
     </p>
     <div class="row g-3 align-items-end">
         <div class="col-md-4">
-            <label class="form-label small text-uppercase text-muted" for="irreg-current-sem">YOUR CURRENT SEMESTER TO TAKE</label>
+            <label class="form-label small text-uppercase text-muted" for="irreg-current-sem">LAST SEMESTER ENROLLED</label>
             <select class="form-select form-select-sm" id="irreg-current-sem" required>
                 <option value="" {% if irreg_current_unset %}selected{% endif %}>- Select Semester -</option>
                 {% for sec in curriculum_sections_dropdown %}
-                {% if forloop.counter0 != 0 %}
                 <option value="{{ forloop.counter0 }}" {% if not irreg_current_unset and irreg_current_sem == forloop.counter0 %}selected{% endif %}>{{ sec.label }}</option>
-                {% endif %}
                 {% endfor %}
             </select>
         </div>
         <div class="col-md-4">
             <label class="form-label small text-uppercase text-muted" for="irreg-start-sem">When you became irregular</label>
-            <select class="form-select form-select-sm" id="irreg-start-sem" required>
+            <select class="form-select form-select-sm" id="irreg-start-sem">
                 <option value="" {% if irreg_start_unset %}selected{% endif %}>- Select Semester -</option>
                 {% for sec in curriculum_sections_dropdown %}
                 <option value="{{ forloop.counter0 }}" {% if not irreg_start_unset and irreg_start_index == forloop.counter0 %}selected{% endif %}>{{ sec.label }}</option>
@@ -957,7 +955,7 @@
 
     <!-- Generated POS preview (from solver) -->
     <div class="modal fade" id="generated-pos-modal" tabindex="-1" aria-labelledby="generated-pos-modal-label" aria-hidden="true">
-        <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable" id="generated-pos-modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title" id="generated-pos-modal-label">Generated Program of Study</h5>
@@ -968,7 +966,7 @@
                     <div id="generated-pos-container"></div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary" data-bs-dismiss="modal">OK</button>
                     <button type="button" class="btn btn-primary" id="goToPreviewBtn">Go to Preview</button>
                 </div>
             </div>
@@ -1495,15 +1493,15 @@
                 var grade = getGradeFromRow(row);
                 if (!grade) {
                     var label = mainSection.querySelector('h6');
-                    return { ok: false, message: 'Please fill all grades for every semester. Missing grade in: ' + (label ? label.textContent : 'section') };
+                    return { ok: false, message: 'Missing grade in: ' + (label ? label.textContent : 'section') };
                 }
                 totalUnits += units;
                 if (grade === '5' || grade === '5.00') failedUnits += units;
             }
             if (totalUnits > 0) {
                 var ratio = failedUnits / totalUnits;
-                if (ratio >= 0.75) return { ok: false, message: '75% - 100% units failed in a semester. Can no longer generate POS.' };
-                if (ratio >= 0.50) return { ok: false, message: "50% or more of units failed in a semester. Please proceed to the department for manual evaluation." };
+                if (ratio >= 0.75) return { ok: false, message: '75%+ units failed. POS cannot be generated.' };
+                if (ratio >= 0.50) return { ok: false, message: "50%+ units failed. Manual evaluation required." };
             }
         }
         return { ok: true };
@@ -1523,15 +1521,15 @@
                 var grade = getGradeFromRow(row);
                 if (!grade) {
                     var label = mainSection.querySelector('h6');
-                    return { ok: false, message: 'Please fill all grades for every semester. Missing grade in: ' + (label ? label.textContent : 'section') };
+                    return { ok: false, message: 'Missing grade in: ' + (label ? label.textContent : 'section') };
                 }
                 totalUnits += units;
                 if (grade === '5' || grade === '5.00') failedUnits += units;
             }
             if (totalUnits > 0) {
                 var ratio = failedUnits / totalUnits;
-                if (ratio >= 0.75) return { ok: false, message: '75% - 100% units failed in a semester. Can no longer generate POS.' };
-                if (ratio >= 0.50) return { ok: false, message: "50% or more of units failed in a semester. Please proceed to the department for manual evaluation." };
+                if (ratio >= 0.75) return { ok: false, message: '75%+ units failed. POS cannot be generated.' };
+                if (ratio >= 0.50) return { ok: false, message: "50%+ units failed. Manual evaluation required." };
             }
         }
         return { ok: true };
@@ -1560,7 +1558,7 @@
         }
         var validation = validateAllSectionsForGenerate();
         if (!validation.ok) {
-            alert(validation.message);
+            showGeneratedPosModal({ status: "infeasible", message: validation.message, pos: [] });
             return;
         }
         var gradesBySection = mergedGradesForSave();
@@ -1708,11 +1706,70 @@
         }
 
         function showGeneratedPosModal(result) {
-            // No popup: always go directly to the Preview POS page.
-            // Preview page will render from sessionStorage if the solver returned status "ok".
-            // Otherwise it will fall back to regenerating dynamically from saved grades.
-            var previewUrl = "{% url 'pos_preview' %}?t=" + Date.now();
-            window.location.href = previewUrl;
+            // For OK: keep existing behavior (redirect to Preview).
+            // For probation/infeasible: show a clean error popup on Generate POS.
+            if (result && result.status === 'ok') {
+                var previewUrl = "{% url 'pos_preview' %}?t=" + Date.now();
+                window.location.href = previewUrl;
+                return;
+            }
+
+            var modalEl = document.getElementById('generated-pos-modal');
+            var modalDialogEl = document.getElementById('generated-pos-modal-dialog');
+            var errorEl = document.getElementById('generated-pos-error');
+            var containerEl = document.getElementById('generated-pos-container');
+            var goToPreviewBtn = document.getElementById('goToPreviewBtn');
+            var titleEl = document.getElementById('generated-pos-modal-label');
+
+            if (titleEl) {
+                if (result && result.status === 'probation') {
+                    titleEl.textContent = 'POS Generation Requires Manual Evaluation';
+                } else {
+                    titleEl.textContent = 'POS Generation Failed';
+                }
+            }
+
+            if (errorEl) {
+                errorEl.classList.remove('d-none');
+                var rawMsg = (result && result.message) ? String(result.message) : 'Unable to generate POS right now.';
+                // Keep popup compact: render a short single-line message.
+                var compactMsg = rawMsg;
+                if (/75%/i.test(rawMsg)) {
+                    compactMsg = 'POS cannot be generated because 75% or more units are failed in a semester.';
+                } else if (/50%/i.test(rawMsg) || /manual evaluation/i.test(rawMsg) || (result && result.status === 'probation')) {
+                    compactMsg = 'Manual evaluation is required because 50% or more units are failed in a semester.';
+                } else if (/missing grade/i.test(rawMsg)) {
+                    compactMsg = rawMsg;
+                } else {
+                    // Fallback to first non-empty line only.
+                    compactMsg = (rawMsg.split(/\r?\n/).find(function(line) { return (line || '').trim() !== ''; }) || rawMsg).trim();
+                }
+                errorEl.style.whiteSpace = 'normal';
+                errorEl.textContent = compactMsg;
+            }
+
+            if (containerEl) {
+                containerEl.innerHTML = '';
+            }
+
+            if (goToPreviewBtn) {
+                // Close button remains on the bottom-left (Go to Preview hidden).
+                goToPreviewBtn.style.display = 'none';
+            }
+            if (modalDialogEl) {
+                // Compact error popup card (avoid overly long/wide modal).
+                modalDialogEl.classList.remove('modal-xl');
+                modalDialogEl.classList.add('modal-md');
+            }
+
+            if (modalEl && typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+                try {
+                    var m = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+                    m.show();
+                } catch (e) {
+                    // Fallback: do nothing.
+                }
+            }
         }
 
         saveGradesToServer(gradesBySection, true, function(data) {
@@ -2096,9 +2153,13 @@
                 var currentSem = document.getElementById('irreg-current-sem').value;
                 var startSem = document.getElementById('irreg-start-sem').value;
                 var petition = document.getElementById('irreg-with-petition').value;
-                if (currentSem === '' || startSem === '') {
-                    alert('Please select your current semester and when you became irregular to proceed.');
+                if (currentSem === '') {
+                    alert('Please select your current semester to proceed.');
                     return;
+                }
+                // Optional: if "When you became irregular" is blank, treat it as current semester.
+                if (startSem === '') {
+                    startSem = currentSem;
                 }
                 var currentIdx = parseInt(currentSem, 10);
                 var startIdx = parseInt(startSem, 10);

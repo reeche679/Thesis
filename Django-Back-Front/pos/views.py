@@ -548,12 +548,6 @@ def pos_generate(request):
         irreg_start_index = _safe_int(irreg_start_param, _safe_int(request.session.get('irreg_start_index')))
         irreg_current_sem = _safe_int(current_sem_param, _safe_int(request.session.get('irreg_current_sem')))
 
-        # 1st Year - First Semester is no longer a valid "current semester to take".
-        # If older session/query state still holds 0, treat it as unset so we don't
-        # render semesters that users can no longer select from the UI.
-        if irreg_current_sem == FIRST_YEAR_FIRST_SEM_INDEX:
-            irreg_current_sem = None
-
         irreg_configured = irreg_start_index is not None and irreg_current_sem is not None
         if pos_reset and irreg_configured:
             request.session.pop('pos_reset', None)
