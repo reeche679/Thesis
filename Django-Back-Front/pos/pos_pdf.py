@@ -545,7 +545,7 @@ def build_pos_pdf(
     info_cols = _info_table_col_widths()
     info_data = [
         ["Name:", (student_name or "—").upper(), "Date:", date_str],
-        ["SR-code:", (sr_code or "—"), "Academic Year:", (academic_year or "—")],
+        ["SR-Code:", (sr_code or "—"), "Academic Year:", (academic_year or "—")],
     ]
     info_tbl = Table(info_data, colWidths=info_cols)
     info_tbl.setStyle(
@@ -1118,7 +1118,7 @@ def build_preview_pos_pdf(
     info_cols = _info_table_col_widths()
     info_data = [
         ["Name:", (student_name or "—").upper(), "Date:", date_str],
-        ["SR-code:", (sr_code or "—"), "Academic Year:", (academic_year or "—")],
+        ["SR-Code:", (sr_code or "—"), "Academic Year:", (academic_year or "—")],
     ]
     info_tbl = Table(info_data, colWidths=info_cols)
     info_tbl.setStyle(

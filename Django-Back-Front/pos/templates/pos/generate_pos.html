@@ -75,11 +75,56 @@
         padding-left: 0.3rem;
     }
 
+    /* Irregular modal course search: black borders + lighter gray placeholder */
+    #irregular-modal-search {
+        border-color: #000 !important;
+        box-shadow: none !important;
+    }
+    #irregular-modal-search:focus {
+        border-color: #000 !important;
+        box-shadow: none !important;
+    }
+    #irregular-modal-search::placeholder {
+        color: #adb5bd !important; /* light gray */
+        opacity: 1 !important;
+    }
+
     /* Hover: keep it light gray (not dark) */
     .grade-display-btn:hover,
     .pos-select-display-btn:hover {
         background-color: rgba(108, 117, 125, 0.12) !important;
         color: inherit !important;
+    }
+
+    /* Compact error modal styling (generated-pos-modal) */
+    #generated-pos-modal .pos-error-ok-btn {
+        padding: 0.25rem 0.7rem;
+        font-size: 0.85rem;
+        line-height: 1.1;
+    }
+    #generated-pos-modal .modal-body {
+        padding-top: 0.75rem;
+        padding-bottom: 0.75rem;
+    }
+    #generated-pos-modal.pos-error-modal .modal-content {
+        background: #f1f3f5;
+        border-radius: 0.6rem;
+    }
+    #generated-pos-modal.pos-error-modal .modal-header {
+        padding: 0.6rem 0.75rem;
+    }
+    #generated-pos-modal.pos-error-modal .modal-title {
+        font-size: 0.95rem;
+        margin: 0;
+    }
+    #generated-pos-modal.pos-error-modal .modal-footer {
+        padding: 0.55rem 0.75rem;
+    }
+    #generated-pos-modal .alert#generated-pos-error {
+        font-size: 0.9rem;
+        line-height: 1.25;
+        margin-bottom: 0;
+        padding: 0.6rem 0.75rem;
     }
     .grade-display-btn:active,
     .pos-select-display-btn:active {
@@ -724,7 +769,28 @@
                     <p class="small text-muted mb-0">Select Courses to Take.</p>
                     <div class="form-check form-check-sm">
                         <input class="form-check-input" type="checkbox" id="irregular-select-all">
-                        <label class="form-check-label small" for="irregular-select-all">Select all</label>
+                        <label class="form-check-label small" for="irregular-select-all">Deselect all</label>
+                    </div>
+                </div>
+                <div class="mb-2">
+                    <div class="input-group input-group-sm" style="max-width: 220px;">
+                        <input
+                            type="text"
+                            class="form-control"
+                            id="irregular-modal-search"
+                            placeholder="Search Course Code"
+                            style="border-color:#000 !important; box-shadow:none;"
+                            onfocus="this.style.borderColor='#000';"
+                            onblur="this.style.borderColor='#000';"
+                        >
+                        <button
+                            class="btn btn-outline-primary"
+                            type="button"
+                            id="irregular-modal-clear-search"
+                            style="border-color:#000; color:#000; background-color:transparent;"
+                            onmouseover="this.style.backgroundColor='#e9ecef'; this.style.borderColor='#000'; this.style.color='#000';"
+                            onmouseout="this.style.backgroundColor='transparent'; this.style.borderColor='#000'; this.style.color='#000';"
+                        >Clear</button>
                     </div>
                 </div>
                 <div class="table-responsive">
@@ -817,7 +883,7 @@
             <h6 class="main-sem-title fw-bold mb-0 text-center">{{ item.section.label }}</h6>
             <div class="main-sem-header-right d-flex align-items-center justify-content-end">
                 {% if not is_regular %}
-                <button type="button" class="btn btn-sm btn-outline-secondary irreg-edit-section-btn {% if has_generated_pos and item.is_curriculum_locked %}irreg-edit-visible{% else %}irreg-edit-hidden{% endif %}" data-section-index="{{ item.section_index }}" title="Edit this semester">
+                <button type="button" class="btn btn-sm btn-outline-secondary irreg-edit-section-btn irreg-edit-hidden" data-section-index="{{ item.section_index }}" title="Edit this semester">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                 </button>
                 {% endif %}
@@ -861,9 +927,6 @@
                         <td class="small text-muted text-center">{{ cg.course.prereq|default:"" }}</td>
                         <td class="small text-muted text-center">{{ cg.course.coreq|default:"" }}</td>
                         <td>
-                            {% if has_generated_pos and not is_regular and item.is_curriculum_locked %}
-                            <span class="fw-semibold">{{ cg.grade|default:"—" }}</span>
-                            {% else %}
                             <select class="form-select form-select-sm grade-select" data-course-code="{{ cg.course.code }}">
                                 <option value="" {% if not cg.grade %}selected{% endif %}></option>
                                 <option value="1.00" {% if cg.grade == '1.00' %}selected{% endif %}>1.00</option>
@@ -877,7 +940,6 @@
                                 <option value="3.00" {% if cg.grade == '3.00' %}selected{% endif %}>3.00</option>
                                 <option value="5.00" {% if cg.grade == '5.00' %}selected{% endif %}>5.00</option>
                             </select>
-                            {% endif %}
                         </td>
                     </tr>
                     {% endfor %}
@@ -886,15 +948,13 @@
                     <tr>
                         <th colspan="2" class="text-end">Total Units</th>
                         <th class="text-center" id="total-units-sem-{{ item.section_index }}">{{ item.total_units|default:0 }}</th>
-                        {% if not is_regular and not item.is_curriculum_locked %}
+                        {% if not is_regular %}
                         <th colspan="4"></th>
                         <th class="text-center">
                             <button type="button" class="btn btn-sm btn-outline-success irreg-check-section-btn p-1" data-section-index="{{ item.section_index }}" title="Save &amp; lock this semester">
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
                             </button>
                         </th>
-                        {% elif not is_regular %}
-                        <th colspan="5"></th>
                         {% else %}
                         <th colspan="5"></th>
                         {% endif %}
@@ -955,7 +1015,7 @@
 
     <!-- Generated POS preview (from solver) -->
     <div class="modal fade" id="generated-pos-modal" tabindex="-1" aria-labelledby="generated-pos-modal-label" aria-hidden="true">
-        <div class="modal-dialog modal-xl modal-dialog-scrollable" id="generated-pos-modal-dialog">
+        <div class="modal-dialog modal-sm" id="generated-pos-modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title" id="generated-pos-modal-label">Generated Program of Study</h5>
@@ -966,7 +1026,7 @@
                     <div id="generated-pos-container"></div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-primary" data-bs-dismiss="modal">OK</button>
+                    <button type="button" class="btn btn-primary btn-sm pos-error-ok-btn" data-bs-dismiss="modal">OK</button>
                     <button type="button" class="btn btn-primary" id="goToPreviewBtn">Go to Preview</button>
                 </div>
             </div>
@@ -1191,6 +1251,59 @@
     function getCookie(name) {
         var match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
         return match ? match[2] : null;
+    }
+
+    // Global short error popup (replaces browser alert()).
+    // Uses the same generated-pos modal with a compact message + OK button.
+    function showGeneratedPosErrorPopup(message, status) {
+        var modalEl = document.getElementById('generated-pos-modal');
+        var modalDialogEl = document.getElementById('generated-pos-modal-dialog');
+        var errorEl = document.getElementById('generated-pos-error');
+        var goToPreviewBtn = document.getElementById('goToPreviewBtn');
+        var titleEl = document.getElementById('generated-pos-modal-label');
+
+        if (!modalEl || !errorEl) return;
+
+        if (titleEl) {
+            if (status === 'probation') titleEl.textContent = 'POS Generation Requires Manual Evaluation';
+            else titleEl.textContent = 'POS Generation Failed';
+        }
+
+        var rawMsg = (message && message.toString) ? String(message) : 'Unable to generate POS right now.';
+        var compactMsg = rawMsg.trim();
+
+        if (/75%/i.test(rawMsg)) {
+            compactMsg = 'POS cannot be generated because 75% or more units are failed in a semester.';
+        } else if (/50%/i.test(rawMsg) || /manual evaluation/i.test(rawMsg) || status === 'probation') {
+            compactMsg = 'Manual evaluation is required because 50% or more units are failed in a semester.';
+        } else if (/missing grade/i.test(rawMsg)) {
+            compactMsg = rawMsg;
+        } else {
+            compactMsg = (rawMsg.split(/\r?\n/).find(function(line) { return (line || '').trim() !== ''; }) || rawMsg).trim();
+        }
+
+        errorEl.classList.remove('d-none');
+        errorEl.style.whiteSpace = 'normal';
+        errorEl.textContent = compactMsg;
+
+        // Hide Go to Preview; this is an error state.
+        if (goToPreviewBtn) goToPreviewBtn.style.display = 'none';
+        if (modalDialogEl) {
+            modalDialogEl.classList.remove('modal-md');
+            modalDialogEl.classList.add('modal-sm');
+        }
+        if (modalEl) modalEl.classList.add('pos-error-modal');
+
+        // Clear container to keep the modal compact.
+        var containerEl = document.getElementById('generated-pos-container');
+        if (containerEl) containerEl.innerHTML = '';
+
+        if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+            try {
+                var m = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+                m.show();
+            } catch (e) {}
+        }
     }
 
     function collectGrades() {
@@ -1429,7 +1542,7 @@
             }).then(function(r) { return r.json(); }).then(function(data) {
                 confirmDeleteBtn.disabled = false;
                 if (!data || !data.ok) {
-                    alert('Failed to delete POS data. Please try again.');
+                    showGeneratedPosErrorPopup('Failed to delete POS data. Please try again.', 'infeasible');
                     return;
                 }
                 try { localStorage.removeItem('posGrades'); } catch (e) {}
@@ -1440,7 +1553,7 @@
                 window.location.href = window.location.pathname;
             }).catch(function() {
                 confirmDeleteBtn.disabled = false;
-                alert('Failed to delete POS data. Please try again.');
+                showGeneratedPosErrorPopup('Failed to delete POS data. Please try again.', 'infeasible');
             });
         });
     }
@@ -1472,9 +1585,9 @@
                     alert(data.message || 'POS is valid.');
                 } else {
                     var msg = (data.errors && data.errors.length) ? data.errors.join('\n') : (data.message || 'Validation failed.');
-                    alert(msg);
+                    showGeneratedPosErrorPopup(msg, 'infeasible');
                 }
-            }).catch(function() { alert('Validation request failed.'); });
+            }).catch(function() { showGeneratedPosErrorPopup('Validation request failed.', 'infeasible'); });
         });
     }
 
@@ -1541,19 +1654,19 @@
 
     document.getElementById('generatePosBtn').addEventListener('click', function() {
         if (!IS_REGULAR && !IRREG_CONFIGURED) {
-            alert('Please select your current semester and when you became irregular above, then click OK to proceed.');
+            showGeneratedPosErrorPopup('Select your current semester to proceed.', 'infeasible');
             return;
         }
         if (IS_REGULAR) {
             var regSel = document.getElementById('regular-current-semester');
             if (!regSel || !regSel.value) {
-                alert('Please select your current semester and click OK to proceed.');
+                showGeneratedPosErrorPopup('Select your last semester enrolled to proceed.', 'infeasible');
                 return;
             }
         }
         var sections = document.querySelectorAll('[id^="main-sem-"]');
         if (!IS_REGULAR && sections.length === 0) {
-            alert('Please select your current semester and when you became irregular above, then click OK to proceed.');
+            showGeneratedPosErrorPopup('Select your current semester to proceed.', 'infeasible');
             return;
         }
         var validation = validateAllSectionsForGenerate();
@@ -1761,9 +1874,10 @@
             }
             if (modalDialogEl) {
                 // Compact error popup card (avoid overly long/wide modal).
-                modalDialogEl.classList.remove('modal-xl');
-                modalDialogEl.classList.add('modal-md');
+                modalDialogEl.classList.remove('modal-md');
+                modalDialogEl.classList.add('modal-sm');
             }
+            if (modalEl) modalEl.classList.add('pos-error-modal');
 
             if (modalEl && typeof bootstrap !== 'undefined' && bootstrap.Modal) {
                 try {
@@ -1793,7 +1907,7 @@
                       showGeneratedPosModal({ status: "infeasible", message: "Request to generate POS failed. Please try again.", pos: [] });
                   });
             } else {
-                alert('Failed to save grades. Please try again.');
+                showGeneratedPosErrorPopup('Failed to save grades. Please try again.', 'infeasible');
             }
         });
     });
@@ -1830,31 +1944,60 @@
         var modalPickerTbody = document.getElementById('irregular-modal-picker-tbody');
         var irregularModal = document.getElementById('irregular-add-modal');
         var selectAllCheckbox = document.getElementById('irregular-select-all');
+        var courseSearchInput = document.getElementById('irregular-modal-search');
+        var clearCourseSearchBtn = document.getElementById('irregular-modal-clear-search');
         var currentSectionIndex = -1;
         var modalSelectedCodes = new Set();
 
         function updateSelectAllState() {
             if (!selectAllCheckbox) return;
-            var rows = modalPickerTbody.querySelectorAll('.irregular-picker-row');
-            if (!rows.length) {
+            var rows = Array.from(modalPickerTbody.querySelectorAll('.irregular-picker-row'));
+            var visibleRows = rows.filter(function(r) { return r.style.display !== 'none'; });
+            if (!visibleRows.length) {
                 selectAllCheckbox.checked = false;
                 selectAllCheckbox.indeterminate = false;
                 return;
             }
             var selectedCount = 0;
-            rows.forEach(function(r) {
+            visibleRows.forEach(function(r) {
                 if (r.classList.contains('selected')) selectedCount++;
             });
             if (selectedCount === 0) {
                 selectAllCheckbox.checked = false;
                 selectAllCheckbox.indeterminate = false;
-            } else if (selectedCount === rows.length) {
+            } else if (selectedCount === visibleRows.length) {
                 selectAllCheckbox.checked = true;
                 selectAllCheckbox.indeterminate = false;
             } else {
                 selectAllCheckbox.checked = false;
                 selectAllCheckbox.indeterminate = true;
             }
+        }
+
+        function applyCourseSearchFilter() {
+            if (!courseSearchInput) return;
+            var term = (courseSearchInput.value || '').toString().trim().toLowerCase();
+            var rows = modalPickerTbody.querySelectorAll('.irregular-picker-row');
+            rows.forEach(function(r) {
+                var code = (r.getAttribute('data-course-code') || '').toString().toLowerCase();
+                var show = !term || code.indexOf(term) !== -1;
+                r.style.display = show ? '' : 'none';
+            });
+            updateSelectAllState();
+        }
+
+        if (courseSearchInput) {
+            courseSearchInput.addEventListener('input', function() {
+                applyCourseSearchFilter();
+            });
+        }
+        if (clearCourseSearchBtn) {
+            clearCourseSearchBtn.addEventListener('click', function() {
+                if (!courseSearchInput) return;
+                courseSearchInput.value = '';
+                applyCourseSearchFilter();
+                try { courseSearchInput.focus(); } catch (e) {}
+            });
         }
 
         function getServerGrades() {
@@ -1933,6 +2076,10 @@
             document.getElementById('irregular-add-modal-label').textContent = 'Add courses – ' + sec.label;
             modalSelectedCodes.clear();
             modalPickerTbody.innerHTML = '';
+            if (courseSearchInput) {
+                courseSearchInput.value = '';
+                applyCourseSearchFilter();
+            }
             if (selectAllCheckbox) {
                 selectAllCheckbox.checked = false;
                 selectAllCheckbox.indeterminate = false;
@@ -1941,10 +2088,21 @@
             if (IS_REGULAR) {
                 coursesToShow = sec.courses.slice();
             } else {
-                coursesToShow = (pickerAvailableBySection[idx] || pickerAvailableBySection[String(idx)]) || null;
-                if (!coursesToShow) {
-                    coursesToShow = sec.courses.slice();
-                }
+                // Global course picker (not semester-based): aggregate candidates across all sections,
+                // then filter by already-passed and already-present in the selected section.
+                coursesToShow = [];
+                var seen = new Set();
+                Object.keys(pickerAvailableBySection || {}).forEach(function(sectionKey) {
+                    var list = pickerAvailableBySection[sectionKey] || [];
+                    if (!Array.isArray(list)) return;
+                    list.forEach(function(c) {
+                        if (!c || !c.code) return;
+                        if (seen.has(c.code)) return;
+                        seen.add(c.code);
+                        coursesToShow.push(c);
+                    });
+                });
+                if (!coursesToShow.length) coursesToShow = sec.courses.slice();
             }
 
             var passedCodes = collectAllPassedCodes(idx);
@@ -1976,6 +2134,8 @@
                 modalPickerTbody.appendChild(tr);
             });
             updateSelectAllState();
+            // Apply current search term (if user typed before reopening modal).
+            applyCourseSearchFilter();
             var bsModal = typeof bootstrap !== 'undefined' && bootstrap.Modal ? new bootstrap.Modal(irregularModal) : null;
             if (bsModal) bsModal.show(); else irregularModal.classList.add('show'); irregularModal.style.display = 'block';
         }
@@ -2132,19 +2292,20 @@
 
         if (selectAllCheckbox) {
             selectAllCheckbox.addEventListener('change', function() {
-                var rows = modalPickerTbody.querySelectorAll('.irregular-picker-row');
-                modalSelectedCodes.clear();
+                var rows = Array.from(modalPickerTbody.querySelectorAll('.irregular-picker-row')).filter(function(r) {
+                    return r.style.display !== 'none';
+                });
                 if (this.checked) {
-                    rows.forEach(function(r) {
-                        var code = r.getAttribute('data-course-code');
-                        if (!code) return;
-                        modalSelectedCodes.add(code);
-                        r.classList.add('selected');
-                    });
-                } else {
+                    // "Deselect all" behavior: clear user's selections.
+                    modalSelectedCodes.clear();
                     rows.forEach(function(r) {
                         r.classList.remove('selected');
                     });
+                    // Immediately uncheck to behave like a button.
+                    this.checked = false;
+                    this.indeterminate = false;
+                } else {
+                    // No-op: users can still select rows individually.
                 }
                 updateSelectAllState();
             });
@@ -2157,7 +2318,7 @@
                 var startSem = document.getElementById('irreg-start-sem').value;
                 var petition = document.getElementById('irreg-with-petition').value;
                 if (currentSem === '') {
-                    alert('Please select your current semester to proceed.');
+                    showGeneratedPosErrorPopup('Please select your current semester to proceed.', 'infeasible');
                     return;
                 }
                 // Optional: if "When you became irregular" is blank, treat it as current semester.
@@ -2167,12 +2328,12 @@
                 var currentIdx = parseInt(currentSem, 10);
                 var startIdx = parseInt(startSem, 10);
                 if (!Number.isFinite(currentIdx) || !Number.isFinite(startIdx)) {
-                    alert('Please select valid semesters to proceed.');
+                    showGeneratedPosErrorPopup('Please select valid semesters to proceed.', 'infeasible');
                     return;
                 }
                 // Current semester must be the same or ahead of when they became irregular
                 if (currentIdx < startIdx) {
-                    alert('Invalid selection: "YOUR CURRENT SEMESTER TO TAKE" must be the same as or ahead of "When you became irregular".');
+                    showGeneratedPosErrorPopup('Invalid semester selection. Please check your current semester and irregular start.', 'infeasible');
                     return;
                 }
                 var params = [];
@@ -2196,7 +2357,9 @@
             var checkBtn = sectionDiv.querySelector('.irreg-check-section-btn');
             if (checkBtn) checkBtn.style.display = 'none';
             var editBtn = sectionDiv.querySelector('.irreg-edit-section-btn');
-            if (editBtn) { editBtn.classList.remove('irreg-edit-hidden'); editBtn.classList.add('irreg-edit-visible'); }
+            // Only allow edit icon for non-curriculum-locked semesters.
+            var isCurriculumLocked = sectionDiv.getAttribute('data-curriculum-locked') === 'true';
+            if (editBtn && !isCurriculumLocked) { editBtn.classList.remove('irreg-edit-hidden'); editBtn.classList.add('irreg-edit-visible'); }
         }
 
         document.body.addEventListener('click', function(e) {
