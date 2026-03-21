@@ -874,6 +874,8 @@ def generate_pos_api(request):
       - passed_courses (list of course codes)
       - failed_courses (list of course codes)
       - with_petition (bool, optional)
+      - configuration (str, optional)
+      - alternative_algorithm (str|null, optional)
 
     Response is the solver's result dict:
       - status: "ok" | "probation" | "infeasible"
@@ -898,6 +900,10 @@ def generate_pos_api(request):
         "failed_courses": [_UI_TO_SOLVER_ELECTIVE.get(c, c) for c in raw_failed],
         "with_petition": data.get("with_petition", False),
     }
+    if "configuration" in data:
+        payload["configuration"] = data.get("configuration")
+    if "alternative_algorithm" in data:
+        payload["alternative_algorithm"] = data.get("alternative_algorithm")
 
     try:
         result = generate_pos_via_solver(payload)

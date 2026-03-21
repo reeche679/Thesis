@@ -1,16 +1,17 @@
 """
-POS scheduling algorithms.
+POS scheduling configurations.
 
-Each algorithm is implemented as a function that adds constraints (and optionally
-influences the objective) to the CP-SAT model. The modulo-3 (term-type-aligned)
-algorithm is the baseline offering rule used by the main solver.
+Each configuration is implemented as a function that adds constraints (and
+optionally influences the objective) to the CP-SAT model. The modulo-3
+(term-type-aligned) configuration is the baseline offering rule used by the
+main solver.
 """
 
 from dataclasses import dataclass
 from typing import Callable
 
 # ---------------------------------------------------------------------------
-# Weights (Algorithm 2 input)
+# Weights (Configuration 2 input)
 # ---------------------------------------------------------------------------
 #
 # Default weight is 1 for any course not listed here.
@@ -32,12 +33,12 @@ DEFAULT_COURSE_WEIGHTS = {
     "Elective Course 3": 8,
     "CpE 310": 8,
     "CpE 312": 8,
-
 }
 
 # ---------------------------------------------------------------------------
-# Algorithm 1: Term-type-aligned (Modulo-3) offering constraints
+# Configuration 1: Term-type-aligned (Modulo-3) offering constraints
 # ---------------------------------------------------------------------------
+
 
 def add_term_type_aligned_offering_constraints(
     model,
@@ -124,7 +125,7 @@ def add_capped_petition_trio_offering_constraints(
             ):
                 valid_sems.append(s)
             elif cat == "Bottleneck":
-                # For this algorithm, treat bottlenecks as always petition-enabled:
+                # For this configuration, treat bottlenecks as always petition-enabled:
                 # allow them in any regular term from current_sem to cap_sem.
                 valid_sems.append(s)
         if valid_sems:
@@ -170,7 +171,7 @@ def add_weighted_priority_objective(
     weights: dict | None = None,
 ):
     """
-    Algorithm 2 (Weighted-priority objective):
+    Configuration 2 (Weighted-priority objective):
 
     1) Minimize the latest semester used (finish as early as possible).
     2) Tie-break by minimizing sum(weights[c] * semester[c]).
@@ -194,13 +195,14 @@ def add_weighted_priority_objective(
 
 
 # ---------------------------------------------------------------------------
-# Single-selection registry (one name = one full algorithm)
+# Single-selection registry (one name = one full configuration)
 # ---------------------------------------------------------------------------
 
+
 @dataclass(frozen=True)
-class AlgorithmSpec:
+class ConfigurationSpec:
     """
-    One thesis algorithm = one offering rule + one objective rule (+ optional weights).
+    One configuration = one offering rule + one objective rule (+ optional weights).
     """
 
     offering_fn: Callable
@@ -208,26 +210,26 @@ class AlgorithmSpec:
     weights: dict | None = None
 
 
-ALGORITHMS = {
-    # Algorithm 1: your original behavior (modulo-3 offering + baseline objective)
-    "algo1_modulo3_baseline": AlgorithmSpec(
+CONFIGURATIONS = {
+    # Configuration 1: original behavior (modulo-3 offering + baseline objective)
+    "config1_baseline": ConfigurationSpec(
         offering_fn=add_term_type_aligned_offering_constraints,
         objective_fn=add_baseline_objective,
         weights=None,
     ),
-    # Algorithm 2: modulo-3 offering + weighted-priority objective
-    "algo2_modulo3_weighted_priority": AlgorithmSpec(
+    # Configuration 2: modulo-3 offering + weighted-priority objective
+    "config2_weighted": ConfigurationSpec(
         offering_fn=add_term_type_aligned_offering_constraints,
         objective_fn=add_weighted_priority_objective,
         weights=DEFAULT_COURSE_WEIGHTS,
     ),
-    # Algorithm 3: capped horizon + trio fixed at 5th Year 2nd Sem + weighted objective
-    "algo3_capped_trio_weighted": AlgorithmSpec(
+    # Configuration 3: capped horizon + trio fixed at 5th Year 2nd Sem + weighted objective
+    "config3_weightedtriocap": ConfigurationSpec(
         offering_fn=add_capped_petition_trio_offering_constraints,
         objective_fn=add_weighted_priority_objective,
         weights=DEFAULT_COURSE_WEIGHTS,
     ),
 }
 
-DEFAULT_ALGORITHM = "algo1_modulo3_baseline"
+DEFAULT_CONFIGURATION = "config1_baseline"
 

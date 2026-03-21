@@ -1,4 +1,6 @@
 import sys
+import os
+import subprocess
 from pathlib import Path
 
 # Add project root to path so packages are found when run from Main-Solver
@@ -7,6 +9,8 @@ if str(_root) not in sys.path:
     sys.path.insert(0, str(_root))
 
 import math
+import random
+import json
 from ortools.sat.python import cp_model
 from courses_and_year_standings.courses import PREREQ_ALIASES, YEAR_STANDING_RULES, courses
 import courses_and_year_standings.units_and_year_standings as u
@@ -17,10 +21,61 @@ from algorithms_and_helpers.pos_helpers import (
     _get_req_list,
     _log_infeasible,
 )
-from algorithms_and_helpers.algorithms import (
-    ALGORITHMS,
-    DEFAULT_ALGORITHM,
+from algorithms_and_helpers.Configurations import (
+    CONFIGURATIONS,
+    DEFAULT_CONFIGURATION,
 )
+from solver_settings import (
+    CONFIGURATION,
+    ALTERNATIVE_ALGORITHM,
+    ENFORCE_GRADUATION_TRIO_ONLY_SEMESTER,
+)
+from pos_terminal_display import export_generated_pos_pdf
+from algorithms_and_helpers.alternative_algorithms import (
+    run_fuzzy_logic_search,
+    run_local_search,
+    run_tabu_search,
+)
+
+
+_DEBUG_LOG_PATH = Path(__file__).resolve().parents[2] / "debug-7593d3.log"
+
+
+def _debug_log(hypothesis_id: str, location: str, message: str, data: dict, run_id: str = "run1"):
+    # #region agent log
+    try:
+        with _DEBUG_LOG_PATH.open("a", encoding="utf-8") as f:
+            f.write(
+                json.dumps(
+                    {
+                        "sessionId": "7593d3",
+                        "runId": run_id,
+                        "hypothesisId": hypothesis_id,
+                        "location": location,
+                        "message": message,
+                        "data": data,
+                        "timestamp": int(__import__("time").time() * 1000),
+                    },
+                    ensure_ascii=True,
+                )
+                + "\n"
+            )
+    except Exception:
+        pass
+    # #endregion
+
+
+def _open_file_with_default_app(file_path: Path):
+    """Open a file using the OS default application."""
+    try:
+        if os.name == "nt":
+            os.startfile(str(file_path))  # type: ignore[attr-defined]
+        elif sys.platform == "darwin":
+            subprocess.Popen(["open", str(file_path)])
+        else:
+            subprocess.Popen(["xdg-open", str(file_path)])
+    except Exception as e:
+        print(f"Could not auto-open PDF: {e}")
 
 
 # === High-level sub-functions (pure refactor, no logic change) ===
@@ -163,15 +218,20 @@ def create_semester_variables(model, current_sem, passed_courses):
     return semester
 
 
-# Single algorithm selection: change this name to swap the thesis algorithm.
-# Must be a key in algorithms_and_helpers.algorithms.ALGORITHMS.
-ALGORITHM_NAME = "algo2_modulo3_weighted_priority"
+# Single configuration selection is centralized in solver_settings.py.
+# CP-SAT configuration keys come from algorithms_and_helpers.Configurations.CONFIGURATIONS.
+
+ALTERNATIVE_ALGORITHMS = {
+    "local_search": run_local_search,
+    "fuzzy_logic": run_fuzzy_logic_search,
+    "tabu_search": run_tabu_search,
+}
 
 
 
 def add_offering_constraints(model, semester, passed_courses, current_sem, with_petition: bool):
-    """Add offering-window constraints using the selected thesis algorithm."""
-    spec = ALGORITHMS[ALGORITHM_NAME]
+    """Add offering-window constraints using the selected configuration."""
+    spec = CONFIGURATIONS[CONFIGURATION]
     spec.offering_fn(
         model,
         semester,
@@ -187,8 +247,7 @@ def add_offering_constraints(model, semester, passed_courses, current_sem, with_
 # Graduation semester: only these three courses may appear in the final semester.
 GRADUATION_TRIO = ("CpE 405", "CpE 406", "ENGG 117")
 
-# Toggle this off when you *don't* want to force a "trio-only" semester.
-ENFORCE_GRADUATION_TRIO_ONLY_SEMESTER = True
+# Graduation trio enforcement toggle is centralized in solver_settings.py.
 
 
 def add_graduation_semester_constraint(model, semester, passed_courses):
@@ -361,8 +420,8 @@ def add_prereq_year_coreq_constraints(
 
 
 def add_objective(model, semester, passed_courses, failed_courses, current_sem):
-    """Set objective using the selected thesis algorithm."""
-    spec = ALGORITHMS[ALGORITHM_NAME]
+    """Set objective using the selected configuration."""
+    spec = CONFIGURATIONS[CONFIGURATION]
     spec.objective_fn(
         model,
         semester,
@@ -447,16 +506,323 @@ def _apply_forced_semester_assignments(model, semester, passed_courses, forced_s
         model.Add(semester[code] == si)
 
 
-def _run_core(current_sem, passed_courses, failed_courses, with_petition: bool, forced_semester_map=None):
-    """
-    Internal pipeline that runs the full model and returns a structured result dict.
-    Shared by CLI and external callers.
-    """
-    # 1b. Probation / failed-units check (per semester)
-    probation_msg = check_probation(current_sem, passed_courses, failed_courses)
-    if probation_msg is not None:
-        return {"status": "probation", "message": probation_msg, "pos": []}
+def _valid_semesters_for_course(code, info, current_sem, with_petition: bool):
+    """Compute allowed semesters for a course under the active configuration."""
+    orig = _first_semester(info) or 1
+    cat = info.get("category", "Rigid")
+    max_sem = u.MAX_SEMESTER
+    if CONFIGURATION == "config3_weightedtriocap":
+        max_sem = min(max_sem, 14)
 
+    graduation_trio = {"ENGG 117", "CpE 405", "CpE 406"}
+    if CONFIGURATION == "config3_weightedtriocap" and code in graduation_trio:
+        return [max_sem]
+
+    valid = []
+    for s in range(current_sem, max_sem + 1):
+        sem_type, orig_type = s % 3, orig % 3
+        if cat == "Rigid":
+            if sem_type == orig_type:
+                valid.append(s)
+        elif cat == "Flexible":
+            if (orig_type in [1, 2] and sem_type in [1, 2]) or (orig_type == 0 and sem_type == 0):
+                valid.append(s)
+        elif cat == "Bottleneck":
+            if CONFIGURATION == "config3_weightedtriocap":
+                valid.append(s)
+            elif with_petition or sem_type == orig_type:
+                valid.append(s)
+        else:
+            valid.append(s)
+    return valid
+
+
+def _build_pos_from_state(state, current_sem, passed_courses):
+    pos = []
+    for s in range(current_sem, u.MAX_SEMESTER + 1):
+        sem_list = [
+            c for c in courses
+            if c not in passed_courses and state.get(c) == s
+        ]
+        label = _sem_label(s)
+        total_u = sum(courses[c].get("units", 0) for c in sem_list) if sem_list else 0
+        pos.append(
+            {
+                "semester_index": s,
+                "label": label,
+                "total_units": total_u,
+                "courses": [
+                    {
+                        "code": c,
+                        "title": courses[c].get("course_title", c),
+                        "units": courses[c].get("units", 0),
+                    }
+                    for c in sorted(sem_list)
+                ],
+            }
+        )
+    return pos
+
+
+def _state_violation_summary(state, current_sem, passed_courses, with_petition: bool):
+    """
+    Fast in-Python constraint check/penalty model for alternative algorithms.
+    Returns dict with violation counts and summary features.
+    """
+    violation_count = 0
+    prereq_violations = 0
+    load_by_sem = {s: 0 for s in range(current_sem, u.MAX_SEMESTER + 1)}
+
+    # 1) Domain/offering checks and per-semester units
+    for c, info in courses.items():
+        if c in passed_courses:
+            continue
+        s = state.get(c)
+        if s is None:
+            violation_count += 1
+            continue
+        valid = _valid_semesters_for_course(c, info, current_sem, with_petition)
+        if s not in valid:
+            violation_count += 1
+        if s in load_by_sem:
+            load_by_sem[s] += info.get("units", 0)
+
+    for s, units in load_by_sem.items():
+        max_u = u.max_units_for_sem(s)
+        if units > max_u:
+            violation_count += (units - max_u)
+
+    # 2) Graduation trio-only semester rule
+    if ENFORCE_GRADUATION_TRIO_ONLY_SEMESTER:
+        trio = [c for c in GRADUATION_TRIO if c in courses and c not in passed_courses]
+        if len(trio) >= 2:
+            ref_s = state.get(trio[0])
+            if ref_s is None:
+                violation_count += 1
+            else:
+                for c in trio[1:]:
+                    if state.get(c) != ref_s:
+                        violation_count += 1
+                for c in courses:
+                    if c in passed_courses or c in GRADUATION_TRIO:
+                        continue
+                    if state.get(c) == ref_s:
+                        violation_count += 1
+
+    # 3) Prerequisite/co-requisite checks (year-standing approximated via ordering)
+    course_code_index = {_normalize_code(code): code for code in courses}
+    prereq_alias_map = {_normalize_code(k): v for k, v in PREREQ_ALIASES.items()}
+
+    def resolve_course(code: str):
+        if not isinstance(code, str):
+            return None
+        return course_code_index.get(_normalize_code(code))
+
+    for c, info in courses.items():
+        if c in passed_courses:
+            continue
+        sem_c = state.get(c, current_sem)
+
+        # prerequisites
+        for prereq in _get_req_list(
+            info, ("pre-requisites", "pre_requisites", "prerequisites", "pre-reqs")
+        ):
+            if isinstance(prereq, str):
+                alias = prereq_alias_map.get(_normalize_code(prereq))
+                if alias is not None:
+                    prereq = alias
+
+            satisfied = False
+            if isinstance(prereq, (list, tuple)):
+                for alt in prereq:
+                    alt_course = resolve_course(alt)
+                    if alt_course and (alt_course in passed_courses or state.get(alt_course, 10**9) < sem_c):
+                        satisfied = True
+                        break
+            else:
+                pre_course = resolve_course(prereq)
+                if pre_course:
+                    satisfied = pre_course in passed_courses or state.get(pre_course, 10**9) < sem_c
+
+            if not satisfied:
+                violation_count += 1
+                prereq_violations += 1
+
+        # co-requisites
+        for coreq in _get_req_list(
+            info, ("co-requisites", "co_requisites", "corequisites", "co-reqs")
+        ):
+            co_course = resolve_course(coreq)
+            if co_course and co_course not in passed_courses:
+                if state.get(co_course, -1) > sem_c:
+                    violation_count += 1
+
+    remaining = [c for c in courses if c not in passed_courses]
+    if remaining:
+        max_sem = max(state.get(c, current_sem) for c in remaining)
+        sum_sem = sum(state.get(c, current_sem) for c in remaining)
+    else:
+        max_sem = current_sem
+        sum_sem = 0
+
+    used_loads = [v for v in load_by_sem.values() if v > 0]
+    if len(used_loads) >= 2:
+        avg = sum(used_loads) / len(used_loads)
+        spread = (sum((x - avg) ** 2 for x in used_loads) / len(used_loads)) ** 0.5
+        load_balance = spread / max(1.0, avg)
+    else:
+        load_balance = 0.0
+
+    return {
+        "violations": float(violation_count),
+        "prereq_violations": float(prereq_violations),
+        "max_sem": float(max_sem),
+        "sum_sem": float(sum_sem),
+        "load_balance": float(load_balance),
+    }
+
+
+def _run_alternative_core(current_sem, passed_courses, failed_courses, with_petition: bool):
+    """Run one selected alternative algorithm end-to-end and return POS payload."""
+    _debug_log(
+        "H1",
+        "CP-SAT.py:_run_alternative_core:start",
+        "alternative_core_enter",
+        {
+            "algorithm": ALTERNATIVE_ALGORITHM,
+            "configuration": CONFIGURATION,
+            "current_sem": current_sem,
+            "remaining_count": len([c for c in courses if c not in passed_courses]),
+        },
+    )
+    if ALTERNATIVE_ALGORITHM not in ALTERNATIVE_ALGORITHMS:
+        return {
+            "status": "invalid_alternative_algorithm",
+            "message": f"Unknown alternative algorithm '{ALTERNATIVE_ALGORITHM}'.",
+            "pos": [],
+        }
+
+    remaining = [c for c in courses if c not in passed_courses]
+    if not remaining:
+        return {"status": "ok", "message": None, "pos": _build_pos_from_state({}, current_sem, passed_courses)}
+
+    valid_map = {
+        c: _valid_semesters_for_course(c, courses[c], current_sem, with_petition)
+        for c in remaining
+    }
+
+    # Seed with earliest feasible-by-window semester; perturb lightly for exploration.
+    rng = random.Random(42)
+    initial_state = {}
+    for c in remaining:
+        choices = valid_map[c] or [current_sem]
+        initial_state[c] = choices[0]
+        if len(choices) > 1 and rng.random() < 0.25:
+            initial_state[c] = rng.choice(choices[: min(3, len(choices))])
+
+    initial_v = _state_violation_summary(
+        initial_state, current_sem, passed_courses, with_petition
+    )
+    _debug_log(
+        "H2",
+        "CP-SAT.py:_run_alternative_core:initial_state",
+        "initial_state_violations",
+        {
+            "algorithm": ALTERNATIVE_ALGORITHM,
+            "violations": int(initial_v.get("violations", 0)),
+            "max_sem": float(initial_v.get("max_sem", 0)),
+            "sum_sem": float(initial_v.get("sum_sem", 0)),
+        },
+    )
+
+    def neighbor_fn(state):
+        neighbors = []
+        for c in remaining:
+            choices = valid_map.get(c) or [state[c]]
+            idx = choices.index(state[c]) if state[c] in choices else 0
+            for nxt_idx in {max(0, idx - 1), min(len(choices) - 1, idx + 1)}:
+                if nxt_idx == idx:
+                    continue
+                nxt = dict(state)
+                nxt[c] = choices[nxt_idx]
+                neighbors.append(nxt)
+            if len(choices) > 2:
+                nxt = dict(state)
+                nxt[c] = rng.choice(choices)
+                neighbors.append(nxt)
+        return neighbors
+
+    def feasible_fn(state):
+        return _state_violation_summary(state, current_sem, passed_courses, with_petition)["violations"] == 0
+
+    def score_fn(state):
+        v = _state_violation_summary(state, current_sem, passed_courses, with_petition)
+        # Keep hard-constraint penalties dominant.
+        return (10_000.0 * v["violations"]) + (100.0 * v["max_sem"]) + v["sum_sem"]
+
+    def fuzzy_feature_fn(state):
+        v = _state_violation_summary(state, current_sem, passed_courses, with_petition)
+        denom = max(1, len(remaining))
+        return {
+            "load_balance": v["load_balance"],
+            "prerequisite_pressure": v["prereq_violations"] / denom,
+            "delay_risk": (v["max_sem"] - current_sem) / max(1, (u.MAX_SEMESTER - current_sem + 1)),
+        }
+
+    def move_id_fn(cur, nxt):
+        for c in remaining:
+            if cur.get(c) != nxt.get(c):
+                return f"{c}:{cur.get(c)}->{nxt.get(c)}"
+        return "noop"
+
+    algo = ALTERNATIVE_ALGORITHM
+    if algo == "local_search":
+        best_state, _ = run_local_search(initial_state, score_fn, neighbor_fn, feasible_fn)
+    elif algo == "fuzzy_logic":
+        best_state, _ = run_fuzzy_logic_search(
+            initial_state, neighbor_fn, fuzzy_feature_fn, feasible_fn
+        )
+    else:  # tabu_search
+        best_state, _ = run_tabu_search(
+            initial_state, score_fn, neighbor_fn, feasible_fn, move_id_fn
+        )
+
+    violations = _state_violation_summary(
+        best_state, current_sem, passed_courses, with_petition
+    )
+    changed_assignments = sum(
+        1 for c in remaining if initial_state.get(c) != best_state.get(c)
+    )
+    _debug_log(
+        "H3",
+        "CP-SAT.py:_run_alternative_core:result_state",
+        "alternative_result_summary",
+        {
+            "algorithm": algo,
+            "changed_assignments": int(changed_assignments),
+            "final_violations": int(violations.get("violations", 0)),
+            "final_max_sem": float(violations.get("max_sem", 0)),
+            "final_sum_sem": float(violations.get("sum_sem", 0)),
+        },
+    )
+    return {
+        "status": "ok",
+        "message": (
+            f"Generated using alternative algorithm '{algo}'. "
+            f"Estimated violations: {int(violations.get('violations', 0))}."
+        ),
+        "pos": _build_pos_from_state(best_state, current_sem, passed_courses),
+    }
+
+
+def _run_cp_sat_configuration_core(
+    current_sem,
+    passed_courses,
+    failed_courses,
+    with_petition: bool,
+    forced_semester_map=None,
+):
+    """Run the existing CP-SAT pipeline for the selected CONFIGURATION."""
     # 2. Model Initialization
     model = cp_model.CpModel()
     year_units, year_courses_list, earned_units_by_year = build_year_aggregates(
@@ -494,6 +860,35 @@ def _run_core(current_sem, passed_courses, failed_courses, with_petition: bool, 
     return _solve_and_collect(model, semester, passed_courses, failed_courses, current_sem)
 
 
+def _run_core(current_sem, passed_courses, failed_courses, with_petition: bool, forced_semester_map=None):
+    """
+    Internal pipeline that runs the full model and returns a structured result dict.
+    Shared by CLI and external callers.
+    """
+    if CONFIGURATION not in CONFIGURATIONS:
+        return {
+            "status": "invalid_configuration",
+            "message": f"Unknown configuration '{CONFIGURATION}'.",
+            "pos": [],
+        }
+
+    # 1b. Probation / failed-units check (per semester)
+    probation_msg = check_probation(current_sem, passed_courses, failed_courses)
+    if probation_msg is not None:
+        return {"status": "probation", "message": probation_msg, "pos": []}
+
+    if ALTERNATIVE_ALGORITHM is not None:
+        return _run_alternative_core(current_sem, passed_courses, failed_courses, with_petition)
+
+    return _run_cp_sat_configuration_core(
+        current_sem,
+        passed_courses,
+        failed_courses,
+        with_petition=with_petition,
+        forced_semester_map=forced_semester_map,
+    )
+
+
 def generate_pos(payload: dict) -> dict:
     """
     Pure API entry point for external callers (e.g. Django).
@@ -504,9 +899,13 @@ def generate_pos(payload: dict) -> dict:
       - failed_courses (list of course codes)
       - with_petition (bool, optional)
       - forced_semester_map (dict, optional) forcing course->semester
+      - configuration (str, optional) CP-SAT configuration key
+      - alternative_algorithm (str | null, optional): local_search | fuzzy_logic | tabu_search
+      - enforce_graduation_trio_only_semester (bool, optional)
     """
     if payload is None:
         raise ValueError("payload must be a dict")
+    global CONFIGURATION, ALTERNATIVE_ALGORITHM, ENFORCE_GRADUATION_TRIO_ONLY_SEMESTER
 
     try:
         current_sem = int(payload.get("current_sem"))
@@ -517,14 +916,46 @@ def generate_pos(payload: dict) -> dict:
     failed_courses = list(payload.get("failed_courses") or [])
     with_petition = bool(payload.get("with_petition", False))
     forced_semester_map = payload.get("forced_semester_map") or None
-
-    return _run_core(
-        current_sem,
-        passed_courses,
-        failed_courses,
-        with_petition=with_petition,
-        forced_semester_map=forced_semester_map,
+    requested_configuration = payload.get("configuration", CONFIGURATION)
+    requested_alternative = payload.get("alternative_algorithm", ALTERNATIVE_ALGORITHM)
+    requested_trio_enforcement = bool(
+        payload.get(
+            "enforce_graduation_trio_only_semester",
+            ENFORCE_GRADUATION_TRIO_ONLY_SEMESTER,
+        )
     )
+
+    if requested_configuration not in CONFIGURATIONS:
+        raise ValueError(
+            f"payload['configuration'] must be one of: {', '.join(sorted(CONFIGURATIONS.keys()))}"
+        )
+
+    if requested_alternative is not None and requested_alternative not in ALTERNATIVE_ALGORITHMS:
+        raise ValueError(
+            "payload['alternative_algorithm'] must be one of: local_search, fuzzy_logic, tabu_search, or null"
+        )
+
+    # Apply payload-local solver selectors and restore afterwards so callers don't
+    # permanently mutate process-global defaults across requests.
+    old_configuration = CONFIGURATION
+    old_alternative = ALTERNATIVE_ALGORITHM
+    old_trio_enforcement = ENFORCE_GRADUATION_TRIO_ONLY_SEMESTER
+    CONFIGURATION = requested_configuration
+    ALTERNATIVE_ALGORITHM = requested_alternative
+    ENFORCE_GRADUATION_TRIO_ONLY_SEMESTER = requested_trio_enforcement
+
+    try:
+        return _run_core(
+            current_sem,
+            passed_courses,
+            failed_courses,
+            with_petition=with_petition,
+            forced_semester_map=forced_semester_map,
+        )
+    finally:
+        CONFIGURATION = old_configuration
+        ALTERNATIVE_ALGORITHM = old_alternative
+        ENFORCE_GRADUATION_TRIO_ONLY_SEMESTER = old_trio_enforcement
 
 
 def run_pos_with_state(current_sem, passed_courses, failed_courses, with_petition: bool = False):
@@ -547,6 +978,12 @@ def run_pos_with_state(current_sem, passed_courses, failed_courses, with_petitio
                     f"  • {course['code']} — {course['title']} ({course['units']} units)"
                 )
         print("\n" + "\n".join(lines))
+        try:
+            pdf_path = export_generated_pos_pdf(result.get("pos") or [])
+            print(f"\nPDF exported: {pdf_path}")
+            _open_file_with_default_app(Path(pdf_path))
+        except Exception as e:
+            print(f"\nPDF export skipped: {e}")
     else:
         message = result.get("message")
         if message:
