@@ -8,9 +8,12 @@ _root = Path(__file__).resolve().parent.parent
 if str(_root) not in sys.path:
     sys.path.insert(0, str(_root))
 
+import bisect
 import math
 import random
 import json
+import hashlib
+import time
 from ortools.sat.python import cp_model
 from courses_and_year_standings.courses import PREREQ_ALIASES, YEAR_STANDING_RULES, courses
 import courses_and_year_standings.units_and_year_standings as u
@@ -32,6 +35,7 @@ from solver_settings import (
 )
 from pos_terminal_display import export_generated_pos_pdf
 from algorithms_and_helpers.alternative_algorithms import (
+    run_firefly_search,
     run_fuzzy_logic_search,
     run_local_search,
     run_tabu_search,
@@ -39,6 +43,39 @@ from algorithms_and_helpers.alternative_algorithms import (
 
 
 _DEBUG_LOG_PATH = Path(__file__).resolve().parents[2] / "debug-7593d3.log"
+_AB886B_LOG_PATH = Path(__file__).resolve().parents[2] / "debug-ab886b.log"
+
+
+def _ab886b_log(hypothesis_id: str, location: str, message: str, data: dict, run_id: str = "run1"):
+    # #region agent log
+    try:
+        with _AB886B_LOG_PATH.open("a", encoding="utf-8") as f:
+            f.write(
+                json.dumps(
+                    {
+                        "sessionId": "ab886b",
+                        "runId": run_id,
+                        "hypothesisId": hypothesis_id,
+                        "location": location,
+                        "message": message,
+                        "data": data,
+                        "timestamp": int(__import__("time").time() * 1000),
+                    },
+                    ensure_ascii=True,
+                )
+                + "\n"
+            )
+    except Exception:
+        pass
+    # #endregion
+
+
+def _assignment_fingerprint(state: dict, remaining: list) -> str:
+    payload = json.dumps(
+        {str(c): int(state.get(c, -1)) for c in sorted(remaining, key=str)},
+        sort_keys=True,
+    ).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()[:16]
 
 
 def _debug_log(hypothesis_id: str, location: str, message: str, data: dict, run_id: str = "run1"):
@@ -225,6 +262,16 @@ ALTERNATIVE_ALGORITHMS = {
     "local_search": run_local_search,
     "fuzzy_logic": run_fuzzy_logic_search,
     "tabu_search": run_tabu_search,
+    "firefly": run_firefly_search,
+}
+
+# Distinct streams for rng.choice() inside neighbor generation so greedy algorithms
+# that share score_fn (local vs tabu) do not replay identical neighbor lists.
+_ALT_NEIGHBOR_RNG_SALT = {
+    "local_search": 0,
+    "tabu_search": 10_007,
+    "fuzzy_logic": 20_011,
+    "firefly": 30_017,
 }
 
 
@@ -508,8 +555,6 @@ def _apply_forced_semester_assignments(model, semester, passed_courses, forced_s
 
 def _valid_semesters_for_course(code, info, current_sem, with_petition: bool):
     """Compute allowed semesters for a course under the active configuration."""
-    orig = _first_semester(info) or 1
-    cat = info.get("category", "Rigid")
     max_sem = u.MAX_SEMESTER
     if CONFIGURATION == "config3_weightedtriocap":
         max_sem = min(max_sem, 14)
@@ -517,6 +562,20 @@ def _valid_semesters_for_course(code, info, current_sem, with_petition: bool):
     graduation_trio = {"ENGG 117", "CpE 405", "CpE 406"}
     if CONFIGURATION == "config3_weightedtriocap" and code in graduation_trio:
         return [max_sem]
+
+    if CONFIGURATION == "config0_no_modulo3_baseline":
+        orig = _first_semester(info) or 1
+        cat = info.get("category", "Rigid")
+        lo = max(current_sem, orig)
+        strict = [s for s in range(current_sem, max_sem + 1) if s >= lo]
+        if cat == "Bottleneck" and with_petition:
+            return list(range(current_sem, max_sem + 1))
+        if cat == "Flexible" and with_petition:
+            return list(range(current_sem, max_sem + 1))
+        return strict
+
+    orig = _first_semester(info) or 1
+    cat = info.get("category", "Rigid")
 
     valid = []
     for s in range(current_sem, max_sem + 1):
@@ -683,7 +742,14 @@ def _state_violation_summary(state, current_sem, passed_courses, with_petition: 
 
 
 def _run_alternative_core(current_sem, passed_courses, failed_courses, with_petition: bool):
-    """Run one selected alternative algorithm end-to-end and return POS payload."""
+    """
+    Run one selected alternative algorithm end-to-end and return POS payload.
+
+    Course semester domains (modulo-3 / term-type offering, petition handling,
+    config3 cap & trio rules) come from _valid_semesters_for_course, which is
+    kept consistent with the active CONFIGURATION's offering_fn in
+    Configurations.py — not a separate offering rule.
+    """
     _debug_log(
         "H1",
         "CP-SAT.py:_run_alternative_core:start",
@@ -706,19 +772,28 @@ def _run_alternative_core(current_sem, passed_courses, failed_courses, with_peti
     if not remaining:
         return {"status": "ok", "message": None, "pos": _build_pos_from_state({}, current_sem, passed_courses)}
 
+    # Per-course allowed semesters from CONFIGURATION (modulo-3 / config0 / config3, categories,
+    # petition). Heuristic search never leaves these domains — same offering reduction as CP-SAT.
     valid_map = {
-        c: _valid_semesters_for_course(c, courses[c], current_sem, with_petition)
+        c: tuple(_valid_semesters_for_course(c, courses[c], current_sem, with_petition))
         for c in remaining
     }
 
+    def random_restart_state(rst_rng: random.Random):
+        st: dict = {}
+        for c in remaining:
+            ch = valid_map[c] if valid_map[c] else (current_sem,)
+            st[c] = rst_rng.choice(ch)
+        return st
+
     # Seed with earliest feasible-by-window semester; perturb lightly for exploration.
-    rng = random.Random(42)
+    rng_init = random.Random(42)
     initial_state = {}
     for c in remaining:
-        choices = valid_map[c] or [current_sem]
+        choices = valid_map[c] if valid_map[c] else (current_sem,)
         initial_state[c] = choices[0]
-        if len(choices) > 1 and rng.random() < 0.25:
-            initial_state[c] = rng.choice(choices[: min(3, len(choices))])
+        if len(choices) > 1 and rng_init.random() < 0.25:
+            initial_state[c] = rng_init.choice(choices[: min(3, len(choices))])
 
     initial_v = _state_violation_summary(
         initial_state, current_sem, passed_courses, with_petition
@@ -734,12 +809,33 @@ def _run_alternative_core(current_sem, passed_courses, failed_courses, with_peti
             "sum_sem": float(initial_v.get("sum_sem", 0)),
         },
     )
+    initial_fp = _assignment_fingerprint(initial_state, remaining)
+    # #region agent log
+    _ab886b_log(
+        "H2",
+        "CP-SAT.py:_run_alternative_core:initial_fp",
+        "alternative_initial_fingerprint",
+        {
+            "algorithm": ALTERNATIVE_ALGORITHM,
+            "initial_fp": initial_fp,
+            "initial_violations": int(initial_v.get("violations", 0)),
+        },
+    )
+    # #endregion
+
+    algo = ALTERNATIVE_ALGORITHM
+    neighbor_rng = random.Random(42 + _ALT_NEIGHBOR_RNG_SALT[algo])
 
     def neighbor_fn(state):
         neighbors = []
         for c in remaining:
-            choices = valid_map.get(c) or [state[c]]
-            idx = choices.index(state[c]) if state[c] in choices else 0
+            choices = valid_map.get(c) or (state[c],)
+            if not choices:
+                continue
+            sc = state[c]
+            idx = bisect.bisect_left(choices, sc)
+            if idx >= len(choices) or choices[idx] != sc:
+                idx = 0
             for nxt_idx in {max(0, idx - 1), min(len(choices) - 1, idx + 1)}:
                 if nxt_idx == idx:
                     continue
@@ -748,7 +844,7 @@ def _run_alternative_core(current_sem, passed_courses, failed_courses, with_peti
                 neighbors.append(nxt)
             if len(choices) > 2:
                 nxt = dict(state)
-                nxt[c] = rng.choice(choices)
+                nxt[c] = neighbor_rng.choice(choices)
                 neighbors.append(nxt)
         return neighbors
 
@@ -775,12 +871,27 @@ def _run_alternative_core(current_sem, passed_courses, failed_courses, with_peti
                 return f"{c}:{cur.get(c)}->{nxt.get(c)}"
         return "noop"
 
-    algo = ALTERNATIVE_ALGORITHM
     if algo == "local_search":
-        best_state, _ = run_local_search(initial_state, score_fn, neighbor_fn, feasible_fn)
+        best_state, _ = run_local_search(
+            initial_state,
+            score_fn,
+            neighbor_fn,
+            feasible_fn,
+            random_restart_fn=random_restart_state,
+        )
     elif algo == "fuzzy_logic":
         best_state, _ = run_fuzzy_logic_search(
             initial_state, neighbor_fn, fuzzy_feature_fn, feasible_fn
+        )
+    elif algo == "firefly":
+        best_state, _ = run_firefly_search(
+            initial_state,
+            score_fn,
+            feasible_fn,
+            remaining,
+            valid_map,
+            random_restart_fn=random_restart_state,
+            neighbor_fn=neighbor_fn,
         )
     else:  # tabu_search
         best_state, _ = run_tabu_search(
@@ -793,6 +904,23 @@ def _run_alternative_core(current_sem, passed_courses, failed_courses, with_peti
     changed_assignments = sum(
         1 for c in remaining if initial_state.get(c) != best_state.get(c)
     )
+    final_fp = _assignment_fingerprint(best_state, remaining)
+    # #region agent log
+    _ab886b_log(
+        "H3",
+        "CP-SAT.py:_run_alternative_core:result_fp",
+        "alternative_result_fingerprint",
+        {
+            "algorithm": algo,
+            "neighbor_rng_salt": _ALT_NEIGHBOR_RNG_SALT.get(algo, 0),
+            "initial_fp": initial_fp,
+            "final_fp": final_fp,
+            "initial_eq_final": initial_fp == final_fp,
+            "changed_assignments": int(changed_assignments),
+            "final_violations": int(violations.get("violations", 0)),
+        },
+    )
+    # #endregion
     _debug_log(
         "H3",
         "CP-SAT.py:_run_alternative_core:result_state",
@@ -805,6 +933,7 @@ def _run_alternative_core(current_sem, passed_courses, failed_courses, with_peti
             "final_sum_sem": float(violations.get("sum_sem", 0)),
         },
     )
+
     return {
         "status": "ok",
         "message": (
@@ -877,6 +1006,19 @@ def _run_core(current_sem, passed_courses, failed_courses, with_petition: bool, 
     if probation_msg is not None:
         return {"status": "probation", "message": probation_msg, "pos": []}
 
+    # #region agent log
+    _ab886b_log(
+        "H1",
+        "CP-SAT.py:_run_core:branch",
+        "solver_branch_selection",
+        {
+            "ALTERNATIVE_ALGORITHM": ALTERNATIVE_ALGORITHM,
+            "branch": "alternative" if ALTERNATIVE_ALGORITHM is not None else "cp_sat",
+            "CONFIGURATION": CONFIGURATION,
+        },
+    )
+    # #endregion
+
     if ALTERNATIVE_ALGORITHM is not None:
         return _run_alternative_core(current_sem, passed_courses, failed_courses, with_petition)
 
@@ -902,6 +1044,9 @@ def generate_pos(payload: dict) -> dict:
       - configuration (str, optional) CP-SAT configuration key
       - alternative_algorithm (str | null, optional): local_search | fuzzy_logic | tabu_search
       - enforce_graduation_trio_only_semester (bool, optional)
+
+    Alternative algorithms use the same CONFIGURATION offering windows as CP-SAT
+    (see _valid_semesters_for_course); returned POS is always the heuristic's own result.
     """
     if payload is None:
         raise ValueError("payload must be a dict")
@@ -932,7 +1077,7 @@ def generate_pos(payload: dict) -> dict:
 
     if requested_alternative is not None and requested_alternative not in ALTERNATIVE_ALGORITHMS:
         raise ValueError(
-            "payload['alternative_algorithm'] must be one of: local_search, fuzzy_logic, tabu_search, or null"
+            "payload['alternative_algorithm'] must be one of: local_search, fuzzy_logic, tabu_search, firefly, or null"
         )
 
     # Apply payload-local solver selectors and restore afterwards so callers don't
@@ -963,7 +1108,18 @@ def run_pos_with_state(current_sem, passed_courses, failed_courses, with_petitio
     Core solver pipeline shared by static and dynamic modes.
     Expects current_sem, passed_courses, failed_courses to be precomputed.
     """
+    _algo_terminal = (
+        f"{ALTERNATIVE_ALGORITHM} (heuristic)"
+        if ALTERNATIVE_ALGORITHM is not None
+        else "cp_sat (OR-Tools CP-SAT)"
+    )
+    print(
+        f"\nActive solver — configuration: {CONFIGURATION!r}  |  algorithm: {_algo_terminal}"
+    )
+    _t_solve = time.perf_counter()
     result = _run_core(current_sem, passed_courses, failed_courses, with_petition=with_petition)
+    _solve_secs = time.perf_counter() - _t_solve
+    print(f"Solve time: {_solve_secs:.3f} s (wall clock, full pipeline)")
 
     status = result.get("status")
     if status == "ok":

@@ -132,6 +132,53 @@ def add_capped_petition_trio_offering_constraints(
             model.AddAllowedAssignments([semester[c]], [[s] for s in valid_sems])
 
 
+def add_category_without_modulo3_offering_constraints(
+    model,
+    semester,
+    courses,
+    passed_courses,
+    current_sem: int,
+    with_petition: bool,
+    first_semester_fn,
+    max_semester: int,
+):
+    """
+    Same problem class as the baseline, but **no modulo-3 term-type domain reduction**.
+
+    Categories still matter, without using (semester % 3) vs (orig % 3):
+
+    - **Rigid**: semesters s with max(current_sem, first_offering_sem) ≤ s ≤ max_semester
+      (petition does not change Rigid — same as modulo-3 baseline).
+    - **Bottleneck** (no petition): same continuous floor as Rigid (s ≥ lo).
+    - **Bottleneck** (with petition): full [current_sem, max_semester] (same as baseline).
+    - **Flexible** (no petition): same continuous floor as Rigid (s ≥ lo).
+    - **Flexible** (with petition): full [current_sem, max_semester] (extra placement freedom
+      when petition mode is on; baseline only used petition for Bottleneck, but config0
+      needs a visible petition switch without modulo-3 slots).
+
+    Use next to config1 to measure the effect of modulo-3 slot restriction alone.
+    """
+    for c, info in courses.items():
+        if c in passed_courses:
+            continue
+        orig = first_semester_fn(info) or 1
+        cat = info.get("category", "Rigid")
+        lo = max(current_sem, orig)
+
+        strict = [s for s in range(current_sem, max_semester + 1) if s >= lo]
+
+        if cat == "Bottleneck" and with_petition:
+            valid_sems = list(range(current_sem, max_semester + 1))
+        elif cat == "Flexible" and with_petition:
+            valid_sems = list(range(current_sem, max_semester + 1))
+        else:
+            # Rigid; Flexible without petition; Bottleneck without petition; unknown category
+            valid_sems = strict
+
+        if valid_sems:
+            model.AddAllowedAssignments([semester[c]], [[s] for s in valid_sems])
+
+
 def add_baseline_objective(
     model,
     semester,
@@ -211,6 +258,13 @@ class ConfigurationSpec:
 
 
 CONFIGURATIONS = {
+    # Configuration 0: same baseline objective as config1, categories + orig_sem floor,
+    # but **no** modulo-3 term-type reduction — compare search domain / runtime vs config1.
+    "config0_no_modulo3_baseline": ConfigurationSpec(
+        offering_fn=add_category_without_modulo3_offering_constraints,
+        objective_fn=add_baseline_objective,
+        weights=None,
+    ),
     # Configuration 1: original behavior (modulo-3 offering + baseline objective)
     "config1_baseline": ConfigurationSpec(
         offering_fn=add_term_type_aligned_offering_constraints,
