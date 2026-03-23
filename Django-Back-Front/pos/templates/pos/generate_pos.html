@@ -89,6 +89,50 @@
         opacity: 1 !important;
     }
 
+    /* Small circular info button beside semester labels */
+    .pos-label-with-info {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        font-weight: 700;
+    }
+    .pos-info-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 0.86rem !important;
+        height: 0.86rem !important;
+        min-width: 0 !important;
+        min-height: 0 !important;
+        aspect-ratio: 1 / 1;
+        flex: 0 0 auto;
+        border-radius: 50% !important;
+        border: 1px solid #6c757d;
+        color: #495057;
+        background: #fff;
+        font-size: 0.58rem;
+        font-weight: 600;
+        line-height: 1;
+        padding: 0 !important;
+        box-sizing: border-box;
+    }
+    .pos-info-btn:hover,
+    .pos-info-btn:focus {
+        border-color: #495057;
+        color: #212529;
+        background: #f8f9fa;
+        box-shadow: none;
+    }
+    .popover.pos-info-popover {
+        border-radius: 0.5rem;
+    }
+    .popover.pos-info-popover .popover-body {
+        font-size: 0.74rem;
+        line-height: 1.2;
+        padding: 0.4rem 0.5rem;
+        max-width: 215px;
+    }
+
     /* Irregular "WHEN YOU BECAME IRREGULAR" dropdown: keep black border/text/arrow
        even when still on "- Select Semester -" for new users. */
     #irreg-start-sem {
@@ -724,14 +768,27 @@
 
 {% if not is_regular %}
 <div class="pos-card p-4 mb-4" id="current-semester-card">
-    <div class="pos-section-title mb-2">Irregular Path</div>
+    <div class="pos-section-title mb-2">Program Configuration</div>
     <p class="small text-muted mb-3 text-justify">
-        Set your current semester now, when you became irregular, and if there is petition or not.
+        Set your last semester enrolled and when you became irregular.
         Curriculum courses up to that semester will be listed below.
     </p>
     <div class="row g-3 align-items-end">
         <div class="col-md-4">
-            <label class="form-label small text-uppercase text-muted" for="irreg-current-sem">LAST SEMESTER ENROLLED</label>
+            <label class="form-label small text-uppercase text-muted pos-label-with-info" for="irreg-current-sem">
+                LAST SEMESTER ENROLLED
+                <button
+                    type="button"
+                    class="btn pos-info-btn"
+                    data-pos-info="popover"
+                    data-bs-toggle="popover"
+                    data-bs-trigger="click"
+                    data-bs-placement="right"
+                    data-bs-custom-class="pos-info-popover"
+                    data-bs-content="Choose the most recent semester you finished. Only semesters up to this point are included for grade input."
+                    aria-label="Last Semester Enrolled info"
+                >i</button>
+            </label>
             <select class="form-select form-select-sm" id="irreg-current-sem">
                 <option value="" {% if irreg_current_unset %}selected{% endif %}>- Select Semester -</option>
                 {% for sec in curriculum_sections_dropdown %}
@@ -740,7 +797,20 @@
             </select>
         </div>
         <div class="col-md-4">
-            <label class="form-label small text-uppercase text-muted" for="irreg-start-sem">When you became irregular</label>
+            <label class="form-label small text-uppercase text-muted pos-label-with-info" for="irreg-start-sem">
+                WHEN YOU BECAME IRREGULAR
+                <button
+                    type="button"
+                    class="btn pos-info-btn"
+                    data-pos-info="popover"
+                    data-bs-toggle="popover"
+                    data-bs-trigger="click"
+                    data-bs-placement="right"
+                    data-bs-custom-class="pos-info-popover"
+                    data-bs-content="Optional. Set when your path became irregular. If left blank, the system starts from Last Semester Enrolled."
+                    aria-label="When you became irregular info"
+                >i</button>
+            </label>
             <select class="form-select form-select-sm" id="irreg-start-sem">
                 <option value="" {% if irreg_start_unset %}selected{% endif %}>- Select Semester -</option>
                 {% for sec in curriculum_sections_dropdown %}
@@ -765,8 +835,19 @@
     <div class="regular-semester-row row g-3 align-items-end">
         <!-- 1st column: current semester -->
         <div class="col-md-3 col-12">
-            <label class="form-label small text-uppercase text-muted" for="regular-current-semester">
+            <label class="form-label small text-uppercase text-muted pos-label-with-info" for="regular-current-semester">
                 LAST SEMESTER ENROLLED
+                <button
+                    type="button"
+                    class="btn pos-info-btn"
+                    data-pos-info="popover"
+                    data-bs-toggle="popover"
+                    data-bs-trigger="click"
+                    data-bs-placement="right"
+                    data-bs-custom-class="pos-info-popover"
+                    data-bs-content="Choose the most recent semester you finished. Only semesters up to this point are included for grade input."
+                    aria-label="Last Semester Enrolled info"
+                >i</button>
             </label>
             <select class="form-select form-select-sm" id="regular-current-semester">
                 <option value="" {% if current_semester_index is none or current_semester_index < 0 %}selected{% endif %}>- Select Semester -</option>
@@ -895,9 +976,15 @@
         <div class="pos-section-title mb-0">Course List by Semester</div>
     </div>
 
-    {% if not is_regular and not irreg_configured %}
+    {% if pos_reload_banner %}
+    <div class="alert alert-warning py-2 mb-3 small">
+        You loaded a saved POS. Choose <strong>LAST SEMESTER ENROLLED</strong> and click <strong>OK</strong> before generating again.
+    </div>
+    {% endif %}
+
+    {% if not is_regular and not semester_tables_visible %}
     <div class="alert alert-info py-3 mb-3">
-        <strong>Select your semester to continue.</strong> Please choose your current semester and when you became irregular above, then click <strong>OK</strong> to proceed to adding grades.
+        <strong>Select your semester to continue.</strong> Please choose your last semester enrolled and when you became irregular above, then click <strong>OK</strong> to proceed to adding grades.
     </div>
     {% endif %}
 
@@ -996,7 +1083,7 @@
 
 
 
-    <div class="mt-4" id="pos-action-buttons" {% if not is_regular and not irreg_configured %}style="display:none;"{% endif %}>
+    <div class="mt-4" id="pos-action-buttons" {% if not semester_tables_visible %}style="display:none;"{% endif %}>
         <div class="d-flex align-items-center gap-2">
             <div class="dropdown">
                 <button type="button" class="btn btn-outline-secondary btn-sm pos-gear-btn" data-bs-toggle="dropdown" aria-expanded="false" title="Options" aria-label="Options">
@@ -1273,7 +1360,7 @@
     }
     var posConfig = (function() {
         var el = document.getElementById('pos-config');
-        return el && el.textContent ? JSON.parse(el.textContent) : { is_regular: false, has_generated_pos: false, irreg_configured: false };
+        return el && el.textContent ? JSON.parse(el.textContent) : { is_regular: false, has_generated_pos: false, irreg_configured: false, pos_reload_pending: false };
     })();
     var IS_REGULAR = !!posConfig.is_regular;
     var HAS_GENERATED_POS = !!posConfig.has_generated_pos;
@@ -1430,10 +1517,9 @@
         return base;
     }
 
-    function saveGradesToServer(gradesBySection, recordGenerated, done) {
-        if (typeof recordGenerated === 'function') { done = recordGenerated; recordGenerated = false; }
+    function saveGradesToServer(gradesBySection, done) {
+        if (typeof gradesBySection === 'function') { done = gradesBySection; gradesBySection = {}; }
         var payload = { grades_by_section: gradesBySection };
-        if (recordGenerated) payload.generated = true;
         fetch("{% url 'save_pos_grades' %}", {
             method: 'POST',
             headers: {
@@ -1453,6 +1539,21 @@
     }
 
     document.addEventListener('DOMContentLoaded', function() {
+        if (typeof bootstrap !== 'undefined' && bootstrap.Popover) {
+            document.querySelectorAll('[data-pos-info="popover"]').forEach(function(el) {
+                new bootstrap.Popover(el, { container: 'body' });
+            });
+            document.addEventListener('click', function(e) {
+                var trigger = e.target.closest('[data-pos-info="popover"]');
+                var insidePopover = e.target.closest('.popover');
+                if (trigger || insidePopover) return;
+                document.querySelectorAll('[data-pos-info="popover"]').forEach(function(el) {
+                    var pop = bootstrap.Popover.getInstance(el);
+                    if (pop) pop.hide();
+                });
+            });
+        }
+
         const gradeSelects = document.querySelectorAll('.grade-select');
         gradeSelects.forEach(function(select) {
             const row = select.closest('tr');
@@ -1650,9 +1751,19 @@
         var sections = document.querySelectorAll('[id^="main-sem-"]');
         for (var s = 0; s < sections.length; s++) {
             var mainSection = sections[s];
+            // Hidden sections shouldn't block generation.
+            if (window.getComputedStyle(mainSection).display === 'none') continue;
+
+            var curriculumLocked = (mainSection.getAttribute('data-curriculum-locked') || '').toLowerCase() === 'true';
             var tbody = mainSection.querySelector('tbody');
             if (!tbody) continue;
             var rows = tbody.querySelectorAll('tr[data-course-code][data-units]');
+            // For irregular "add-course" (unlocked) semesters, an empty table means the user never added courses
+            // for that semester. Block generation with a friendly message.
+            if (!curriculumLocked && rows.length === 0) {
+                var label = mainSection.querySelector('h6');
+                return { ok: false, message: 'Please fill up courses on missing tables.' + (label && label.textContent ? ' (' + label.textContent.trim() + ')' : '') };
+            }
             var totalUnits = 0, failedUnits = 0;
             for (var i = 0; i < rows.length; i++) {
                 var row = rows[i];
@@ -1901,7 +2012,7 @@
             }
         }
 
-        saveGradesToServer(gradesBySection, true, function(data) {
+        saveGradesToServer(gradesBySection, function(data) {
             if (data && data.ok) {
                 // Call solver API and store response for Preview page to render dynamically
                 var solverPayload = buildSolverPayloadFromGrades(gradesBySection);

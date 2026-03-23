@@ -1,10 +1,14 @@
 import sys
 import os
 import subprocess
+import importlib.util
 from pathlib import Path
 
-# Add project root to path so packages are found when run from Main-Solver
-_root = Path(__file__).resolve().parent.parent
+# Add import roots so modules are found both when run directly and via runpy.
+_main_solver_dir = Path(__file__).resolve().parent
+_root = _main_solver_dir.parent
+if str(_main_solver_dir) not in sys.path:
+    sys.path.insert(0, str(_main_solver_dir))
 if str(_root) not in sys.path:
     sys.path.insert(0, str(_root))
 
@@ -28,11 +32,22 @@ from algorithms_and_helpers.Configurations import (
     CONFIGURATIONS,
     DEFAULT_CONFIGURATION,
 )
-from solver_settings import (
-    CONFIGURATION,
-    ALTERNATIVE_ALGORITHM,
-    ENFORCE_GRADUATION_TRIO_ONLY_SEMESTER,
-)
+try:
+    from solver_settings import (
+        CONFIGURATION,
+        ALTERNATIVE_ALGORITHM,
+        ENFORCE_GRADUATION_TRIO_ONLY_SEMESTER,
+    )
+except ModuleNotFoundError:
+    _settings_path = Path(__file__).resolve().with_name("solver_settings.py")
+    _settings_spec = importlib.util.spec_from_file_location("solver_settings", _settings_path)
+    if _settings_spec is None or _settings_spec.loader is None:
+        raise
+    _settings_module = importlib.util.module_from_spec(_settings_spec)
+    _settings_spec.loader.exec_module(_settings_module)
+    CONFIGURATION = _settings_module.CONFIGURATION
+    ALTERNATIVE_ALGORITHM = _settings_module.ALTERNATIVE_ALGORITHM
+    ENFORCE_GRADUATION_TRIO_ONLY_SEMESTER = _settings_module.ENFORCE_GRADUATION_TRIO_ONLY_SEMESTER
 from pos_terminal_display import export_generated_pos_pdf
 from algorithms_and_helpers.alternative_algorithms import (
     run_firefly_search,

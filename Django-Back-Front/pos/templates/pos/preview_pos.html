@@ -392,9 +392,14 @@
                     </div>
                 </div>
             </div>
-            <a href="{% url 'download_pos_pdf' %}" class="btn btn-outline-danger btn-sm" download>
-                Download PDF
-            </a>
+            <div class="d-flex align-items-center gap-2">
+                <button type="button" id="preview-save-history-btn" class="btn btn-outline-primary btn-sm">
+                    Save
+                </button>
+                <button type="button" id="preview-download-pdf-btn" class="btn btn-outline-danger btn-sm">
+                    Download PDF
+                </button>
+            </div>
         </div>
 </div>
 {% endblock %}
@@ -404,6 +409,79 @@
 {{ course_lookup|json_script:"course-lookup" }}
 <script>
     (function() {
+        var previewDlBtn = document.getElementById('preview-download-pdf-btn');
+        if (previewDlBtn) {
+            previewDlBtn.addEventListener('click', function() {
+                var mode = getSelectedPetitionMode();
+                var currentSemRaw = localStorage.getItem('posCurrentSemIndex');
+                var currentUiIndex = currentSemRaw !== null && currentSemRaw !== '' ? parseInt(currentSemRaw, 10) : null;
+                var boundaryParam = currentUiIndex !== null && !isNaN(currentUiIndex) ? '&boundary_ui_index=' + encodeURIComponent(currentUiIndex) : '';
+                window.location.href = "{% url 'download_pos_pdf' %}?petition_mode=" + encodeURIComponent(mode) + boundaryParam;
+            });
+        }
+
+        // Save tuned/edited Preview POS into POS History.
+        var previewSaveBtn = document.getElementById('preview-save-history-btn');
+        function setPreviewSaveState(state) {
+            if (!previewSaveBtn) return;
+            if (state === 'saved') {
+                previewSaveBtn.disabled = true;
+                previewSaveBtn.classList.remove('btn-outline-primary');
+                previewSaveBtn.classList.add('btn-primary');
+                previewSaveBtn.textContent = 'Saved';
+            } else {
+                previewSaveBtn.disabled = false;
+                previewSaveBtn.classList.remove('btn-primary');
+                previewSaveBtn.classList.add('btn-outline-primary');
+                previewSaveBtn.textContent = 'Save';
+            }
+        }
+
+        function enablePreviewSave() {
+            setPreviewSaveState('ready');
+        }
+
+        if (previewSaveBtn) {
+            // Default: user can save immediately.
+            setPreviewSaveState('ready');
+
+            previewSaveBtn.addEventListener('click', function() {
+                if (previewSaveBtn.disabled) return;
+                var mode = getSelectedPetitionMode();
+                var boundaryUiIndex = localStorage.getItem('posCurrentSemIndex');
+                if (boundaryUiIndex === null || boundaryUiIndex === '') boundaryUiIndex = '';
+
+                previewSaveBtn.disabled = true;
+                previewSaveBtn.textContent = 'Saving...';
+
+                var saveUrl = "{% url 'save_preview_pos_to_history' %}?petition_mode=" + encodeURIComponent(mode) + "&boundary_ui_index=" + encodeURIComponent(boundaryUiIndex);
+                var previewUiSections = collectPreviewUiSections();
+
+                fetch(saveUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ preview_ui_sections: previewUiSections })
+                }).then(function(r) { return r.json(); })
+                  .then(function(data) {
+                      if (data && data.ok) {
+                          setPreviewSaveState('saved');
+                      } else {
+                          enablePreviewSave();
+                          alert('Save failed. Please try again.');
+                      }
+                  }).catch(function() {
+                      enablePreviewSave();
+                      alert('Save request failed. Please try again.');
+                  });
+            });
+        }
+
+        // If user switches petition mode, allow saving again (separate schedule).
+        var noRadio = document.getElementById('petition-mode-no');
+        var yesRadio = document.getElementById('petition-mode-yes');
+        if (noRadio) noRadio.addEventListener('change', function() { enablePreviewSave(); });
+        if (yesRadio) yesRadio.addEventListener('change', function() { enablePreviewSave(); });
+
         // Mapping from solver semester_index (1-based) -> label
         var SEM_LABELS = [
             "First Year - First Semester",   // 1
@@ -423,6 +501,166 @@
             "Fifth Year - Midterm"           // 15
             // extend if your solver uses more
         ];
+
+        var _semLabelToUiIndex = null;
+        function normalizeSemLabel(s) {
+            return String(s || '')
+                .toLowerCase()
+                .replace(/\s+/g, ' ')
+                .trim();
+        }
+        function getUiIndexFromSemLabel(label) {
+            if (!label) return null;
+            if (_semLabelToUiIndex === null) {
+                _semLabelToUiIndex = {};
+                SEM_LABELS.forEach(function(lab, i) {
+                    _semLabelToUiIndex[normalizeSemLabel(lab)] = i; // uiIndex = i (0-based)
+                });
+            }
+            var v = _semLabelToUiIndex[normalizeSemLabel(label)];
+            return (v === undefined ? null : v);
+        }
+
+        function collectPreviewUiSections() {
+            var out = {};
+
+            function upsertCoursesForUi(uiIndex, courses) {
+                if (uiIndex === null || uiIndex === undefined) return;
+                if (!Array.isArray(courses) || courses.length === 0) return;
+                var key = String(uiIndex);
+                if (!out[key]) out[key] = [];
+                // De-duplicate by course code.
+                var seen = {};
+                out[key].forEach(function(c) {
+                    if (c && c.code) seen[String(c.code).trim()] = true;
+                });
+                courses.forEach(function(c) {
+                    if (!c || !c.code) return;
+                    var code = String(c.code).trim();
+                    if (!code || seen[code]) return;
+                    seen[code] = true;
+                    out[key].push(c);
+                });
+            }
+
+            // 1) Dynamic semesters (solver output rendered with pos-dnd-semester containers).
+            var dyn = document.getElementById('pos-preview-dynamic');
+            if (dyn) {
+                dyn.querySelectorAll('.pos-dnd-semester[data-semester-index]').forEach(function(semEl) {
+                    var solverIndexRaw = semEl.getAttribute('data-semester-index');
+                    var solverIndex = parseInt(solverIndexRaw, 10);
+                    if (isNaN(solverIndex)) return;
+                    var uiIndex = solverIndex - 1;
+
+                    var courseNodes = semEl.querySelectorAll('tr.pos-course-row[data-course-code]');
+                    var courses = [];
+                    courseNodes.forEach(function(tr) {
+                        var code = (tr.getAttribute('data-course-code') || '').trim();
+                        if (!code) return;
+
+                        var info = (typeof courseLookup !== 'undefined' && courseLookup && courseLookup[code]) ? courseLookup[code] : null;
+
+                        // Dynamic table columns order:
+                        // 0 Code, 1 Title, 2 Units, 3 Lec, 4 Lab, 5 Prereq, 6 Coreq
+                        var title = '';
+                        var units = '';
+                        var lec = '';
+                        var lab = '';
+                        var prereq = '';
+                        var coreq = '';
+                        if (tr.children && tr.children.length >= 7) {
+                            title = (tr.children[1] && tr.children[1].textContent) ? tr.children[1].textContent.trim() : '';
+                            units = (tr.children[2] && tr.children[2].textContent) ? tr.children[2].textContent.trim() : '';
+                            lec = (tr.children[3] && tr.children[3].textContent) ? tr.children[3].textContent.trim() : '';
+                            lab = (tr.children[4] && tr.children[4].textContent) ? tr.children[4].textContent.trim() : '';
+                            prereq = (tr.children[5] && tr.children[5].textContent) ? tr.children[5].textContent.trim() : '';
+                            coreq = (tr.children[6] && tr.children[6].textContent) ? tr.children[6].textContent.trim() : '';
+                        }
+
+                        if (info) {
+                            title = info.title || title;
+                            units = (info.units !== undefined && info.units !== null) ? String(info.units) : units;
+                            lec = info.lec || lec;
+                            lab = info.lab || lab;
+                            prereq = info.prereq || prereq;
+                            coreq = info.coreq || coreq;
+                        }
+
+                        courses.push({
+                            code: code,
+                            title: title,
+                            units: units,
+                            lec: lec,
+                            lab: lab,
+                            prereq: prereq,
+                            coreq: coreq
+                        });
+                    });
+
+                    upsertCoursesForUi(uiIndex, courses);
+                });
+            }
+
+            // 2) Server-rendered semesters (graded rows inside #pos-preview-server).
+            var server = document.getElementById('pos-preview-server');
+            if (server) {
+                server.querySelectorAll('#pos-preview-server > div.mb-4').forEach(function(block) {
+                    var h6 = block.querySelector('h6');
+                    var label = h6 ? h6.textContent.trim() : '';
+                    var uiIndex = getUiIndexFromSemLabel(label);
+                    if (uiIndex === null) return;
+
+                    var courses = [];
+                    block.querySelectorAll('tbody tr').forEach(function(tr) {
+                        var gradeTd = tr.querySelector('td.grade-display[data-course-code]');
+                        var code = gradeTd ? (gradeTd.getAttribute('data-course-code') || '').trim() : '';
+                        if (!code) return;
+
+                        var info = (typeof courseLookup !== 'undefined' && courseLookup && courseLookup[code]) ? courseLookup[code] : null;
+
+                        // Server table columns order:
+                        // 0 Code, 1 Title, 2 Units, 3 Lec, 4 Lab, 5 Prereq, 6 Coreq
+                        var title = '';
+                        var units = '';
+                        var lec = '';
+                        var lab = '';
+                        var prereq = '';
+                        var coreq = '';
+                        if (tr.children && tr.children.length >= 7) {
+                            title = (tr.children[1] && tr.children[1].textContent) ? tr.children[1].textContent.trim() : '';
+                            units = (tr.children[2] && tr.children[2].textContent) ? tr.children[2].textContent.trim() : '';
+                            lec = (tr.children[3] && tr.children[3].textContent) ? tr.children[3].textContent.trim() : '';
+                            lab = (tr.children[4] && tr.children[4].textContent) ? tr.children[4].textContent.trim() : '';
+                            prereq = (tr.children[5] && tr.children[5].textContent) ? tr.children[5].textContent.trim() : '';
+                            coreq = (tr.children[6] && tr.children[6].textContent) ? tr.children[6].textContent.trim() : '';
+                        }
+
+                        if (info) {
+                            title = info.title || title;
+                            units = (info.units !== undefined && info.units !== null) ? String(info.units) : units;
+                            lec = info.lec || lec;
+                            lab = info.lab || lab;
+                            prereq = info.prereq || prereq;
+                            coreq = info.coreq || coreq;
+                        }
+
+                        courses.push({
+                            code: code,
+                            title: title,
+                            units: units,
+                            lec: lec,
+                            lab: lab,
+                            prereq: prereq,
+                            coreq: coreq
+                        });
+                    });
+
+                    upsertCoursesForUi(uiIndex, courses);
+                });
+            }
+
+            return out;
+        }
 
         function safeJsonParse(s) {
             try { return JSON.parse(s); } catch (e) { return null; }
@@ -995,6 +1233,12 @@
             if (noRadio) noRadio.disabled = enabled || !!posEditState.saving || !!posEditState.validating;
             if (yesRadio) yesRadio.disabled = enabled || !!posEditState.saving || !!posEditState.validating;
 
+            // During edit mode, saving to history should only be allowed after the user clicks Apply.
+            var saveBtn = document.getElementById('preview-save-history-btn');
+            if (saveBtn) {
+                if (enabled) saveBtn.disabled = true;
+            }
+
             if (enabled) {
                 if (!wasEditing) {
                     posEditState.validating = false;
@@ -1061,6 +1305,7 @@
                   .then(function(data) {
                       if (data && data.ok) {
                           setPosEditMode(false);
+                          enablePreviewSave();
                       } else {
                           // If save fails, keep edit mode so user can try again.
                           console.error('Save tuned POS failed:', data);
@@ -1358,6 +1603,7 @@
               renderDynamicPOS(res);
           })
           .catch(function() {});
+
     })();
 </script>
 {% endblock %}

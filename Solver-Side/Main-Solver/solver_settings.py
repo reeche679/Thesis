@@ -19,8 +19,7 @@ CONFIGURATION = "config1_baseline"
 # - "local_search" | "fuzzy_logic" | "tabu_search" | "firefly" -> use heuristic flow
 # Speed vs quality: edit *Config dataclass defaults in
 # algorithms_and_helpers/alternative_algorithms.py (iterations, early_stop_on_feasible, etc.).
-ALTERNATIVE_ALGORITHM = "local_search"
+ALTERNATIVE_ALGORITHM = None
 
 # Graduation trio enforcement switch
 ENFORCE_GRADUATION_TRIO_ONLY_SEMESTER = True
-

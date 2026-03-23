@@ -61,7 +61,7 @@ document.addEventListener('DOMContentLoaded', function() {
     <div>
         <h1 class="h5 mb-1">Program of Study History</h1>
         <p class="text-muted mb-0">
-            List of previously generated Programs of Study associated with this account.
+            Saved when you download a POS from Preview (No Petition / With Petition). Load a row to continue editing on Generate POS.
         </p>
     </div>
 </div>
@@ -89,6 +89,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     <td class="text-center {% if forloop.first %}text-success{% else %}text-muted{% endif %}">{% if forloop.first %}Active{% else %}Archived{% endif %}</td>
                     <td class="text-center">
                         <div class="d-flex gap-2 justify-content-center align-items-center">
+                            <a href="{% url 'load_pos_record' record_id=record.pk %}" class="btn btn-outline-primary btn-sm history-action-btn" title="Load full POS on Generate POS" aria-label="Load to Generate POS">
+                                <i class="bi bi-box-arrow-in-down-left"></i>
+                            </a>
                             <a href="{% url 'download_pos_pdf_record' record_id=record.pk %}" class="btn btn-outline-secondary btn-sm history-action-btn" title="Download this generated POS" aria-label="Download" download>
                                 <i class="bi bi-download"></i>
                             </a>
@@ -103,7 +106,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="6" class="text-center text-muted py-4">No generated Programs of Study yet. Generate one from the Generate POS page.</td>
+                    <td colspan="6" class="text-center text-muted py-4">No saved Programs of Study yet. Click Save on the Preview page to save one here.</td>
                 </tr>
                 {% endfor %}
             </tbody>

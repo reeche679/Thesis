@@ -142,15 +142,13 @@ def pos_home(request):
 @_require_student
 @require_POST
 def set_academic_term(request):
-    """Set session and student: academic_year, pos_path (regular/irregular),
-    and (for Regular path) the current semester (year_level + semester)."""
+    """Set session academic year and default POS path configuration."""
     ay = (request.POST.get('academic_year') or '').strip()
     valid_ays = {c[0] for c in ACADEMIC_YEAR_CHOICES}
     if ay in valid_ays:
         request.session['academic_year'] = ay
-    pos_path = (request.POST.get('pos_path') or '').strip()
-    if pos_path in ('regular', 'irregular'):
-        request.session['pos_path'] = pos_path
+    # Single-path flow: always use irregular configuration.
+    request.session['pos_path'] = 'irregular'
     # For Regular path, capture the chosen current semester index and map to (year_level, semester)
     if request.session.get('pos_path') == 'regular':
         current_sem_index_raw = request.POST.get('current_semester_index')
@@ -201,7 +199,7 @@ def _curriculum_for_irregular():
 
 
 # Order matches POS_CURRICULUM: 0=1st Y 1st Sem, 1=1st Y 2nd Sem, 2=1st Y Midterm, 3=2nd Y 1st Sem, ...
-# Section index 0-9: 1st-4th year; 10-27: 5th-10th year (each year: First Sem, Second Sem, Midterm)
+# Section index 0-11: 1st-4th year; 12-29: 5th-10th year (each year: First Sem, Second Sem, Midterm)
 _INDEX_TO_YEAR_SEM = [
     ("1st Year", "First Semester"),
     ("1st Year", "Second Semester"),
@@ -214,6 +212,7 @@ _INDEX_TO_YEAR_SEM = [
     ("3rd Year", "Midterm"),
     ("4th Year", "First Semester"),
     ("4th Year", "Second Semester"),
+    ("4th Year", "Midterm"),
     ("5th Year", "First Semester"),
     ("5th Year", "Second Semester"),
     ("5th Year", "Midterm"),
@@ -247,8 +246,11 @@ CURRENT_SEMESTER_CHOICES_YEAR4_ONLY = [c for c in CURRENT_SEMESTER_CHOICES if c[
 # show no semester tables until the user explicitly selects a value.
 FIRST_YEAR_FIRST_SEM_INDEX = 0
 
-# For Regular path on Generate POS: allow selection up to 5th Year Second Semester (index 12 after adding 2nd Year Midterm)
-CURRENT_SEMESTER_CHOICES_UPTO_5YEAR2 = [c for c in CURRENT_SEMESTER_CHOICES if c[0] <= 12]
+# For Regular path on Generate POS: allow selection up to 5th Year Second Semester.
+# With 3 semesters per year:
+# - 5th Year First Sem = 12
+# - 5th Year Second Sem = 13
+CURRENT_SEMESTER_CHOICES_UPTO_5YEAR2 = [c for c in CURRENT_SEMESTER_CHOICES if c[0] <= 13]
 # Regular path dropdown: exclude 2nd Year Midterm (index 5) - add-course only, not a valid "current semester" for regular
 SECOND_YEAR_MIDTERM_INDEX = 5
 CURRENT_SEMESTER_CHOICES_REGULAR = [
@@ -260,7 +262,7 @@ CURRENT_SEMESTER_CHOICES_REGULAR = [
 # Irregular path dropdowns (Generate POS): allow selection up to 5th Year Second Semester.
 # This dropdown is used for both "LAST SEMESTER ENROLLED" and "WHEN YOU BECAME IRREGULAR"
 # in the Irregular section of the Generate POS page.
-SECTION_INDEX_MAX_DROPDOWN_GENERATE = 12  # includes 5th Year First Sem (11) + 5th Year Second Sem (12)
+SECTION_INDEX_MAX_DROPDOWN_GENERATE = 13  # includes 5th Year First Sem (12) + 5th Year Second Sem (13)
 
 
 def _year_semester_to_section_index(year_level, semester):
@@ -516,6 +518,7 @@ def pos_generate(request):
     irreg_configured = True
     irreg_start_index = None
     irreg_current_sem = None
+    pos_reload_pending = False
     # For every section, precompute courses available to add (this + previous semesters, failed or not yet taken, plus flexible)
     picker_available_by_section = {
         si: _picker_available_for_next_section(si, curriculum_sections, saved_grades_by_section)
@@ -557,15 +560,29 @@ def pos_generate(request):
         current_sem_param = request.GET.get('current_sem')
         with_petition = request.GET.get('with_petition', '')
 
+        became_irregular_explicit = (
+            irreg_start_param is not None and str(irreg_start_param).strip() != ""
+        )
+
+        if current_sem_param is not None:
+            request.session.pop('pos_reload_pending', None)
+
+        pos_reload_pending = bool(request.session.get('pos_reload_pending'))
+
         irreg_start_index = _safe_int(irreg_start_param, _safe_int(request.session.get('irreg_start_index')))
         irreg_current_sem = _safe_int(current_sem_param, _safe_int(request.session.get('irreg_current_sem')))
 
         # Irregular generation only needs CURRENT semester. If IRREG_START is left empty,
         # we'll treat it as "effective start = current semester" for curriculum display/constraints.
         irreg_configured = irreg_current_sem is not None
+        use_reload_full_tables = pos_reload_pending and not irreg_configured
+
         if pos_reset and irreg_configured:
             request.session.pop('pos_reset', None)
             pos_reset = False
+
+        effective_irreg_start_index = None
+        table_scope_sem = None
 
         if irreg_configured:
             # If user explicitly set IRREG_START via the URL (including leaving it blank),
@@ -586,13 +603,22 @@ def pos_generate(request):
             if effective_irreg_start_index is None:
                 effective_irreg_start_index = irreg_current_sem
 
+            # Defense-in-depth:
+            # If WHEN YOU BECAME IRREGULAR is explicitly selected, honor that exact dropdown value.
+            # This prevents any accidental fallback to "effective start = current semester".
+            if became_irregular_explicit:
+                try:
+                    explicit_si = int(irreg_start_param)
+                    effective_irreg_start_index = explicit_si
+                except (TypeError, ValueError):
+                    pass
+
             effective_irreg_start_index = max(0, min(effective_irreg_start_index, max_si))
             irreg_current_sem = max(0, min(irreg_current_sem, max_si))
             if irreg_current_sem < effective_irreg_start_index:
                 irreg_current_sem = effective_irreg_start_index
 
-            # Keep irreg_start_index as-is (None if user left it empty) for dropdown UI.
-            # Use effective_irreg_start_index for all semester-table logic below.
+            table_scope_sem = irreg_current_sem
 
             yl, sem = _INDEX_TO_YEAR_SEM[irreg_current_sem]
             request.session['year_level'] = yl
@@ -602,7 +628,37 @@ def pos_generate(request):
                 student.semester = sem
                 student.save(update_fields=['year_level', 'semester'])
 
-        if irreg_configured:
+        elif use_reload_full_tables:
+            # Loaded from history: show full saved POS + grades until user picks Last Semester Enrolled + OK.
+            gen_pos = request.session.get("last_generated_pos") or []
+            max_si = len(curriculum_sections) - 1
+
+            loaded_preview_ui_sections = request.session.get("pos_loaded_preview_ui_sections") or {}
+            table_scope_sem = -1
+            if isinstance(loaded_preview_ui_sections, dict) and loaded_preview_ui_sections:
+                for k, courses in loaded_preview_ui_sections.items():
+                    try:
+                        si = int(k)
+                    except (TypeError, ValueError):
+                        continue
+                    if si < 0 or si > max_si:
+                        continue
+                    if isinstance(courses, list) and any(
+                        (c.get("code") if isinstance(c, dict) else None) for c in courses
+                    ):
+                        table_scope_sem = max(table_scope_sem, si)
+
+            if table_scope_sem < 0:
+                table_scope_sem = _max_ui_section_from_grades_and_pos(saved_grades_by_section, gen_pos)
+            table_scope_sem = max(0, min(table_scope_sem, max_si))
+            effective_irreg_start_index = irreg_start_index
+            if effective_irreg_start_index is None:
+                effective_irreg_start_index = table_scope_sem
+            effective_irreg_start_index = max(0, min(effective_irreg_start_index, max_si))
+            if table_scope_sem < effective_irreg_start_index:
+                table_scope_sem = effective_irreg_start_index
+
+        if irreg_configured or use_reload_full_tables:
             # Collect all passed course codes across all sections
             all_passed_codes = set()
             for si_check in range(len(curriculum_sections)):
@@ -610,54 +666,310 @@ def pos_generate(request):
                     if _is_passing_grade(grade):
                         all_passed_codes.add(code)
 
+            # When the user explicitly picked "WHEN YOU BECAME IRREGULAR",
+            # the semester tables after that boundary should be manual-add (empty),
+            # even if we previously loaded a POS from history.
+            # If we loaded a POS from history, we should continue using the saved Preview tables
+            # even when both dropdowns are selected (OK redirect includes both params).
+            # Otherwise we would incorrectly switch to "manual add" mode and wipe courses.
+            use_loaded_schedule = bool(request.session.get('pos_loaded_from_history'))
+            loaded_preview_ui_sections = request.session.get("pos_loaded_preview_ui_sections") or {}
+            use_loaded_preview_ui_sections = (
+                use_loaded_schedule and isinstance(loaded_preview_ui_sections, dict) and bool(loaded_preview_ui_sections)
+            )
+
+            # Use the solver/tuned schedule stored in session so we can show
+            # ungraded semester tables (courses only) when loading/editing.
+            generated_pos = request.session.get("last_generated_pos") or []
+            gen_pos_sem_meta_by_solver = {}
+            selected_codes_by_ui_sem = {}
+            for sem in (generated_pos or []):
+                if not isinstance(sem, dict):
+                    continue
+                try:
+                    solver_sem_idx = int(sem.get("semester_index"))
+                except (TypeError, ValueError):
+                    continue
+                ui_si = solver_sem_idx - 1
+                if ui_si < 0:
+                    continue
+
+                sem_courses = sem.get("courses") or []
+                code_to_course_info = {}
+                codes_set = set()
+                if isinstance(sem_courses, list):
+                    for c in sem_courses:
+                        if not isinstance(c, dict):
+                            continue
+                        code = str(c.get("code") or "").strip()
+                        if not code:
+                            continue
+                        code_to_course_info[code] = c
+                        codes_set.add(code)
+
+                selected_codes_by_ui_sem[ui_si] = codes_set
+                gen_pos_sem_meta_by_solver[solver_sem_idx] = {
+                    "code_to_course_info": code_to_course_info,
+                    "codes_set": codes_set,
+                }
+
             # Sections 0..effective_irreg_start_index: show all curriculum courses (like regular path)
             for si in range(effective_irreg_start_index + 1):
                 sec = curriculum_sections[si]
                 section_grades = saved_grades_by_section.get(si, {})
                 courses_with_grades = []
-                for c in sec["courses"]:
-                    code = c["code"]
-                    grade = section_grades.get(code)
-                    courses_with_grades.append({'course': c, 'grade': grade})
-                total_units_display = sum(c.get('units', 0) or 0 for c in sec["courses"])
+
+                # When loading from Preview history, use the exact course table
+                # the user saved (including ungraded rows), not the static curriculum list.
+                loaded_key = str(si)
+                if use_loaded_preview_ui_sections:
+                    loaded_courses = loaded_preview_ui_sections.get(loaded_key) or []
+                    if not isinstance(loaded_courses, list) or not loaded_courses:
+                        continue
+                    for entry in loaded_courses:
+                        if not isinstance(entry, dict):
+                            continue
+                        code = str(entry.get("code") or "").strip()
+                        if not code:
+                            continue
+                        grade = section_grades.get(code)
+
+                        # Prefer saved metadata from preview; otherwise fall back to curriculum lookup.
+                        title = entry.get("title") or code
+                        units = entry.get("units", 0) or 0
+                        lec = entry.get("lec", "") or ""
+                        lab = entry.get("lab", "") or ""
+                        prereq = entry.get("prereq") or entry.get("prerequisites", "") or ""
+                        coreq = entry.get("coreq") or entry.get("corequisites", "") or ""
+                        try:
+                            units_f = float(units) if units not in ("", None) else 0
+                        except (TypeError, ValueError):
+                            units_f = 0
+
+                        if code in course_lookup and (not entry.get("title") or units_f == 0):
+                            _title, _units, _lec, _lab, _prereq, _coreq = course_lookup.get(code)
+                            title = title or _title
+                            if units_f == 0:
+                                units_f = _units
+                            lec = lec or _lec
+                            lab = lab or _lab
+                            prereq = prereq or _prereq
+                            coreq = coreq or _coreq
+
+                        courses_with_grades.append({
+                            "course": {
+                                "code": code,
+                                "display_code": display_pos_course_code(code),
+                                "title": title,
+                                "units": units_f,
+                                "lec": lec,
+                                "lab": lab,
+                                "prereq": prereq,
+                                "coreq": coreq,
+                            },
+                            "grade": grade,
+                        })
+                else:
+                    for c in sec["courses"]:
+                        code = c["code"]
+                        grade = section_grades.get(code)
+                        courses_with_grades.append({'course': c, 'grade': grade})
+
+                if not courses_with_grades and not became_irregular_explicit:
+                    continue
+
+                total_units_display = sum(cg['course'].get('units', 0) or 0 for cg in courses_with_grades)
                 display_sections.append({
                     'section': sec, 'courses_with_grades': courses_with_grades, 'section_index': si,
                     'total_units': total_units_display,
                     'is_curriculum_locked': True,
                 })
 
-            # Sections (effective_irreg_start_index+1)..irreg_current_sem: add-course sections
-            for si in range(effective_irreg_start_index + 1, irreg_current_sem + 1):
+            # Sections (effective_irreg_start_index+1)..table_scope_sem: add-course sections
+            for si in range(effective_irreg_start_index + 1, table_scope_sem + 1):
                 sec = curriculum_sections[si]
                 section_grades = saved_grades_by_section.get(si, {})
                 courses_with_grades = []
                 seen = set()
-                for c in sec['courses']:
-                    if c['code'] in section_grades and section_grades[c['code']]:
-                        seen.add(c['code'])
-                        courses_with_grades.append({'course': c, 'grade': section_grades[c['code']]})
-                for code, grade in (section_grades or {}).items():
-                    if not code or not grade or code in seen:
+
+                # When loading from Preview history, use the exact course tables
+                # the user saved (including ungraded rows).
+                loaded_key = str(si)
+                if use_loaded_preview_ui_sections:
+                    loaded_courses = loaded_preview_ui_sections.get(loaded_key) or []
+                    if not isinstance(loaded_courses, list) or not loaded_courses:
                         continue
-                    seen.add(code)
-                    info = course_lookup.get(code)
-                    if info:
-                        title, units, lec, lab, prereq, coreq = info
-                    else:
-                        title, units, lec, lab, prereq, coreq = code, 0, 0, 0, "", ""
-                    courses_with_grades.append({
-                        'course': {
-                            'code': code,
-                            'display_code': display_pos_course_code(code),
-                            'title': title,
-                            'units': units,
-                            'lec': lec,
-                            'lab': lab,
-                            'prereq': prereq,
-                            'coreq': coreq,
-                        },
-                        'grade': grade,
+                    for entry in loaded_courses:
+                        if not isinstance(entry, dict):
+                            continue
+                        code = str(entry.get("code") or "").strip()
+                        if not code:
+                            continue
+                        grade = section_grades.get(code)
+
+                        title = entry.get("title") or code
+                        units = entry.get("units", 0) or 0
+                        lec = entry.get("lec", "") or ""
+                        lab = entry.get("lab", "") or ""
+                        prereq = entry.get("prereq") or entry.get("prerequisites", "") or ""
+                        coreq = entry.get("coreq") or entry.get("corequisites", "") or ""
+                        try:
+                            units_f = float(units) if units not in ("", None) else 0
+                        except (TypeError, ValueError):
+                            units_f = 0
+
+                        if code in course_lookup and (not entry.get("title") or units_f == 0):
+                            _title, _units, _lec, _lab, _prereq, _coreq = course_lookup.get(code)
+                            title = title or _title
+                            if units_f == 0:
+                                units_f = _units
+                            lec = lec or _lec
+                            lab = lab or _lab
+                            prereq = prereq or _prereq
+                            coreq = coreq or _coreq
+
+                        courses_with_grades.append({
+                            "course": {
+                                "code": code,
+                                "display_code": display_pos_course_code(code),
+                                "title": title,
+                                "units": units_f,
+                                "lec": lec,
+                                "lab": lab,
+                                "prereq": prereq,
+                                "coreq": coreq,
+                            },
+                            "grade": grade,
+                        })
+
+                    if not courses_with_grades:
+                        continue
+
+                    total_units_display = sum(cg['course'].get('units', 0) or 0 for cg in courses_with_grades)
+                    display_sections.append({
+                        'section': sec,
+                        'courses_with_grades': courses_with_grades,
+                        'section_index': si,
+                        'total_units': total_units_display,
+                        # When loading from history, semesters are already decided
+                        # in the saved Preview, so we hide "+ Add courses".
+                        'is_curriculum_locked': bool(use_loaded_schedule),
                     })
+                    continue
+
+                selected_codes = selected_codes_by_ui_sem.get(si) or set()
+                sem_meta = gen_pos_sem_meta_by_solver.get(si + 1) or {}
+                code_to_course_info = sem_meta.get("code_to_course_info") or {}
+
+                # Prefer solver-tuned course list so we show ungraded semesters too.
+                # Only do this when loading from history; otherwise keep original
+                # behavior for the normal workflow.
+                if use_loaded_schedule and selected_codes:
+                    for code in selected_codes:
+                        grade = section_grades.get(code)
+                        info = code_to_course_info.get(code)
+                        if isinstance(info, dict) and info:
+                            title = info.get("title") or code
+                            try:
+                                units = info.get("units", 0) or 0
+                                units = float(units) if units is not None else 0
+                            except (TypeError, ValueError):
+                                units = 0
+                            lec = info.get("lec", "") or ""
+                            lab = info.get("lab", "") or ""
+                            prereq = info.get("prereq", "") or info.get("prerequisites", "") or ""
+                            coreq = info.get("coreq", "") or info.get("corequisites", "") or ""
+                        else:
+                            _info = course_lookup.get(code)
+                            if _info:
+                                title, units, lec, lab, prereq, coreq = _info
+                            else:
+                                title, units, lec, lab, prereq, coreq = code, 0, 0, 0, "", ""
+
+                        courses_with_grades.append({
+                            'course': {
+                                'code': code,
+                                'display_code': display_pos_course_code(code),
+                                'title': title,
+                                'units': units,
+                                'lec': lec,
+                                'lab': lab,
+                                'prereq': prereq,
+                                'coreq': coreq,
+                            },
+                            'grade': grade,
+                        })
+                        seen.add(code)
+
+                    # Also include any graded courses that somehow aren't in the solver list.
+                    for code, grade in (section_grades or {}).items():
+                        if not code or code in seen or not grade:
+                            continue
+                        _info = course_lookup.get(code)
+                        if _info:
+                            title, units, lec, lab, prereq, coreq = _info
+                        else:
+                            title, units, lec, lab, prereq, coreq = code, 0, 0, 0, "", ""
+                        courses_with_grades.append({
+                            'course': {
+                                'code': code,
+                                'display_code': display_pos_course_code(code),
+                                'title': title,
+                                'units': units,
+                                'lec': lec,
+                                'lab': lab,
+                                'prereq': prereq,
+                                'coreq': coreq,
+                            },
+                            'grade': grade,
+                        })
+                        seen.add(code)
+                else:
+                    # Fallback: old behavior based only on saved grades.
+                    for c in sec['courses']:
+                        if c['code'] in section_grades and section_grades[c['code']]:
+                            seen.add(c['code'])
+                            courses_with_grades.append({'course': c, 'grade': section_grades[c['code']]})
+                    for code, grade in (section_grades or {}).items():
+                        if not code or not grade or code in seen:
+                            continue
+                        seen.add(code)
+                        info = course_lookup.get(code)
+                        if info:
+                            title, units, lec, lab, prereq, coreq = info
+                        else:
+                            title, units, lec, lab, prereq, coreq = code, 0, 0, 0, "", ""
+                        courses_with_grades.append({
+                            'course': {
+                                'code': code,
+                                'display_code': display_pos_course_code(code),
+                                'title': title,
+                                'units': units,
+                                'lec': lec,
+                                'lab': lab,
+                                'prereq': prereq,
+                                'coreq': coreq,
+                            },
+                            'grade': grade,
+                        })
+
+                if not courses_with_grades:
+                    # If user explicitly configured when they became irregular,
+                    # we still need to render the unlocked semesters as empty tables
+                    # so the UI can show "+ Add courses" and let the user add courses.
+                    if became_irregular_explicit:
+                        total_units = 0
+                        display_sections.append({
+                            'section': sec,
+                            'courses_with_grades': [],
+                            'section_index': si,
+                            'total_units': total_units,
+                            # If we're loading from history, keep it "locked"
+                            # so we don't show "+ Add courses" and don't trigger re-add.
+                            'is_curriculum_locked': bool(use_loaded_schedule),
+                        })
+                    continue
+
                 total_units = sum(cg['course'].get('units', 0) or 0 for cg in courses_with_grades)
                 display_sections.append({
                     'section': sec, 'courses_with_grades': courses_with_grades, 'section_index': si,
@@ -666,14 +978,29 @@ def pos_generate(request):
                 })
 
             editable_section_index = (
-                irreg_current_sem if irreg_current_sem > effective_irreg_start_index else None
+                table_scope_sem if table_scope_sem > effective_irreg_start_index else None
             )
 
             # Rebuild picker_available_by_section filtering out passed courses
             picker_available_by_section = {}
-            for si in range(effective_irreg_start_index + 1, irreg_current_sem + 1):
+            for si in range(effective_irreg_start_index + 1, table_scope_sem + 1):
                 candidates = _picker_available_for_next_section(si, curriculum_sections, saved_grades_by_section)
-                candidates = [c for c in candidates if c['code'] not in all_passed_codes]
+                if use_loaded_schedule:
+                    if use_loaded_preview_ui_sections:
+                        loaded_list = loaded_preview_ui_sections.get(str(si)) or []
+                        selected_in_sem = {
+                            str(e.get("code")).strip()
+                            for e in loaded_list
+                            if isinstance(e, dict) and (e.get("code") is not None) and str(e.get("code")).strip() != ""
+                        }
+                    else:
+                        selected_in_sem = selected_codes_by_ui_sem.get(si) or set()
+                    candidates = [
+                        c for c in candidates
+                        if c.get('code') not in all_passed_codes and c.get('code') not in selected_in_sem
+                    ]
+                else:
+                    candidates = [c for c in candidates if c.get('code') not in all_passed_codes]
                 picker_available_by_section[si] = candidates
 
     has_generated_pos = POSRecord.objects.filter(student=student).exists()
@@ -681,10 +1008,20 @@ def pos_generate(request):
     if pos_reset:
         has_generated_pos = False
 
+    semester_tables_visible = len(display_sections) > 0
+    pos_reload_banner = bool(pos_reload_pending and not is_regular and semester_tables_visible)
+
     context = {
         'student': student,
         'has_generated_pos': has_generated_pos,
-        'pos_config': {'is_regular': is_regular, 'has_generated_pos': has_generated_pos, 'irreg_configured': irreg_configured if not is_regular else True},
+        'semester_tables_visible': semester_tables_visible,
+        'pos_reload_banner': pos_reload_banner,
+        'pos_config': {
+            'is_regular': is_regular,
+            'has_generated_pos': has_generated_pos,
+            'irreg_configured': irreg_configured if not is_regular else True,
+            'pos_reload_pending': bool(pos_reload_pending and not is_regular),
+        },
         'saved_grades_by_section': saved_grades_by_section,
         'saved_only': saved_grades_by_section,
         'session_academic_year': request.session.get('academic_year', ''),
@@ -716,7 +1053,7 @@ def pos_generate(request):
 @_require_student
 @require_POST
 def save_pos_grades(request):
-    """Save grades by section. POST body: { "grades_by_section": { "0": {"MATH 101": "5.00"}, "2": {"MATH 101": "2.00"} }, "generated": true }.
+    """Save grades by section. POST body: { "grades_by_section": { "0": {"MATH 101": "5.00"}, "2": {"MATH 101": "2.00"} } }.
     Same course can have different grades in different sections (e.g. failed in one, passed in another)."""
     student = get_logged_in_student(request)
     try:
@@ -730,7 +1067,6 @@ def save_pos_grades(request):
         grades_by_section = data.get('grades')
         if isinstance(grades_by_section, dict) and grades_by_section and not any(isinstance(v, dict) for v in grades_by_section.values()):
             grades_by_section = {'0': grades_by_section}
-    record_generated = data.get('generated') is True
     if not isinstance(grades_by_section, dict):
         grades_by_section = {}
     StudentGrade.objects.filter(student=student).delete()
@@ -749,22 +1085,6 @@ def save_pos_grades(request):
                     grade=str(grade).strip(),
                     section_index=si,
                 )
-    if record_generated:
-        ay = request.session.get('academic_year') or ''
-        sem = request.session.get('semester') or ''
-        yl = request.session.get('year_level') or ''
-        POSRecord.objects.create(
-            student=student,
-            generated_at=timezone.now(),
-            academic_year=ay,
-            semester=sem,
-            year_level=yl,
-            grades_snapshot=grades_by_section,
-        )
-        _prune_old_pos_records(student)
-        # Preserve the user's selected path (Regular vs Irregular).
-        # The UI will always redirect to Preview after generation, but the
-        # Generate page should stay on whichever path the user started with.
     return JsonResponse({'ok': True})
 
 
@@ -795,6 +1115,9 @@ def delete_pos_data(request):
     try:
         request.session.pop('last_generated_pos', None)
         request.session.pop('last_generated_payload', None)
+        request.session.pop('last_generated_pos_options', None)
+        request.session.pop('pos_reload_pending', None)
+        request.session.pop('pos_loaded_from_history', None)
     except Exception:
         pass
 
@@ -900,6 +1223,15 @@ def generate_pos_api(request):
         "failed_courses": [_UI_TO_SOLVER_ELECTIVE.get(c, c) for c in raw_failed],
         "with_petition": data.get("with_petition", False),
     }
+
+    # Defensive validation: avoid null/invalid current_sem crashes.
+    try:
+        cur_sem = payload.get("current_sem")
+        if cur_sem is None or cur_sem == "":
+            return JsonResponse({"status": "infeasible", "message": "Please select your current semester to proceed.", "pos": []}, status=400)
+        payload["current_sem"] = int(cur_sem)
+    except (TypeError, ValueError):
+        return JsonResponse({"status": "infeasible", "message": "Invalid semester selection. Please check your dropdowns.", "pos": []}, status=400)
     if "configuration" in data:
         payload["configuration"] = data.get("configuration")
     if "alternative_algorithm" in data:
@@ -936,6 +1268,8 @@ def generate_pos_api(request):
     try:
         student = get_logged_in_student(request)
         if student is not None and isinstance(result, dict):
+            # Once the user generates a brand-new POS, it is no longer coming from a history-load state.
+            request.session.pop('pos_loaded_from_history', None)
             request.session["last_generated_pos"] = result.get("pos") or []
             if isinstance(result.get("pos_options"), dict):
                 request.session["last_generated_pos_options"] = result.get("pos_options")
@@ -1824,6 +2158,139 @@ def _prune_old_pos_records(student):
     POSRecord.objects.filter(student=student).exclude(pk__in=ids_to_keep).delete()
 
 
+def _grades_dict_string_keys(grades_by_section):
+    """Normalize grades_by_section for JSON storage (string keys, section ints as str)."""
+    out = {}
+    for k, v in (grades_by_section or {}).items():
+        if not isinstance(v, dict):
+            continue
+        try:
+            sk = str(int(k))
+        except (ValueError, TypeError):
+            sk = str(k)
+        out[sk] = {str(c).strip(): str(g).strip() for c, g in v.items() if c and g}
+    return out
+
+
+def _max_ui_section_from_grades_and_pos(grades_by_section, generated_pos):
+    """Largest curriculum section index (0-based) referenced by saved grades or solver POS."""
+    max_si = -1
+    for k in (grades_by_section or {}):
+        try:
+            max_si = max(max_si, int(k))
+        except (ValueError, TypeError):
+            try:
+                max_si = max(max_si, int(str(k)))
+            except (ValueError, TypeError):
+                pass
+    for sem in (generated_pos or []):
+        if not isinstance(sem, dict):
+            continue
+        try:
+            sidx = int(sem.get("semester_index"))
+            sem_courses = sem.get("courses") or []
+            has_courses = False
+            if isinstance(sem_courses, list):
+                for c in sem_courses:
+                    if not isinstance(c, dict):
+                        continue
+                    if (c.get("code") or "").strip():
+                        has_courses = True
+                        break
+            if has_courses:
+                max_si = max(max_si, sidx - 1)
+        except (ValueError, TypeError):
+            pass
+    return max(0, max_si)
+
+
+def _snapshot_for_pos_history(request, student):
+    """Build JSON-serializable preview snapshot from session + DB grades."""
+    grades = _saved_grades_by_section(student)
+    grades_snap = _grades_dict_string_keys(grades)
+    pos_options = request.session.get("last_generated_pos_options")
+    if not isinstance(pos_options, dict):
+        pos_options = {}
+    mode = (request.GET.get("petition_mode") or "").strip()
+    if mode not in ("no_petition", "with_petition"):
+        mode = request.session.get("last_selected_petition_mode") or "no_petition"
+    if mode not in ("no_petition", "with_petition"):
+        mode = "no_petition"
+    # IMPORTANT:
+    # Use the *current edited/tuned* schedule stored in session.
+    # `last_generated_pos_options` holds only the base solver schedules
+    # (un-edited). Users drag/edit in Preview and we must reflect that.
+    generated_pos = copy.deepcopy(request.session.get("last_generated_pos") or [])
+    base_payload = copy.deepcopy(request.session.get("last_generated_payload") or {})
+    if not isinstance(base_payload, dict):
+        base_payload = {}
+    base_payload["with_petition"] = mode == "with_petition"
+    boundary_param = request.GET.get("boundary_ui_index")
+    boundary = None
+    try:
+        if boundary_param is not None and str(boundary_param).strip() != "":
+            boundary = int(boundary_param)
+    except (TypeError, ValueError):
+        boundary = None
+    if boundary is None:
+        boundary = _year_semester_to_section_index(
+            request.session.get("year_level"),
+            request.session.get("semester"),
+        )
+    irreg_si = request.session.get("irreg_start_index")
+    return {
+        "pos_options": copy.deepcopy(pos_options),
+        "generated_pos": generated_pos,
+        "petition_mode": mode,
+        "last_generated_payload": base_payload,
+        "grades_by_section": grades_snap,
+        "preview_boundary_section_index": boundary,
+        "irreg_start_index": irreg_si,
+        "irreg_with_petition": request.session.get("irreg_with_petition", "yes"),
+    }
+
+
+def _persist_pos_history_on_download(request, student):
+    """Append a history row when the user downloads Preview PDF (selected petition variant)."""
+    snap = _snapshot_for_pos_history(request, student)
+    request.session["last_generated_pos"] = snap["generated_pos"]
+    request.session["last_selected_petition_mode"] = snap["petition_mode"]
+    request.session["last_generated_payload"] = snap["last_generated_payload"]
+    yl = request.session.get("year_level") or ""
+    sem = request.session.get("semester") or ""
+    POSRecord.objects.create(
+        student=student,
+        academic_year=request.session.get("academic_year") or "",
+        semester=sem,
+        year_level=yl,
+        grades_snapshot=snap["grades_by_section"],
+        preview_snapshot=snap,
+    )
+    _prune_old_pos_records(student)
+
+
+def _apply_grades_snapshot_to_student(student, grades_by_section):
+    """Replace StudentGrade rows from a {section_index: {code: grade}} snapshot."""
+    StudentGrade.objects.filter(student=student).delete()
+    if not isinstance(grades_by_section, dict):
+        return
+    for sk, sec in grades_by_section.items():
+        try:
+            si = int(sk)
+        except (ValueError, TypeError):
+            continue
+        if not isinstance(sec, dict):
+            continue
+        for course_code, grade in sec.items():
+            if course_code and grade:
+                StudentGrade.objects.create(
+                    student=student,
+                    course_code=str(course_code).strip(),
+                    grade=str(grade).strip(),
+                    section_index=si,
+                )
+
+
 @_require_student
 def pos_preview(request):
     """Preview POS page - Read-only POS table matching PDF layout; each section shows that section's grades (same course can differ per section)."""
@@ -1862,14 +2329,29 @@ def download_pos_pdf(request):
     if not _has_academic_term(request) or not _has_profile_photo(request):
         return redirect(reverse('pos_home') + '?required=1')
     student = get_logged_in_student(request)
+    # Determine currently selected petition mode (passed from Preview Download click).
+    mode = (request.GET.get("petition_mode") or "").strip()
+    if mode not in ("no_petition", "with_petition"):
+        mode = request.session.get("last_selected_petition_mode") or "no_petition"
+    request.session["last_selected_petition_mode"] = mode
+
     grades_by_section = _saved_grades_by_section(student)
     academic_year = request.session.get('academic_year', '') or student.academic_year or ''
 
     # Preview cut-off determines where grades stop (and where solver future semesters begin).
-    preview_boundary_section_index = _year_semester_to_section_index(
-        request.session.get('year_level'),
-        request.session.get('semester'),
-    )
+    boundary_param = request.GET.get("boundary_ui_index")
+    preview_boundary_section_index = None
+    try:
+        if boundary_param is not None and str(boundary_param).strip() != "":
+            preview_boundary_section_index = int(boundary_param)
+    except (TypeError, ValueError):
+        preview_boundary_section_index = None
+
+    if preview_boundary_section_index is None:
+        preview_boundary_section_index = _year_semester_to_section_index(
+            request.session.get('year_level'),
+            request.session.get('semester'),
+        )
 
     # Match Preview exactly: past/current semesters come from `preview_sections`,
     # while future semesters are appended from the last solver-generated POS.
@@ -1896,6 +2378,58 @@ def download_pos_pdf(request):
     response = HttpResponse(pdf_bytes, content_type='application/pdf')
     response['Content-Disposition'] = f'attachment; filename="{filename}"'
     return response
+
+
+@csrf_exempt
+@_require_student
+@require_POST
+def save_preview_pos_to_history(request):
+    """
+    Save the currently edited Preview POS state into POS history.
+
+    The request must include:
+      - `petition_mode` (no_petition | with_petition) as a GET query param
+      - `boundary_ui_index` as a GET query param (0-based index used by Preview)
+    """
+    student = get_logged_in_student(request)
+    if student is None:
+        return JsonResponse({"ok": False, "error": "Not authenticated"}, status=401)
+
+    # Save only when the user has the needed configuration.
+    if not _has_academic_term(request) or not _has_profile_photo(request):
+        return JsonResponse({"ok": False, "error": "Missing academic term/profile photo"}, status=400)
+
+    snap = _snapshot_for_pos_history(request, student)
+
+    # Capture the exact semester course tables the user sees on the Preview page
+    # (including ungraded rows), so Load -> Generate POS can reproduce it.
+    try:
+        body_raw = request.body.decode("utf-8") if request.body else ""
+        body = json.loads(body_raw) if body_raw.strip() else {}
+    except Exception:
+        body = {}
+    preview_ui_sections = body.get("preview_ui_sections") or body.get("preview_sections") or {}
+    if isinstance(preview_ui_sections, dict):
+        # Keys should be UI section indices; JSON forces them to be strings.
+        snap["preview_ui_sections"] = preview_ui_sections
+
+    last = POSRecord.objects.filter(student=student).order_by('-generated_at').first()
+    if last is not None and last.preview_snapshot == snap:
+        return JsonResponse({"ok": True, "saved": False, "record_id": last.pk})
+
+    yl = request.session.get('year_level') or ''
+    sem = request.session.get('semester') or ''
+    record = POSRecord.objects.create(
+        student=student,
+        academic_year=request.session.get('academic_year') or '',
+        semester=sem,
+        year_level=yl,
+        grades_snapshot=snap.get("grades_by_section") or {},
+        preview_snapshot=snap,
+    )
+    _prune_old_pos_records(student)
+
+    return JsonResponse({"ok": True, "saved": True, "record_id": record.pk})
 
 
 @_require_student
@@ -1946,31 +2480,108 @@ def download_pos_pdf_record(request, record_id):
     """Download the POS PDF for a specific history record (uses that record's saved grades snapshot)."""
     student = get_logged_in_student(request)
     record = get_object_or_404(POSRecord, pk=record_id, student=student)
-    snapshot = getattr(record, 'grades_snapshot', None) or {}
-    if isinstance(snapshot, dict) and snapshot and not any(isinstance(v, dict) for v in snapshot.values()):
-        grades_by_section = {'0': snapshot}
-    else:
-        grades_by_section = snapshot
+    snap = getattr(record, "preview_snapshot", None) or {}
     eval_date = record.generated_at.date()
     academic_year = record.academic_year or ''
-
-    from .pos_pdf import build_pos_pdf
     logo_path = os.path.abspath(os.path.normpath(os.path.join(str(settings.BASE_DIR), 'static', 'img', 'BSU_Logo.png')))
     if not os.path.isfile(logo_path):
         logo_path = None
-    pdf_bytes = build_pos_pdf(
-        student_name=student.full_name or '',
-        sr_code=student.sr_code or '',
-        academic_year=academic_year,
-        grades_by_section=grades_by_section,
-        eval_date=eval_date,
-        logo_path=logo_path,
-    )
+
+    if isinstance(snap, dict) and snap.get("grades_by_section"):
+        grades_raw = snap.get("grades_by_section") or {}
+        grades_by_section = {}
+        for k, v in grades_raw.items():
+            if not isinstance(v, dict):
+                continue
+            try:
+                grades_by_section[int(k)] = dict(v)
+            except (ValueError, TypeError):
+                continue
+        generated_pos = snap.get("generated_pos") if isinstance(snap.get("generated_pos"), list) else []
+        boundary = snap.get("preview_boundary_section_index")
+        preview_sections = _preview_sections_from_curriculum(grades_by_section)
+        from .pos_pdf import build_preview_pos_pdf
+        pdf_bytes = build_preview_pos_pdf(
+            student_name=student.full_name or '',
+            sr_code=student.sr_code or '',
+            academic_year=academic_year,
+            boundary_section_index=boundary,
+            preview_sections=preview_sections,
+            future_pos=generated_pos,
+            logo_path=logo_path,
+        )
+    else:
+        snapshot = getattr(record, 'grades_snapshot', None) or {}
+        if isinstance(snapshot, dict) and snapshot and not any(isinstance(v, dict) for v in snapshot.values()):
+            grades_by_section = {'0': snapshot}
+        else:
+            grades_by_section = snapshot
+        from .pos_pdf import build_pos_pdf
+        pdf_bytes = build_pos_pdf(
+            student_name=student.full_name or '',
+            sr_code=student.sr_code or '',
+            academic_year=academic_year,
+            grades_by_section=grades_by_section,
+            eval_date=eval_date,
+            logo_path=logo_path,
+        )
     date_str = eval_date.strftime('%Y-%m-%d')
     filename = f"POS_{student.sr_code or 'POS'}_{date_str}.pdf"
     response = HttpResponse(pdf_bytes, content_type='application/pdf')
     response['Content-Disposition'] = f'attachment; filename="{filename}"'
     return response
+
+
+@_require_student
+def load_pos_record(request, record_id):
+    """Restore a history record into Generate POS (full grades + preview POS); user must re-select Last Semester Enrolled."""
+    student = get_logged_in_student(request)
+    record = get_object_or_404(POSRecord, pk=record_id, student=student)
+    snap = record.preview_snapshot if isinstance(record.preview_snapshot, dict) else {}
+    grades_src = snap.get("grades_by_section") if snap else None
+    if not isinstance(grades_src, dict) or not grades_src:
+        grades_src = record.grades_snapshot or {}
+    if isinstance(grades_src, dict) and grades_src and not any(isinstance(v, dict) for v in grades_src.values()):
+        grades_src = {"0": grades_src}
+    _apply_grades_snapshot_to_student(student, grades_src)
+
+    if snap:
+        request.session["last_generated_pos_options"] = copy.deepcopy(snap.get("pos_options") or {})
+        request.session["last_generated_pos"] = copy.deepcopy(snap.get("generated_pos") or [])
+        request.session["last_selected_petition_mode"] = snap.get("petition_mode") or "no_petition"
+        lp = snap.get("last_generated_payload")
+        if isinstance(lp, dict) and lp:
+            request.session["last_generated_payload"] = copy.deepcopy(lp)
+        irr = snap.get("irreg_start_index")
+        if irr is not None:
+            try:
+                request.session["irreg_start_index"] = int(irr)
+            except (TypeError, ValueError):
+                request.session.pop("irreg_start_index", None)
+        else:
+            request.session.pop("irreg_start_index", None)
+        iw = snap.get("irreg_with_petition")
+        if iw in ("yes", "no"):
+            request.session["irreg_with_petition"] = iw
+
+        pu = snap.get("preview_ui_sections")
+        if isinstance(pu, dict) and pu:
+            request.session["pos_loaded_preview_ui_sections"] = copy.deepcopy(pu)
+        else:
+            request.session.pop("pos_loaded_preview_ui_sections", None)
+    else:
+        request.session.pop("last_generated_pos_options", None)
+        request.session["last_generated_pos"] = []
+        request.session.pop("last_generated_payload", None)
+        request.session.pop("pos_loaded_preview_ui_sections", None)
+
+    request.session.pop("irreg_current_sem", None)
+    request.session.pop("year_level", None)
+    request.session.pop("semester", None)
+    request.session["pos_reload_pending"] = True
+    request.session["pos_loaded_from_history"] = True
+    request.session.pop("pos_reset", None)
+    return redirect("pos_generate")
 
 
 @_require_student

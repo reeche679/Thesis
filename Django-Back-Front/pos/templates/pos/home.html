@@ -130,45 +130,6 @@
         z-index: 1;
     }
 
-    /* Path toggle: Regular / Irregular – fluid, wrap on small screens */
-    .path-toggle-group {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.5rem;
-    }
-    .path-toggle {
-        position: relative;
-        display: inline-flex;
-        align-items: center;
-        cursor: pointer;
-        user-select: none;
-    }
-    .path-toggle input[type="radio"] {
-        position: absolute;
-        opacity: 0;
-        pointer-events: none;
-    }
-    .path-toggle-box {
-        padding: 0.35rem 0.75rem;
-        border-radius: 0.25rem;
-        border: 1px solid #ced4da;
-        font-size: clamp(0.8rem, 2vw, 0.85rem);
-        min-width: 80px;
-        text-align: center;
-        background-color: #ffffff;
-        color: #495057;
-        transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
-    }
-    .path-toggle input[type="radio"]:checked + .path-toggle-box {
-        background-color: #0d6efd;
-        border-color: #0d6efd;
-        color: #ffffff;
-        box-shadow: 0 0 0 0.1rem rgba(13, 110, 253, 0.25);
-    }
-    .path-toggle-box:hover {
-        border-color: #0d6efd;
-    }
-
     /* Responsive: compact landscape on small screens (photo left, info middle, time right) */
     @media (max-width: 575.98px) {
         .home-outer-card {
@@ -340,7 +301,7 @@
 
             {% if required_term %}
             <div class="alert alert-warning small mb-3" role="alert">
-                Complete your information before proceeding. Upload your <strong>photo</strong> above and select <strong>Academic Year</strong> and <strong>path (Regular/Irregular)</strong>. Then you can use <strong>Generate POS</strong> below.
+                Complete your information before proceeding. Upload your <strong>photo</strong> above and select <strong>Academic Year</strong>. Then you can use <strong>Generate POS</strong> below.
             </div>
             {% endif %}
 
@@ -361,19 +322,6 @@
                     </div>
                 </div>
 
-                <div class="mb-3">
-                    <label class="text-muted small text-uppercase d-block mb-2">PATH</label>
-                    <div class="path-toggle-group">
-                        <label class="path-toggle">
-                            <input type="radio" name="pos_path" value="regular" {% if session_pos_path == 'regular' %}checked{% endif %}>
-                            <span class="path-toggle-box">Regular</span>
-                        </label>
-                        <label class="path-toggle">
-                            <input type="radio" name="pos_path" value="irregular" {% if session_pos_path == 'irregular' %}checked{% endif %}>
-                            <span class="path-toggle-box">Irregular</span>
-                        </label>
-                    </div>
-                </div>
             </form>
 
             <hr>

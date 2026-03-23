@@ -18,14 +18,13 @@ from reportlab.platypus import (
 # Course table column widths (inches). Student info table is scaled to the same total width for alignment.
 _POS_COURSE_COL_WIDTHS_INCH = (
     0.88,  # Course Code
-    2.15,  # Course Title
+    2.82,  # Course Title (increased; removed Remarks column width)
     0.57,  # Credit Units
     0.39,  # Lec
     0.39,  # Lab
     1.00,  # Prerequisite(s)
     0.95,  # Co-requisite(s)
     0.50,  # Grade
-    0.67,  # Remarks
 )
 _POS_COURSE_TABLE_TOTAL_INCH = sum(_POS_COURSE_COL_WIDTHS_INCH)
 # Original info block label/value proportions (sum 7.2 in); scaled to match course table width.
@@ -135,6 +134,9 @@ POS_CURRICULUM = [
         ("CpE 405", "CpE Practice and Design 2", 2, 0, 6, "CpE 404", ""),
         ("CpE 406", "Comprehensive Examination for CpE", 2, 0, 6, "Graduating", ""),
     ]),
+    # Fourth Year Midterm: kept as a dedicated section index to align UI/solver semester numbering.
+    # If it has no defined curriculum courses, it will naturally stay empty unless the solver introduces courses.
+    ("FOURTH YEAR", "MIDTERM", 0, 0, 0, []),
     # 5th–10th year: empty rows so user can add grades; preview/PDF show these sections
     ("FIFTH YEAR", "FIRST SEMESTER", 0, 0, 0, []),
     ("FIFTH YEAR", "SECOND SEMESTER", 0, 0, 0, []),
@@ -639,9 +641,8 @@ def build_pos_pdf(
                 Paragraph("Prerequisite(s)", header_cell_style),
                 Paragraph("Co-requisite(s)", header_cell_style),
                 Paragraph("Grade", header_cell_style),
-                Paragraph("Remarks", header_cell_style),
             ],
-            ["", "", "", Paragraph("Lec", header_cell_style), Paragraph("Lab", header_cell_style), "", "", "", ""],
+            ["", "", "", Paragraph("Lec", header_cell_style), Paragraph("Lab", header_cell_style), "", "", ""],
         ]
         curriculum_codes_this_section = {r[0] for r in rows}
         section_rows = []
@@ -696,9 +697,8 @@ def build_pos_pdf(
                 Paragraph(_requisite_display_text(prereq).replace("&", "&amp;") or " ", cell_style_center),
                 Paragraph(_requisite_display_text(coreq).replace("&", "&amp;") or " ", cell_style_center),
                 _grade_cell(grade),
-                _remark_cell(grade),
             ])
-        table_data.append(["Total", "", str(sum_units), str(sum_lec), str(sum_lab), "", "", "", ""])
+        table_data.append(["Total", "", str(sum_units), str(sum_lec), str(sum_lab), "", "", ""])
 
         t = Table(table_data, colWidths=col_widths, repeatRows=0)
         ncols = len(col_widths)
@@ -725,7 +725,6 @@ def build_pos_pdf(
                 ("SPAN", (5, 2), (5, 3)),
                 ("SPAN", (6, 2), (6, 3)),
                 ("SPAN", (7, 2), (7, 3)),
-                ("SPAN", (8, 2), (8, 3)),
                 ("FONTNAME", (0, 2), (-1, 3), "Times-Bold"),
                 ("ALIGN", (0, 2), (-1, 3), "CENTER"),
                 ("VALIGN", (0, 2), (-1, 3), "MIDDLE"),
@@ -743,7 +742,6 @@ def build_pos_pdf(
                 ("ALIGN", (2, 2), (4, -1), "CENTER"),
                 ("ALIGN", (5, 2), (6, -1), "CENTER"),
                 ("ALIGN", (7, 2), (7, -1), "CENTER"),
-                ("ALIGN", (8, 2), (8, -1), "CENTER"),
                 ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
                 ("LEFTPADDING", (0, 0), (-1, -1), 4),
                 ("RIGHTPADDING", (0, 0), (-1, -1), 4),
@@ -908,7 +906,6 @@ def build_generated_pos_pdf(
                 Paragraph("<b>Pre-requisite(s)</b>", header_cell_style),
                 Paragraph("<b>Co-requisite(s)</b>", header_cell_style),
                 Paragraph("<b>Grade</b>", header_cell_style),
-                Paragraph("<b>Remarks</b>", header_cell_style),
             ]
         ]
 
@@ -930,17 +927,6 @@ def build_generated_pos_pdf(
             if boundary_section_index is not None and ui_section_index is not None and ui_section_index > boundary_section_index:
                 grade_str = ""
 
-            remark_str = ""
-            if grade_str:
-                try:
-                    gv = float(grade_str)
-                    if gv <= 3.00:
-                        remark_str = "Passed"
-                    elif gv == 5.0:
-                        remark_str = "Failed"
-                except (ValueError, TypeError):
-                    remark_str = ""
-
             table_data.append(
                 [
                     Paragraph(display_pos_course_code(code).replace("&", "&amp;"), cell_style_center),
@@ -951,7 +937,6 @@ def build_generated_pos_pdf(
                     Paragraph(_requisite_display_text((prereq or "").replace("&", "&amp;")) if prereq else " ", cell_style_center),
                     Paragraph(_requisite_display_text((coreq or "").replace("&", "&amp;")) if coreq else " ", cell_style_center),
                     _grade_cell(grade_str),
-                    _remark_cell(grade_str),
                 ]
             )
 
@@ -967,7 +952,6 @@ def build_generated_pos_pdf(
                 1.0 * inch,   # prereq
                 1.0 * inch,   # coreq
                 0.5 * inch,   # grade
-                0.7 * inch,   # remarks
             ],
             repeatRows=1,
         )
@@ -1217,9 +1201,8 @@ def build_preview_pos_pdf(
                 Paragraph("Prerequisite(s)", header_cell_style),
                 Paragraph("Co-requisite(s)", header_cell_style),
                 Paragraph("Grade", header_cell_style),
-                Paragraph("Remarks", header_cell_style),
             ],
-            ["", "", "", Paragraph("Lec", header_cell_style), Paragraph("Lab", header_cell_style), "", "", "", ""],
+            ["", "", "", Paragraph("Lec", header_cell_style), Paragraph("Lab", header_cell_style), "", "", ""],
         ]
 
         sum_units = 0
@@ -1249,7 +1232,6 @@ def build_preview_pos_pdf(
                 Paragraph(_requisite_display_text(prereq).replace("&", "&amp;") or " ", cell_style_center),
                 Paragraph(_requisite_display_text(coreq).replace("&", "&amp;") or " ", cell_style_center),
                 _grade_cell(grade),
-                _remark_cell_from_grade(grade),
             ])
 
         # Only show Total Units; leave Lec/Lab totals blank (matches requirement).
@@ -1265,7 +1247,7 @@ def build_preview_pos_pdf(
                 total_units_display = str(int(round(float(sum_units))))
             except (TypeError, ValueError):
                 total_units_display = "0"
-        table_data.append(["Total", "", total_units_display, "", "", "", "", "", ""])
+        table_data.append(["Total", "", total_units_display, "", "", "", "", ""])
 
         t = Table(table_data, colWidths=col_widths, repeatRows=0)
         ncols = len(col_widths)
@@ -1292,7 +1274,6 @@ def build_preview_pos_pdf(
                 ("SPAN", (5, 2), (5, 3)),
                 ("SPAN", (6, 2), (6, 3)),
                 ("SPAN", (7, 2), (7, 3)),
-                ("SPAN", (8, 2), (8, 3)),
                 ("FONTNAME", (0, 2), (-1, 3), "Times-Bold"),
                 ("ALIGN", (0, 2), (-1, 3), "CENTER"),
                 ("VALIGN", (0, 2), (-1, 3), "MIDDLE"),
@@ -1310,7 +1291,6 @@ def build_preview_pos_pdf(
                 ("ALIGN", (2, 2), (4, -1), "CENTER"),
                 ("ALIGN", (5, 2), (6, -1), "CENTER"),
                 ("ALIGN", (7, 2), (7, -1), "CENTER"),
-                ("ALIGN", (8, 2), (8, -1), "CENTER"),
                 ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
                 ("LEFTPADDING", (0, 0), (-1, -1), 4),
                 ("RIGHTPADDING", (0, 0), (-1, -1), 4),

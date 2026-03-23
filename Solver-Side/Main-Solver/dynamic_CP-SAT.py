@@ -2,8 +2,22 @@ import sys
 import importlib.util
 from pathlib import Path
 
-# Add project root to path so shared modules can be imported
-_root = Path(__file__).resolve().parent.parent
+# Ensure solver settings can be imported in all runtimes (direct/runpy).
+try:
+    import solver_settings  # noqa: F401
+except ModuleNotFoundError:
+    _settings_path = Path(__file__).resolve().with_name("solver_settings.py")
+    _settings_spec = importlib.util.spec_from_file_location("solver_settings", _settings_path)
+    if _settings_spec is not None and _settings_spec.loader is not None:
+        _settings_module = importlib.util.module_from_spec(_settings_spec)
+        _settings_spec.loader.exec_module(_settings_module)
+        sys.modules["solver_settings"] = _settings_module
+
+# Add import roots so modules are found both when run directly and via runpy.
+_main_solver_dir = Path(__file__).resolve().parent
+_root = _main_solver_dir.parent
+if str(_main_solver_dir) not in sys.path:
+    sys.path.insert(0, str(_main_solver_dir))
 if str(_root) not in sys.path:
     sys.path.insert(0, str(_root))
 
