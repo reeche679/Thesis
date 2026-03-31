@@ -1,0 +1,35 @@
+# =============================================================================
+# OPTIONAL PRODUCTION TOPOLOGY — nginx in Docker in front of Gunicorn (port 8080).
+# Use this if you want nginx inside Compose instead of Apache on the host.
+# Default VPS setup in your plan: docker-compose.prod.yml (Apache on host, one web container).
+# =============================================================================
+# Run: docker compose -f docker-compose.nginx.yml up -d --build
+# Open http://127.0.0.1:8080  |  ngrok: ngrok http 8080
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: dockerfile
+    expose:
+      - "8000"
+    volumes:
+      - ./Django-Back-Front/staticfiles:/app/Django-Back-Front/staticfiles
+      - ./Django-Back-Front/media:/app/Django-Back-Front/media
+      - ./Django-Back-Front/db.sqlite3:/app/Django-Back-Front/db.sqlite3
+    environment:
+      DEBUG: "0"
+      SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-127.0.0.1,localhost}
+      CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-}
+      # Set to 1 when behind ngrok/HTTPS (Cloudflare); leave 0 for plain http://127.0.0.1:8080 or cookies break
+      USE_TRUSTED_REVERSE_PROXY: ${USE_TRUSTED_REVERSE_PROXY:-0}
+
+  proxy:
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      - web

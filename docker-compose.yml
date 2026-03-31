@@ -1,0 +1,22 @@
+# =============================================================================
+# LOCAL / DEV — quick run on your machine (same image as production).
+# For the actual VPS deployment use: docker-compose.prod.yml
+# =============================================================================
+services:
+  web:
+    build:
+      context: .
+      dockerfile: dockerfile
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - ./Django-Back-Front/staticfiles:/app/Django-Back-Front/staticfiles
+      - ./Django-Back-Front/media:/app/Django-Back-Front/media
+      - ./Django-Back-Front/db.sqlite3:/app/Django-Back-Front/db.sqlite3
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf
+    environment:
+      DEBUG: "0"
+      SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-127.0.0.1,localhost}
+      CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-}
+      USE_TRUSTED_REVERSE_PROXY: ${USE_TRUSTED_REVERSE_PROXY:-0}

@@ -6,6 +6,7 @@ import re
 import os
 import copy
 import math
+from pathlib import Path
 from django.conf import settings
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
@@ -19,6 +20,33 @@ from .solver_bridge import generate_pos_via_solver, validate_pos_via_solver, get
 
 SR_CODE_REGEX = re.compile(r'^\d{2}-\d{5}$')
 EMAIL_REGEX = re.compile(r'^\d{2}-\d{5}@g\.batstate-u\.edu\.ph$')
+
+
+_DEBUG_41755C_LOG_PATH = Path(__file__).resolve().parents[2] / "debug-41755c.log"
+
+
+def _dbg41755c(hypothesis_id: str, location: str, message: str, data: dict, run_id: str = "run1"):
+    # #region agent log
+    try:
+        with _DEBUG_41755C_LOG_PATH.open("a", encoding="utf-8") as f:
+            f.write(
+                json.dumps(
+                    {
+                        "sessionId": "41755c",
+                        "runId": run_id,
+                        "hypothesisId": hypothesis_id,
+                        "location": location,
+                        "message": message,
+                        "data": data,
+                        "timestamp": int(__import__("time").time() * 1000),
+                    },
+                    ensure_ascii=True,
+                )
+                + "\n"
+            )
+    except Exception:
+        pass
+    # #endregion
 
 
 def _is_password_strong(password):
@@ -1437,6 +1465,18 @@ def feasible_move_marks(request):
         data = json.loads(request.body)
     except json.JSONDecodeError:
         return JsonResponse({"ok": False, "error": "Invalid JSON"}, status=400)
+    # #region agent log
+    _dbg41755c(
+        "H2",
+        "views.py:feasible_move_marks:parsedBody",
+        "request parsed for feasible marks",
+        {
+            "hasDataDict": isinstance(data, dict),
+            "keys": sorted(list(data.keys())) if isinstance(data, dict) else [],
+            "hasCourseCode": bool(isinstance(data, dict) and data.get("course_code")),
+        },
+    )
+    # #endregion
 
     if not isinstance(data, dict):
         return JsonResponse({"ok": False, "error": "Expected JSON object"}, status=400)
@@ -1531,6 +1571,18 @@ def feasible_move_marks(request):
                     candidate_codes.add(code_ui)
 
     editable_sem_indices = sorted(set(editable_sem_indices))
+    # #region agent log
+    _dbg41755c(
+        "H4",
+        "views.py:feasible_move_marks:editableSemesters",
+        "computed editable semesters and candidates",
+        {
+            "editableSemCount": len(editable_sem_indices),
+            "candidateCodeCount": len(candidate_codes),
+            "courseCodeUi": course_code_ui,
+        },
+    )
+    # #endregion
     if not editable_sem_indices:
         # Nothing is draggable in the current DOM state.
         if course_code_ui:
@@ -1569,6 +1621,19 @@ def feasible_move_marks(request):
             forced_semester_map=forced_map,
         )
         ok = (result.get("status") == "ok")
+        # #region agent log
+        _dbg41755c(
+            "H5",
+            "views.py:feasible_move_marks:solverCheck",
+            "solver feasibility check finished",
+            {
+                "solverCode": solver_code,
+                "destSemester": int(dest_si),
+                "status": result.get("status"),
+                "ok": bool(ok),
+            },
+        )
+        # #endregion
         feasibility_memo[key] = bool(ok)
         return feasibility_memo[key]
 

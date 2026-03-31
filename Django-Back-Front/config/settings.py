@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
+import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -20,12 +21,35 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-%_33$(i#xpxax&hi*swbaq(l%=rk&3dh)(+29uzt96s4u+gas1'
+SECRET_KEY = os.environ.get(
+    "SECRET_KEY",
+    "django-insecure-dev-only-change-with-SECRET_KEY-env-in-production",
+)
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+_debug = os.environ.get("DEBUG", "False").strip().lower()
+DEBUG = _debug in ("1", "true", "yes", "on")
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', '*']  # '*' allows phone access on same Wi-Fi (dev only)
+_allowed = os.environ.get("ALLOWED_HOSTS", "localhost,127.0.0.1,*")
+ALLOWED_HOSTS = [h.strip() for h in _allowed.split(",") if h.strip()]
+
+# Required for HTTPS sites (e.g. Cloudflare). Comma-separated, e.g.
+# CSRF_TRUSTED_ORIGINS=https://example.com,https://www.example.com
+_csrf = os.environ.get("CSRF_TRUSTED_ORIGINS", "")
+CSRF_TRUSTED_ORIGINS = [o.strip() for o in _csrf.split(",") if o.strip()]
+
+# When behind Apache/nginx/Cloudflare (trusted), set USE_TRUSTED_REVERSE_PROXY=1
+_use_proxy = os.environ.get("USE_TRUSTED_REVERSE_PROXY", "").strip().lower()
+if _use_proxy in ("1", "true", "yes", "on"):
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    # If a proxy sets a wrong X-Forwarded-Host (common behind ngrok + Apache), Django returns 400.
+    # Default 0: use the Host header (curl works; ngrok+mobile failed when this was 1 and X-Forwarded-Host mismatched).
+    # Set USE_X_FORWARDED_HOST=1 only if you rely on X-Forwarded-Host and trust its value.
+    _xf_host = os.environ.get("USE_X_FORWARDED_HOST", "0").strip().lower()
+    USE_X_FORWARDED_HOST = _xf_host in ("1", "true", "yes", "on")
+    if not DEBUG:
+        SESSION_COOKIE_SECURE = True
+        CSRF_COOKIE_SECURE = True
 
 
 # Application definition
@@ -44,6 +68,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -118,15 +143,16 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
-STATIC_URL = 'static/'
+# Leading slash so {% static %} URLs resolve correctly behind Gunicorn / reverse proxies
+STATIC_URL = "/static/"
 
 # Additional locations of static files
 STATICFILES_DIRS = [
-    BASE_DIR / 'static',
+    BASE_DIR / "static",
 ]
 
 # Directory where static files will be collected for production
-STATIC_ROOT = BASE_DIR / 'staticfiles'
+STATIC_ROOT = BASE_DIR / "staticfiles"
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
@@ -134,5 +160,5 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # User-uploaded files (e.g. student photos)
-MEDIA_URL = 'media/'
-MEDIA_ROOT = BASE_DIR / 'media'
+MEDIA_URL = "/media/"
+MEDIA_ROOT = BASE_DIR / "media"

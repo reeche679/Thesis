@@ -1,0 +1,26 @@
+# =============================================================================
+# PRODUCTION — use this on the VPS (with .env on the server, never commit secrets).
+# Gunicorn on :8000 bound to localhost; Apache (or nginx) on the host terminates TLS
+# and reverse-proxies to 127.0.0.1:8000 (see your deployment plan).
+#
+#   docker compose -f docker-compose.prod.yml up -d --build
+#
+# Loads environment from `.env.prod` in the same directory (not Windows C:\ paths —
+# on Ubuntu your project lives e.g. /home/reeche/Thesis_for_Deployment).
+# =============================================================================
+services:
+  web:
+    build:
+      context: .
+      dockerfile: dockerfile
+    env_file:
+      - .env.prod
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - ./Django-Back-Front/staticfiles:/app/Django-Back-Front/staticfiles
+      - ./Django-Back-Front/media:/app/Django-Back-Front/media
+      - ./Django-Back-Front/db.sqlite3:/app/Django-Back-Front/db.sqlite3
+    restart: unless-stopped
+    environment:
+      DEBUG: "0"
