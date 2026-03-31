@@ -11,15 +11,21 @@ from django.conf import settings
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.http import HttpResponse, HttpResponseBadRequest, JsonResponse
+from django.db.utils import OperationalError, ProgrammingError
 from django.views.decorators.http import require_POST
 from django.views.decorators.csrf import ensure_csrf_cookie, csrf_exempt
 
 from django.utils import timezone
-from accounts.models import Student, StudentGrade, POSRecord
+from accounts.models import Student, StudentGrade, POSRecord, SignatoryOption, SignatoryPreference
 from .solver_bridge import generate_pos_via_solver, validate_pos_via_solver, get_solver_metadata
 
 SR_CODE_REGEX = re.compile(r'^\d{2}-\d{5}$')
-EMAIL_REGEX = re.compile(r'^\d{2}-\d{5}@g\.batstate-u\.edu\.ph$')
+# BSU student email: local part may be SR-style (23-00000) or name-style (e.g. first.last@...); no spaces.
+BSU_STUDENT_EMAIL_SUFFIX = "@g.batstate-u.edu.ph"
+BSU_STUDENT_EMAIL_LOCAL_MAX_LEN = 254 - len(BSU_STUDENT_EMAIL_SUFFIX)
+EMAIL_REGEX = re.compile(
+    rf"^[A-Za-z0-9._-]{{1,{BSU_STUDENT_EMAIL_LOCAL_MAX_LEN}}}{re.escape(BSU_STUDENT_EMAIL_SUFFIX)}$"
+)
 
 
 _DEBUG_41755C_LOG_PATH = Path(__file__).resolve().parents[2] / "debug-41755c.log"
@@ -106,6 +112,106 @@ YEAR_LEVEL_CHOICES = [
     ('4th Year', '4th Year'),
     ('5th Year', '5th Year'),
 ]
+
+SIGNATORY_ROLES = (
+    SignatoryOption.ROLE_ADVISER,
+    SignatoryOption.ROLE_DEPARTMENT_CHAIR,
+    SignatoryOption.ROLE_PROGRAM_CHAIR,
+)
+SIGNATORY_ADMIN_PASSWORD = "Admin123"
+
+DEFAULT_SIGNATORY_SEED = {
+    SignatoryOption.ROLE_ADVISER: [
+        "Engr. LAILA C. HERNANDEZ",
+        "Engr. ANTHONY G. HERNANDEZ",
+        "Engr. JOYCE ANN G. ACOB",
+        "Engr. PHILIP A. CAGUETE",
+        "Engr. RENZ RANIEL V. SERRANO",
+        "Engr. MARK JOHN FEL T. RAYOS",
+        "Engr. ANACIETO N. MERCADO",
+    ],
+    SignatoryOption.ROLE_DEPARTMENT_CHAIR: [
+        "Engr. RICMART V. GARBIN",
+    ],
+    SignatoryOption.ROLE_PROGRAM_CHAIR: [
+        "Engr. MARK JOHN FEL T. RAYOS",
+    ],
+}
+
+
+def _ensure_signatory_options_seeded():
+    try:
+        for role, names in DEFAULT_SIGNATORY_SEED.items():
+            # Seed defaults only when a role has no entries yet.
+            # This prevents deleted names from being re-created on every request.
+            if SignatoryOption.objects.filter(role=role).exists():
+                continue
+            for name in names:
+                SignatoryOption.objects.create(role=role, name=name)
+    except (OperationalError, ProgrammingError):
+        # Table likely not migrated yet; Preview should still work with defaults.
+        return
+
+
+def _get_signatory_options_map():
+    options_map = {role: [] for role in SIGNATORY_ROLES}
+    try:
+        _ensure_signatory_options_seeded()
+        qs = SignatoryOption.objects.filter(role__in=SIGNATORY_ROLES).order_by("role", "name", "id")
+        for opt in qs:
+            options_map.setdefault(opt.role, []).append({"id": opt.id, "name": opt.name})
+    except (OperationalError, ProgrammingError):
+        # Fallback defaults when SignatoryOption table is unavailable.
+        for role, names in DEFAULT_SIGNATORY_SEED.items():
+            options_map[role] = [{"id": None, "name": nm} for nm in names]
+    return options_map
+
+
+def _get_saved_adviser_for_student(student):
+    if student is None:
+        return ""
+    try:
+        pref = SignatoryPreference.objects.filter(student=student).only("adviser_name").first()
+        return (pref.adviser_name or "").strip() if pref else ""
+    except (OperationalError, ProgrammingError):
+        return ""
+
+
+def _set_saved_adviser_for_student(student, adviser_name):
+    if student is None or not adviser_name:
+        return
+    try:
+        pref, _created = SignatoryPreference.objects.get_or_create(student=student)
+        if pref.adviser_name != adviser_name:
+            pref.adviser_name = adviser_name
+            pref.save(update_fields=["adviser_name", "updated_at"])
+    except (OperationalError, ProgrammingError):
+        return
+
+
+def _resolve_signatories(request, body=None, required=False):
+    body = body if isinstance(body, dict) else {}
+    body_signatories = body.get("signatories") if isinstance(body.get("signatories"), dict) else {}
+    options_map = _get_signatory_options_map()
+
+    def _pick(role, payload_key):
+        allowed_names = [item["name"] for item in options_map.get(role, [])]
+        if role in (SignatoryOption.ROLE_DEPARTMENT_CHAIR, SignatoryOption.ROLE_PROGRAM_CHAIR):
+            return allowed_names[0] if allowed_names else ""
+        candidate = (request.GET.get(payload_key) or body_signatories.get(payload_key) or "").strip()
+        if candidate and candidate in allowed_names:
+            return candidate
+        if required:
+            return ""
+        if role == SignatoryOption.ROLE_ADVISER:
+            return ""
+        return allowed_names[0] if allowed_names else ""
+
+    return {
+        "adviser": _pick(SignatoryOption.ROLE_ADVISER, "adviser"),
+        "department_chair": _pick(SignatoryOption.ROLE_DEPARTMENT_CHAIR, "department_chair"),
+        "program_chair": _pick(SignatoryOption.ROLE_PROGRAM_CHAIR, "program_chair"),
+    }
 
 
 def _has_academic_term(request):
@@ -1039,6 +1145,39 @@ def pos_generate(request):
     semester_tables_visible = len(display_sections) > 0
     pos_reload_banner = bool(pos_reload_pending and not is_regular and semester_tables_visible)
 
+    # "Last Semester Enrolled" dropdown cap on Generate page:
+    # - default: up to 5th Year 2nd Sem (index 13)
+    # - extend to 6th+ only when a loaded POS from history actually contains those semesters
+    dropdown_max_generate = SECTION_INDEX_MAX_DROPDOWN_GENERATE
+    if bool(request.session.get('pos_loaded_from_history')):
+        loaded_max_si = -1
+        loaded_preview_ui_sections = request.session.get("pos_loaded_preview_ui_sections") or {}
+        if isinstance(loaded_preview_ui_sections, dict) and loaded_preview_ui_sections:
+            for k, courses in loaded_preview_ui_sections.items():
+                try:
+                    si = int(k)
+                except (TypeError, ValueError):
+                    continue
+                if si < 0:
+                    continue
+                if isinstance(courses, list) and any(
+                    (c.get("code") if isinstance(c, dict) else None) for c in courses
+                ):
+                    loaded_max_si = max(loaded_max_si, si)
+        if loaded_max_si < 0:
+            loaded_max_si = _max_ui_section_from_grades_and_pos(
+                saved_grades_by_section,
+                request.session.get("last_generated_pos") or [],
+            )
+        if loaded_max_si > dropdown_max_generate:
+            dropdown_max_generate = loaded_max_si
+    dropdown_max_generate = min(dropdown_max_generate, len(curriculum_sections) - 1)
+
+    current_semester_choices_regular = [
+        c for c in CURRENT_SEMESTER_CHOICES
+        if c[0] <= dropdown_max_generate and c[0] != SECOND_YEAR_MIDTERM_INDEX
+    ]
+
     context = {
         'student': student,
         'has_generated_pos': has_generated_pos,
@@ -1056,8 +1195,8 @@ def pos_generate(request):
         'session_semester': request.session.get('semester', ''),
         'session_year_level': year_level,
         'curriculum_sections': curriculum_sections,
-        'curriculum_sections_dropdown': curriculum_sections[:SECTION_INDEX_MAX_DROPDOWN_GENERATE + 1],
-        'current_semester_choices_regular': CURRENT_SEMESTER_CHOICES_REGULAR,
+        'curriculum_sections_dropdown': curriculum_sections[:dropdown_max_generate + 1],
+        'current_semester_choices_regular': current_semester_choices_regular,
         'current_semester_index': next_section_index,
         'preview_sections': preview_sections,
         'display_sections': display_sections,
@@ -1188,7 +1327,7 @@ def validate_pos(request):
             if _is_passing_grade(grade):
                 continue
             failed_u += units
-        if total_u <= 0:
+        if total_u < 10:
             continue
         ratio = failed_u / total_u
         if ratio >= 0.75:
@@ -1296,14 +1435,16 @@ def generate_pos_api(request):
     try:
         student = get_logged_in_student(request)
         if student is not None and isinstance(result, dict):
-            # Once the user generates a brand-new POS, it is no longer coming from a history-load state.
-            request.session.pop('pos_loaded_from_history', None)
-            request.session["last_generated_pos"] = result.get("pos") or []
-            if isinstance(result.get("pos_options"), dict):
-                request.session["last_generated_pos_options"] = result.get("pos_options")
-            if result.get("default_petition_mode"):
-                request.session["last_selected_petition_mode"] = result.get("default_petition_mode")
-            request.session["last_generated_payload"] = payload
+            status = str(result.get("status") or "").strip().lower()
+            # Keep loaded-table context intact across Generate attempts.
+            # This preserves user-edited/loaded semester rows on Generate page.
+            if status == "ok":
+                request.session["last_generated_pos"] = result.get("pos") or []
+                if isinstance(result.get("pos_options"), dict):
+                    request.session["last_generated_pos_options"] = result.get("pos_options")
+                if result.get("default_petition_mode"):
+                    request.session["last_selected_petition_mode"] = result.get("default_petition_mode")
+                request.session["last_generated_payload"] = payload
     except Exception:
         pass
 
@@ -2364,6 +2505,24 @@ def pos_preview(request):
     student = get_logged_in_student(request)
     grades_by_section = _saved_grades_by_section(student)
     preview_sections = _preview_sections_from_curriculum(grades_by_section)
+    generated_pos = request.session.get("last_generated_pos") or []
+
+    def _has_generated_schedule(pos_rows):
+        if not isinstance(pos_rows, list):
+            return False
+        for sem in pos_rows:
+            if not isinstance(sem, dict):
+                continue
+            for c in (sem.get("courses") or []):
+                if isinstance(c, dict) and (c.get("code") or "").strip():
+                    return True
+        return False
+
+    has_generated_preview = _has_generated_schedule(generated_pos)
+    if not has_generated_preview:
+        # New users (or users who have not generated POS in this session) should
+        # see an empty-state prompt instead of curriculum preview tables.
+        preview_sections = []
     # For solver-generated future semesters we only get course codes back.
     # Provide a lookup so the preview tables can still show lec/lab/pre/core fields.
     course_lookup_tuple = _course_lookup_from_curriculum()
@@ -2378,12 +2537,35 @@ def pos_preview(request):
         }
         for code, info in course_lookup_tuple.items()
     }
+    signatory_options = _get_signatory_options_map()
+    session_signatories = request.session.get("preview_signatories") or {}
+    student_adviser_key = f"adviser_name_student_{student.pk}"
+    stored_adviser = _get_saved_adviser_for_student(student) or (request.session.get(student_adviser_key) or "").strip()
+    if stored_adviser:
+        session_signatories = dict(session_signatories)
+        session_signatories["adviser"] = stored_adviser
+    selected_signatories = _resolve_signatories(
+        request,
+        body={"signatories": session_signatories},
+    )
+    adviser_names = [item["name"] for item in signatory_options.get(SignatoryOption.ROLE_ADVISER, [])]
+    if selected_signatories.get("adviser") not in adviser_names:
+        selected_signatories["adviser"] = ""
+
+    # Department/Program chairs are global fixed defaults.
+    dep_options = signatory_options.get(SignatoryOption.ROLE_DEPARTMENT_CHAIR, [])
+    prog_options = signatory_options.get(SignatoryOption.ROLE_PROGRAM_CHAIR, [])
+    selected_signatories["department_chair"] = dep_options[0]["name"] if dep_options else ""
+    selected_signatories["program_chair"] = prog_options[0]["name"] if prog_options else ""
     context = {
         'student': student,
         'preview_sections': preview_sections,
         'course_lookup': course_lookup,
         'session_academic_year': request.session.get('academic_year', ''),
         'session_semester': request.session.get('semester', ''),
+        'signatory_options': signatory_options,
+        'selected_signatories': selected_signatories,
+        'has_generated_preview': has_generated_preview,
     }
     return render(request, "pos/preview_pos.html", context)
 
@@ -2417,6 +2599,13 @@ def download_pos_pdf(request):
             request.session.get('year_level'),
             request.session.get('semester'),
         )
+    signatories = _resolve_signatories(request, required=True)
+    if not all(signatories.values()):
+        return HttpResponseBadRequest("Please select Adviser, Department Chair, and Program Chair before downloading PDF.")
+    if signatories.get("adviser"):
+        request.session[f"adviser_name_student_{student.pk}"] = signatories["adviser"]
+        _set_saved_adviser_for_student(student, signatories["adviser"])
+    request.session["preview_signatories"] = dict(signatories)
 
     # Match Preview exactly: past/current semesters come from `preview_sections`,
     # while future semesters are appended from the last solver-generated POS.
@@ -2437,6 +2626,9 @@ def download_pos_pdf(request):
         preview_sections=preview_sections,
         future_pos=generated_pos,
         logo_path=logo_path,
+        adviser_name=signatories["adviser"],
+        department_chair_name=signatories["department_chair"],
+        program_chair_name=signatories["program_chair"],
     )
     # Keep filename format requested: `academic_year sr code`.
     filename = f"{academic_year_safe} {sr_code_safe}.pdf"
@@ -2473,10 +2665,18 @@ def save_preview_pos_to_history(request):
         body = json.loads(body_raw) if body_raw.strip() else {}
     except Exception:
         body = {}
+    signatories = _resolve_signatories(request, body=body, required=True)
+    if not all(signatories.values()):
+        return JsonResponse({"ok": False, "error": "Please select Adviser, Department Chair, and Program Chair before saving."}, status=400)
+    if signatories.get("adviser"):
+        request.session[f"adviser_name_student_{student.pk}"] = signatories["adviser"]
+        _set_saved_adviser_for_student(student, signatories["adviser"])
+    request.session["preview_signatories"] = dict(signatories)
     preview_ui_sections = body.get("preview_ui_sections") or body.get("preview_sections") or {}
     if isinstance(preview_ui_sections, dict):
         # Keys should be UI section indices; JSON forces them to be strings.
         snap["preview_ui_sections"] = preview_ui_sections
+    snap["signatories"] = signatories
 
     last = POSRecord.objects.filter(student=student).order_by('-generated_at').first()
     if last is not None and last.preview_snapshot == snap:
@@ -2495,6 +2695,129 @@ def save_preview_pos_to_history(request):
     _prune_old_pos_records(student)
 
     return JsonResponse({"ok": True, "saved": True, "record_id": record.pk})
+
+
+@_require_student
+def get_signatory_options(request):
+    options_map = _get_signatory_options_map()
+    return JsonResponse({"ok": True, "options": options_map})
+
+
+@csrf_exempt
+@_require_student
+@require_POST
+def add_signatory_option(request):
+    try:
+        body_raw = request.body.decode("utf-8") if request.body else ""
+        body = json.loads(body_raw) if body_raw.strip() else {}
+    except Exception:
+        body = {}
+
+    role = (body.get("role") or "").strip()
+    name = (body.get("name") or "").strip()
+    admin_password = (body.get("admin_password") or "").strip()
+    if admin_password != SIGNATORY_ADMIN_PASSWORD:
+        return JsonResponse({"ok": False, "error": "Invalid admin password."}, status=403)
+    if role not in SIGNATORY_ROLES:
+        return JsonResponse({"ok": False, "error": "Invalid role."}, status=400)
+    if not name:
+        return JsonResponse({"ok": False, "error": "Name is required."}, status=400)
+
+    try:
+        option, created = SignatoryOption.objects.get_or_create(role=role, name=name)
+    except (OperationalError, ProgrammingError):
+        return JsonResponse({"ok": False, "error": "Signatory storage is not ready yet. Please run migrations."}, status=500)
+    return JsonResponse(
+        {
+            "ok": True,
+            "created": created,
+            "option": {"id": option.id, "name": option.name, "role": option.role},
+            "options": _get_signatory_options_map(),
+        }
+    )
+
+
+@csrf_exempt
+@_require_student
+@require_POST
+def delete_signatory_option(request):
+    try:
+        body_raw = request.body.decode("utf-8") if request.body else ""
+        body = json.loads(body_raw) if body_raw.strip() else {}
+    except Exception:
+        body = {}
+
+    role = (body.get("role") or "").strip()
+    option_id = body.get("id")
+    admin_password = (body.get("admin_password") or "").strip()
+    if admin_password != SIGNATORY_ADMIN_PASSWORD:
+        return JsonResponse({"ok": False, "error": "Invalid admin password."}, status=403)
+    if role not in SIGNATORY_ROLES:
+        return JsonResponse({"ok": False, "error": "Invalid role."}, status=400)
+    if option_id in (None, ""):
+        return JsonResponse({"ok": False, "error": "Option id is required."}, status=400)
+
+    try:
+        option = SignatoryOption.objects.get(pk=int(option_id), role=role)
+    except (ValueError, TypeError, SignatoryOption.DoesNotExist):
+        return JsonResponse({"ok": False, "error": "Signatory option not found."}, status=404)
+    except (OperationalError, ProgrammingError):
+        return JsonResponse({"ok": False, "error": "Signatory storage is not ready yet. Please run migrations."}, status=500)
+
+    try:
+        option.delete()
+    except (OperationalError, ProgrammingError):
+        return JsonResponse({"ok": False, "error": "Signatory storage is not ready yet. Please run migrations."}, status=500)
+    return JsonResponse({"ok": True, "options": _get_signatory_options_map()})
+
+
+@csrf_exempt
+@_require_student
+@require_POST
+def update_signatory_option(request):
+    try:
+        body_raw = request.body.decode("utf-8") if request.body else ""
+        body = json.loads(body_raw) if body_raw.strip() else {}
+    except Exception:
+        body = {}
+
+    role = (body.get("role") or "").strip()
+    option_id = body.get("id")
+    new_name = (body.get("name") or "").strip()
+    admin_password = (body.get("admin_password") or "").strip()
+    if admin_password != SIGNATORY_ADMIN_PASSWORD:
+        return JsonResponse({"ok": False, "error": "Invalid admin password."}, status=403)
+    if role not in SIGNATORY_ROLES:
+        return JsonResponse({"ok": False, "error": "Invalid role."}, status=400)
+    if option_id in (None, ""):
+        return JsonResponse({"ok": False, "error": "Option id is required."}, status=400)
+    if not new_name:
+        return JsonResponse({"ok": False, "error": "Name is required."}, status=400)
+
+    try:
+        option = SignatoryOption.objects.get(pk=int(option_id), role=role)
+    except (ValueError, TypeError, SignatoryOption.DoesNotExist):
+        return JsonResponse({"ok": False, "error": "Signatory option not found."}, status=404)
+    except (OperationalError, ProgrammingError):
+        return JsonResponse({"ok": False, "error": "Signatory storage is not ready yet. Please run migrations."}, status=500)
+
+    try:
+        duplicate = SignatoryOption.objects.filter(role=role, name=new_name).exclude(pk=option.pk).exists()
+        if duplicate:
+            return JsonResponse({"ok": False, "error": "That name already exists."}, status=400)
+        old_name = option.name
+        option.name = new_name
+        option.save(update_fields=["name"])
+
+        # Keep per-account saved adviser names in sync when a name is edited.
+        try:
+            SignatoryPreference.objects.filter(adviser_name=old_name).update(adviser_name=new_name)
+        except Exception:
+            pass
+    except (OperationalError, ProgrammingError):
+        return JsonResponse({"ok": False, "error": "Signatory storage is not ready yet. Please run migrations."}, status=500)
+
+    return JsonResponse({"ok": True, "options": _get_signatory_options_map()})
 
 
 @_require_student
@@ -2564,6 +2887,12 @@ def download_pos_pdf_record(request, record_id):
                 continue
         generated_pos = snap.get("generated_pos") if isinstance(snap.get("generated_pos"), list) else []
         boundary = snap.get("preview_boundary_section_index")
+        signatories_raw = snap.get("signatories") if isinstance(snap.get("signatories"), dict) else {}
+        signatories = _resolve_signatories(
+            request,
+            body={"signatories": signatories_raw},
+            required=False,
+        )
         preview_sections = _preview_sections_from_curriculum(grades_by_section)
         from .pos_pdf import build_preview_pos_pdf
         pdf_bytes = build_preview_pos_pdf(
@@ -2574,6 +2903,9 @@ def download_pos_pdf_record(request, record_id):
             preview_sections=preview_sections,
             future_pos=generated_pos,
             logo_path=logo_path,
+            adviser_name=signatories["adviser"],
+            department_chair_name=signatories["department_chair"],
+            program_chair_name=signatories["program_chair"],
         )
     else:
         snapshot = getattr(record, 'grades_snapshot', None) or {}
@@ -2746,7 +3078,10 @@ def register_view(request):
         if not email:
             errors.append('Email is required.')
         elif not EMAIL_REGEX.match(email):
-            errors.append('Please enter a valid email (e.g. 23-00000@g.batstate-u.edu.ph).')
+            errors.append(
+                'Please enter a valid BSU email local part (letters, numbers, dots, _ or -; no spaces), '
+                'e.g. 23-00000 or knudcen.gradly.de.villa, with domain @g.batstate-u.edu.ph.'
+            )
         if not password:
             errors.append('Password is required.')
         elif not _is_password_strong(password):

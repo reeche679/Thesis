@@ -1015,6 +1015,9 @@ def build_preview_pos_pdf(
     eval_date=None,
     logo_path=None,
     boundary_section_index=None,
+    adviser_name="Engr. LAILA C. HERNANDEZ",
+    department_chair_name="Engr. RICMART V. GARBIN",
+    program_chair_name="Engr. MARK JOHN FEL T. RAYOS",
 ):
     """
     Build POS PDF that mirrors the Preview page:
@@ -1405,17 +1408,48 @@ def build_preview_pos_pdf(
         story.append(_render_section_table(label, future_rows, total_units_value=total_units_value))
         story.append(Paragraph("Evaluated by: ______________________________", evaluated_style))
 
-    # Footer/signatories (same as build_pos_pdf)
+    # Footer/signatories in a single row (3 columns).
     story.append(Spacer(1, 0.4 * inch))
-    story.append(Paragraph("Checked and Reviewed:", sign_style))
-    story.append(Paragraph("<b>Engr. MARK JOHN FEL T. RAYOS</b>", sign_name_style))
-    story.append(Paragraph("Program Chair, CpE Program", sign_style))
-    story.append(Paragraph("Date:", sign_style))
-    story.append(Spacer(1, 0.12 * inch))
-    story.append(Paragraph("Approved by:", sign_style))
-    story.append(Paragraph("<b>Engr. RICMART V. GARBIN</b>", sign_name_style))
-    story.append(Paragraph("Department Chair, EE Department", sign_style))
-    story.append(Paragraph("Date:", sign_style))
+    sign_table_data = [
+        [
+            Paragraph("Checked and Reviewed:", sign_style),
+            Paragraph("Checked and Reviewed:", sign_style),
+            Paragraph("Approved by:", sign_style),
+        ],
+        [
+            Spacer(1, 0.08 * inch),
+            Spacer(1, 0.08 * inch),
+            Spacer(1, 0.08 * inch),
+        ],
+        [
+            Paragraph("<b>{}</b>".format(adviser_name), sign_name_style),
+            Paragraph("<b>{}</b>".format(program_chair_name), sign_name_style),
+            Paragraph("<b>{}</b>".format(department_chair_name), sign_name_style),
+        ],
+        [
+            Paragraph("Adviser", sign_style),
+            Paragraph("Program Chair, CpE Program", sign_style),
+            Paragraph("Department Chair, EE Department", sign_style),
+        ],
+        [
+            Paragraph("Date:", sign_style),
+            Paragraph("Date:", sign_style),
+            Paragraph("Date:", sign_style),
+        ],
+    ]
+    sign_table = Table(sign_table_data, colWidths=[doc.width / 3.0] * 3, hAlign="LEFT")
+    sign_table.setStyle(
+        TableStyle(
+            [
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+                ("TOPPADDING", (0, 0), (-1, -1), 0),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+            ]
+        )
+    )
+    story.append(sign_table)
 
     def page_canvas(canvas, doc):
         _page_header_canvas(canvas, logo_path)

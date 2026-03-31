@@ -245,6 +245,47 @@
         background-color: rgba(255, 255, 255, 0.6);
     }
 
+    /* Registration error popup: dialog above backdrop; backdrop is full-screen gray behind only */
+    #register-error-modal {
+        z-index: 1060 !important;
+    }
+    /* Backdrop sits under #register-error-modal (1060 > 1055) */
+    body > .modal-backdrop {
+        z-index: 1055;
+        background-color: rgba(45, 45, 52, 0.55);
+    }
+    #register-error-modal .modal-content {
+        position: relative;
+        z-index: 1;
+        box-shadow: 0 1rem 2.5rem rgba(0, 0, 0, 0.22), 0 0 0 1px rgba(0, 0, 0, 0.06);
+        border: 1px solid rgba(0, 0, 0, 0.1);
+    }
+    #register-error-modal .modal-header {
+        background-color: #b00020;
+        color: #fff;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+        padding: 0.8rem 0.85rem;
+        min-height: 2;
+    }
+    #register-error-modal .modal-title {
+        color: #fff;
+        font-size: 0.9rem;
+        line-height: 1.25;
+        font-weight: 600;
+    }
+    #register-error-modal .modal-dialog {
+        margin-top: 1rem;
+        max-width: 680px;
+    }
+    #register-error-modal:not(.fade) .modal-dialog {
+        transform: none;
+        transition: none;
+    }
+    #register-error-modal-body {
+        white-space: pre-line;
+        color: #7a0015;
+    }
+
     /* Footer: disable horizontal scrolling on auth pages */
     .pos-footer .container {
         overflow-x: hidden !important;
@@ -252,6 +293,39 @@
 </style>
 <script>
     document.addEventListener('DOMContentLoaded', function() {
+        const registerErrorModalEl = document.getElementById('register-error-modal');
+        const registerErrorModalBody = document.getElementById('register-error-modal-body');
+        if (registerErrorModalEl && registerErrorModalEl.parentNode !== document.body) {
+            document.body.appendChild(registerErrorModalEl);
+        }
+        const registerErrorModal = (registerErrorModalEl && window.bootstrap)
+            ? new bootstrap.Modal(registerErrorModalEl, { backdrop: true, keyboard: true })
+            : null;
+
+        function showRegisterError(message) {
+            if (registerErrorModalBody) {
+                registerErrorModalBody.textContent = message;
+            }
+            if (registerErrorModal) {
+                registerErrorModal.show();
+            } else {
+                // Fallback only if Bootstrap modal is unavailable.
+                window.alert(message);
+            }
+        }
+
+        const serverErrorsData = document.getElementById('register-server-errors');
+        if (serverErrorsData) {
+            try {
+                const errors = JSON.parse(serverErrorsData.textContent || '[]');
+                if (Array.isArray(errors) && errors.length > 0) {
+                    showRegisterError(errors.join('\n'));
+                }
+            } catch (e) {
+                // Ignore malformed payload silently.
+            }
+        }
+
         const nameFields = ['first_name', 'middle_name', 'last_name'];
         nameFields.forEach(function(fieldId) {
             const field = document.getElementById(fieldId);
@@ -290,6 +364,9 @@
         }
 
         const SR_CODE_REGEX = /^\d{2}-\d{5}$/;
+        const BSU_EMAIL_SUFFIX = '@g.batstate-u.edu.ph';
+        const BSU_EMAIL_LOCAL_MAX_LEN = 254 - BSU_EMAIL_SUFFIX.length;
+        const EMAIL_LOCAL_PATTERN = new RegExp('^[A-Za-z0-9._-]{1,' + BSU_EMAIL_LOCAL_MAX_LEN + '}$');
 
         function isPasswordStrong(pw) {
             if (pw.length < 6) return false;
@@ -310,7 +387,7 @@
                     const value = (el.tagName === 'SELECT') ? el.value : el.value.trim();
                     if (value === '') {
                         el.focus();
-                        alert('Please fill in all fields before creating an account.');
+                        showRegisterError('Please fill in all fields before creating an account.');
                         return;
                     }
                 }
@@ -318,32 +395,33 @@
                 const srCodeEl = document.getElementById('sr_code');
                 if (srCodeEl && !SR_CODE_REGEX.test(srCodeEl.value.trim())) {
                     srCodeEl.focus();
-                    alert('Please enter a valid SR-Code (e.g. 23-00000)');
+                    showRegisterError('Please enter a valid SR-Code e.g. 23-00000');
                     return;
                 }
 
                 const emailLocalEl = document.getElementById('email_local');
                 const emailHiddenEl = document.getElementById('email');
                 if (emailLocalEl && emailHiddenEl) {
-                    const local = emailLocalEl.value.trim();
-                    if (!SR_CODE_REGEX.test(local)) {
+                    const local = emailLocalEl.value.replace(/\s/g, '');
+                    emailLocalEl.value = local;
+                    if (!EMAIL_LOCAL_PATTERN.test(local)) {
                         emailLocalEl.focus();
-                        alert('Please enter a valid SR-Code for email (e.g. 23-00000@g.batstate-u.edu.ph)');
+                        showRegisterError('Please enter a valid BSU email username: letters, numbers, dots, _ or - only (no spaces), up to ' + BSU_EMAIL_LOCAL_MAX_LEN + ' characters before @g.batstate-u.edu.ph.');
                         return;
                     }
-                    emailHiddenEl.value = local + '@g.batstate-u.edu.ph';
+                    emailHiddenEl.value = local + BSU_EMAIL_SUFFIX;
                 }
 
                 const passwordEl = document.getElementById('password');
                 const confirmEl = document.getElementById('confirm_password');
                 if (passwordEl && !isPasswordStrong(passwordEl.value)) {
                     passwordEl.focus();
-                    alert('Password must be at least 6 characters and include uppercase, lowercase, and at least one symbol (e.g. !@#$%).');
+                    showRegisterError('Password must be at least 6 characters and include uppercase, lowercase, and at least one symbol (e.g. !@#$%).');
                     return;
                 }
                 if (passwordEl && confirmEl && passwordEl.value !== confirmEl.value) {
                     confirmEl.focus();
-                    alert('Both passwords must match.');
+                    showRegisterError('Both passwords must match.');
                     return;
                 }
 
@@ -418,9 +496,7 @@
                 <form method="post" action="{% url 'register' %}" id="register-form">
                     {% csrf_token %}
                     {% if errors %}
-                    <div class="alert alert-danger small mb-3" role="alert">
-                        {% for err in errors %}<div>{{ err }}</div>{% endfor %}
-                    </div>
+                    {{ errors|json_script:"register-server-errors" }}
                     {% endif %}
 
                     <div class="row g-3">
@@ -441,13 +517,13 @@
                             <label for="sr_code" class="form-label">SR-Code</label>
                             <input type="text" class="form-control" id="sr_code" name="sr_code" placeholder="e.g. 23-00000" maxlength="8" required
                                    pattern="^\d{2}-\d{5}$"
-                                   title="Please enter a valid SR-Code (e.g. 23-00000)">
+                                   title="SR-Code">
                         </div>
                         <div class="col-md-5">
                             <label for="email_local" class="form-label">Email</label>
                             <div class="form-control d-flex align-items-center flex-nowrap pe-2" id="email-input-wrap" style="min-height: 38px;">
-                                <input type="text" class="border-0 bg-transparent flex-grow-1 me-1" id="email_local" placeholder="e.g. 23-00000@g.batstate-u.edu.ph" maxlength="8"
-                                       style="outline: none; min-width: 0;" title="Enter your email address">
+                                <input type="text" class="border-0 bg-transparent flex-grow-1 me-1" id="email_local" placeholder="e.g. 23-00000@g.batstate-u.edu.ph" maxlength="234" autocomplete="username"
+                                       style="outline: none; min-width: 0;" title="BSU email">
                                 <span class="text-muted flex-shrink-0" id="email_suffix" style="display: none;">@g.batstate-u.edu.ph</span>
                             </div>
                             <input type="hidden" name="email" id="email">
@@ -492,6 +568,22 @@
                     Already have an account?
                     <a href="{% url 'login' %}" class="text-decoration-none">Login</a>
                 </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal" id="register-error-modal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h6 class="modal-title mb-0">Registration Error</h6>
+            </div>
+            <div class="modal-body">
+                <div id="register-error-modal-body" class="small text-danger"></div>
+            </div>
+            <div class="modal-footer justify-content-start">
+                <button type="button" class="btn btn-primary btn-sm" data-bs-dismiss="modal">OK</button>
             </div>
         </div>
     </div>

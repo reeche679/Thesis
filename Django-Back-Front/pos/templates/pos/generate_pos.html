@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load static %}
 
 {% block title %}Generate POS | Program of Study Generation System{% endblock %}
 
@@ -133,29 +134,28 @@
         max-width: 215px;
     }
 
-    /* Irregular "WHEN YOU BECAME IRREGULAR" dropdown: keep black border/text/arrow
-       even when still on "- Select Semester -" for new users. */
+    /* Irregular "WHEN YOU BECAME IRREGULAR" dropdown: keep neutral gray when empty */
     #irreg-start-sem {
-        border-color: #000 !important;
-        color: #000 !important;
+        border-color: #989b9e !important;
+        color: #505559 !important;
         box-shadow: none !important;
-        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23000' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2.5 5.5l5.5 5.5 5.5-5.5'/%3e%3c/svg%3e") !important;
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%236c757d' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2.5 5.5l5.5 5.5 5.5-5.5'/%3e%3c/svg%3e") !important;
         background-repeat: no-repeat !important;
         background-position: right 0.65rem center !important;
         background-size: 12px 10px !important;
     }
     #irreg-start-sem:focus {
-        border-color: #000 !important;
+        border-color: #adb5bd !important;
         box-shadow: none !important;
     }
 
-    /* If Bootstrap/browser marks it as invalid, keep it black */
+    /* If Bootstrap/browser marks it as invalid, keep it neutral gray */
     #irreg-start-sem:invalid,
     #irreg-start-sem.is-invalid {
-        border-color: #000 !important;
-        color: #000 !important;
+        border-color: #ced4da !important;
+        color: #6c757d !important;
         box-shadow: none !important;
-        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23000' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2.5 5.5l5.5 5.5 5.5-5.5'/%3e%3c/svg%3e") !important;
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%236c757d' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2.5 5.5l5.5 5.5 5.5-5.5'/%3e%3c/svg%3e") !important;
         background-repeat: no-repeat !important;
         background-position: right 0.65rem center !important;
         background-size: 12px 10px !important;
@@ -202,6 +202,56 @@
         margin-bottom: 0;
         padding: 0.6rem 0.75rem;
     }
+    /* Generate POS loading popup */
+    #generate-loading-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.28);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        z-index: 1085;
+        padding: 1rem;
+    }
+    #generate-loading-overlay.is-open {
+        display: flex;
+    }
+    .generate-loading-card {
+        width: min(330px, 92vw);
+        background: #eef0f2;
+        border-radius: 14px;
+        border: 1px solid rgba(0, 0, 0, 0.08);
+        box-shadow: 0 18px 40px rgba(0, 0, 0, 0.22);
+        padding: 0.95rem 1rem 0.9rem;
+    }
+    .generate-loading-title {
+        font-size: 0.94rem;
+        font-weight: 700;
+        color: #2f3438;
+        margin-bottom: 0.55rem;
+    }
+    .generate-loading-gif-wrap {
+        height: 118px;
+        border-radius: 10px;
+        background: #f7f7f8;
+        border: 1px solid rgba(0, 0, 0, 0.08);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+    }
+    .generate-loading-gif {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        display: block;
+        opacity: 0.95;
+    }
+    .generate-loading-sub {
+        margin-top: 0.55rem;
+        font-size: 0.81rem;
+        color: #596067;
+    }
     .grade-display-btn:active,
     .pos-select-display-btn:active {
         background-color: rgba(108, 117, 125, 0.18) !important;
@@ -219,19 +269,19 @@
         box-shadow: 0 0 0 0.15rem rgba(176, 42, 55, 0.22) !important;
     }
 
-    /* Irregular "WHEN YOU BECAME IRREGULAR" dropdown: keep black when empty.
+    /* Irregular "WHEN YOU BECAME IRREGULAR" display button: keep neutral gray when empty.
        The red outline above is for all empty semester dropdown display buttons;
        we override it only for this specific dropdown. */
     .pos-select-display-btn.irreg-sem-black-empty:not(.has-value) {
-        border-color: #000 !important;
-        color: #000 !important;
-        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23000' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e") !important;
+        border-color: #ced4da !important;
+        color: #6c757d !important;
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%236c757d' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e") !important;
         background-repeat: no-repeat !important;
         background-position: right 0.15rem center !important;
         background-size: 12px 10px !important;
     }
     .pos-select-display-btn.irreg-sem-black-empty:not(.has-value):focus {
-        box-shadow: 0 0 0 0.15rem rgba(0, 0, 0, 0.15) !important;
+        box-shadow: 0 0 0 0.15rem rgba(108, 117, 125, 0.2) !important;
     }
 
     @media (max-width: 575.98px) {
@@ -388,11 +438,123 @@
         overflow-x: auto;
         -webkit-overflow-scrolling: touch;
         overscroll-behavior-x: contain;
+        position: relative;
+        max-width: 100%;
+        border-left: 1px solid #dee2e6;
+        border-right: 1px solid #dee2e6;
+    }
+    /* Mobile/short-screen usability: keep Course Code visible while swiping */
+    @media (max-width: 991.98px) {
+        /* Keep non-frozen cells behind the frozen first column */
+        .main-sem .table-responsive thead th,
+        .main-sem .table-responsive tbody td,
+        .main-sem .table-responsive tfoot th,
+        #irreg-edit-modal .table-responsive thead th,
+        #irreg-edit-modal .table-responsive tbody td,
+        #irreg-edit-modal .table-responsive tfoot th,
+        #irregular-add-modal .table-responsive thead th,
+        #irregular-add-modal .table-responsive tbody td,
+        #irregular-add-modal .table-responsive tfoot th {
+            position: relative;
+            z-index: 1;
+        }
+        .main-sem .table-responsive,
+        #irreg-edit-modal .table-responsive,
+        #irregular-add-modal .table-responsive {
+            position: relative;
+            left: 0;
+            margin-left: 0;
+            max-width: 100%;
+        }
+        .main-sem .table,
+        #irreg-edit-modal .table,
+        #irregular-add-modal .table {
+            margin-left: 0 !important;
+        }
+        .main-sem .table-responsive thead tr:first-child th:first-child,
+        .main-sem .table-responsive tbody td:first-child,
+        .main-sem .table-responsive tfoot th:first-child,
+        #irreg-edit-modal .table-responsive thead tr:first-child th:first-child,
+        #irreg-edit-modal .table-responsive tbody td:first-child,
+        #irreg-edit-modal .table-responsive tfoot th:first-child,
+        #irregular-add-modal .table-responsive thead tr:first-child th:first-child,
+        #irregular-add-modal .table-responsive tbody td:first-child {
+            position: sticky;
+            left: 0 !important;
+        }
+        .main-sem .table-responsive thead tr:first-child th:first-child::before,
+        .main-sem .table-responsive tbody td:first-child::before,
+        .main-sem .table-responsive tfoot th:first-child::before,
+        #irreg-edit-modal .table-responsive thead tr:first-child th:first-child::before,
+        #irreg-edit-modal .table-responsive tbody td:first-child::before,
+        #irreg-edit-modal .table-responsive tfoot th:first-child::before,
+        #irregular-add-modal .table-responsive thead tr:first-child th:first-child::before,
+        #irregular-add-modal .table-responsive tbody td:first-child::before {
+            content: "";
+            position: absolute;
+            left: -1px;
+            top: -1px;
+            bottom: -1px;
+            width: 2px;
+            background: #fff;
+            z-index: 7;
+            pointer-events: none;
+        }
+        .main-sem .table-responsive thead tr:first-child th:first-child,
+        .main-sem .table-responsive tfoot th:first-child,
+        #irreg-edit-modal .table-responsive thead tr:first-child th:first-child,
+        #irreg-edit-modal .table-responsive tfoot th:first-child,
+        #irregular-add-modal .table-responsive thead tr:first-child th:first-child {
+            z-index: 6;
+            background: #f8f9fa !important;
+            border-left: 1px solid #dee2e6 !important;
+            border-right: 1px solid #dee2e6 !important;
+            border-top: 1px solid #dee2e6 !important;
+            border-bottom: 1px solid #dee2e6 !important; /* title/header line border */
+        }
+        .main-sem .table-responsive tbody td:first-child,
+        #irreg-edit-modal .table-responsive tbody td:first-child,
+        #irregular-add-modal .table-responsive tbody td:first-child {
+            z-index: 5;
+            background: #fff !important;
+            border-left: 1px solid #dee2e6 !important;
+            border-right: 1px solid #dee2e6 !important;
+            border-top: 1px solid #dee2e6 !important;
+            border-bottom: 1px solid #dee2e6 !important;
+            box-shadow: none !important;
+            background-clip: padding-box;
+        }
+        .main-sem .table-responsive tfoot th:first-child,
+        #irreg-edit-modal .table-responsive tfoot th:first-child {
+            z-index: 3;
+            background: #f8f9fa !important;
+            border-left: 1px solid #dee2e6 !important;
+            border-top: 1px solid #dee2e6 !important;
+            border-bottom: 1px solid #dee2e6 !important;
+            border-right: 1px solid #dee2e6 !important;
+            box-shadow: none !important;
+        }
+        /* Ensure the bottom line is visible under the frozen left footer cell */
+        .main-sem .table-responsive tfoot tr:last-child th.total-left-cell,
+        #irreg-edit-modal .table-responsive tfoot tr:last-child th.total-left-cell {
+            border-bottom: 1px solid #dee2e6 !important;
+            border-left: 1px solid #dee2e6 !important;
+            border-right: 1px solid #dee2e6 !important;
+            border-top: 1px solid #dee2e6 !important;
+            background: #f8f9fa !important;
+        }
+        /* Match the rightmost footer cell background with Total Units footer color */
+        .main-sem .table-responsive tfoot th:last-child,
+        #irreg-edit-modal .table-responsive tfoot th:last-child {
+            background: #f8f9fa !important;
+        }
     }
     .table {
         table-layout: auto;
         width: 100%;
         min-width: 720px; /* full headers/content visible when scrolling horizontally */
+        border-left: 1px solid #dee2e6 !important;
+        border-right: 1px solid #dee2e6 !important;
     }
 
     .table thead th,
@@ -867,7 +1029,7 @@
 </div>
 {% endif %}
 
-<div class="modal fade" id="irregular-add-modal" tabindex="-1" aria-labelledby="irregular-add-modal-label" aria-hidden="true">
+<div class="modal" id="irregular-add-modal" tabindex="-1" aria-labelledby="irregular-add-modal-label" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-scrollable">
         <div class="modal-content">
             <div class="modal-header">
@@ -932,7 +1094,7 @@
 </div>
 
 <!-- Edit semester modal (irregular path) -->
-<div class="modal fade" id="irreg-edit-modal" tabindex="-1" aria-labelledby="irreg-edit-modal-label" aria-hidden="true">
+<div class="modal" id="irreg-edit-modal" tabindex="-1" aria-labelledby="irreg-edit-modal-label" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-scrollable">
         <div class="modal-content">
             <div class="modal-header">
@@ -1034,10 +1196,10 @@
                 </thead>
                 <tbody>
                     {% for cg in item.courses_with_grades %}
-                    <tr data-course-code="{{ cg.course.code }}" data-units="{{ cg.course.units }}">
+                    <tr data-course-code="{{ cg.course.code }}" data-units="{{ cg.course.units|floatformat:'0' }}">
                         <td class="{% if cg.course.display_code|default:cg.course.code != cg.course.code %}elective-course-cell text-start{% else %}text-center{% endif %}">{{ cg.course.display_code|default:cg.course.code }}</td>
                         <td class="course-title-cell">{{ cg.course.title }}</td>
-                        <td class="text-center">{{ cg.course.units }}</td>
+                        <td class="text-center">{{ cg.course.units|floatformat:"0" }}</td>
                         <td class="text-center">{{ cg.course.lec }}</td>
                         <td class="text-center">{{ cg.course.lab }}</td>
                         <td class="small text-muted text-center">{{ cg.course.prereq|default:"" }}</td>
@@ -1062,8 +1224,9 @@
                 </tbody>
                 <tfoot class="table-light">
                     <tr>
-                        <th colspan="2" class="text-end">Total Units</th>
-                        <th class="text-center" id="total-units-sem-{{ item.section_index }}">{{ item.total_units|default:0 }}</th>
+                        <th class="total-left-cell">&nbsp;</th>
+                        <th class="text-end">Total Units</th>
+                        <th class="text-center" id="total-units-sem-{{ item.section_index }}">{{ item.total_units|default:0|floatformat:"0" }}</th>
                         {% if not is_regular %}
                         <th colspan="4"></th>
                         <th class="text-center">
@@ -1111,7 +1274,7 @@
     </div>
 
     <!-- POS Delete confirmation -->
-    <div class="modal fade" id="delete-pos-modal" tabindex="-1" aria-labelledby="delete-pos-modal-label" aria-hidden="true">
+    <div class="modal" id="delete-pos-modal" tabindex="-1" aria-labelledby="delete-pos-modal-label" aria-hidden="true">
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
@@ -1130,7 +1293,7 @@
     </div>
 
     <!-- Generated POS preview (from solver) -->
-    <div class="modal fade" id="generated-pos-modal" tabindex="-1" aria-labelledby="generated-pos-modal-label" aria-hidden="true">
+    <div class="modal" id="generated-pos-modal" tabindex="-1" aria-labelledby="generated-pos-modal-label" aria-hidden="true">
         <div class="modal-dialog modal-sm" id="generated-pos-modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
@@ -1145,6 +1308,15 @@
                     <button type="button" class="btn btn-primary btn-sm pos-error-ok-btn" data-bs-dismiss="modal">OK</button>
                     <button type="button" class="btn btn-primary" id="goToPreviewBtn">Go to Preview</button>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="generate-loading-overlay" aria-hidden="true">
+        <div class="generate-loading-card" role="status" aria-live="polite" aria-label="Generating POS">
+            <div class="generate-loading-title">Generating Program of Study...</div>
+            <div class="generate-loading-gif-wrap" aria-hidden="true">
+                <img class="generate-loading-gif" src="{% static 'img/paper_pen.gif' %}" alt="Generating animation">
             </div>
         </div>
     </div>
@@ -1165,6 +1337,22 @@
 
     function getGradeLabel(value) {
         return value && value.trim() ? value.trim() : '';
+    }
+
+    function asWholeUnits(value) {
+        var n = Number(value);
+        if (!isNaN(n)) return String(Math.round(n));
+        return String(value == null ? '' : value).replace(/\.0+$/, '');
+    }
+
+    function setGenerateLoading(isOpen) {
+        var overlay = document.getElementById('generate-loading-overlay');
+        var btn = document.getElementById('generatePosBtn');
+        if (overlay) {
+            overlay.classList.toggle('is-open', !!isOpen);
+            overlay.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
+        }
+        if (btn) btn.disabled = !!isOpen;
     }
 
     function ensureGradeMenuElements() {
@@ -1738,7 +1926,7 @@
                 totalUnits += units;
                 if (grade === '5' || grade === '5.00') failedUnits += units;
             }
-            if (totalUnits > 0) {
+            if (totalUnits >= 10) {
                 var ratio = failedUnits / totalUnits;
                 if (ratio >= 0.75) return { ok: false, message: '75%+ units failed. POS cannot be generated.' };
                 if (ratio >= 0.50) return { ok: false, message: "50%+ units failed. Manual evaluation required." };
@@ -1776,7 +1964,7 @@
                 totalUnits += units;
                 if (grade === '5' || grade === '5.00') failedUnits += units;
             }
-            if (totalUnits > 0) {
+            if (totalUnits >= 10) {
                 var ratio = failedUnits / totalUnits;
                 if (ratio >= 0.75) return { ok: false, message: '75%+ units failed. POS cannot be generated.' };
                 if (ratio >= 0.50) return { ok: false, message: "50%+ units failed. Manual evaluation required." };
@@ -1915,7 +2103,10 @@
                 card.className = 'pos-card p-3 mb-3';
                 var title = document.createElement('div');
                 title.className = 'fw-bold mb-2 text-center';
-                title.textContent = (sem.label || ('Semester ' + sem.semester_index)) + ' — ' + (sem.total_units || 0) + ' units';
+                var semUnitsRaw = (sem.total_units !== undefined && sem.total_units !== null) ? sem.total_units : 0;
+                var semUnitsNum = Number(semUnitsRaw);
+                var semUnitsWhole = isNaN(semUnitsNum) ? semUnitsRaw : Math.round(semUnitsNum);
+                title.textContent = (sem.label || ('Semester ' + sem.semester_index)) + ' — ' + semUnitsWhole + ' units';
                 card.appendChild(title);
 
                 var tableWrap = document.createElement('div');
@@ -1935,7 +2126,7 @@
                     tr.innerHTML =
                         '<td class="text-center">' + codeShown + '</td>' +
                         '<td class="course-title-cell">' + (c.title || '') + '</td>' +
-                        '<td class="text-center">' + (c.units != null ? c.units : '') + '</td>';
+                        '<td class="text-center">' + asWholeUnits(c.units) + '</td>';
                     tbody.appendChild(tr);
                 });
                 tableWrap.appendChild(table);
@@ -2014,6 +2205,7 @@
 
         saveGradesToServer(gradesBySection, function(data) {
             if (data && data.ok) {
+                setGenerateLoading(true);
                 // Call solver API and store response for Preview page to render dynamically
                 var solverPayload = buildSolverPayloadFromGrades(gradesBySection);
                 fetch("{% url 'generate_pos_api' %}", {
@@ -2023,13 +2215,16 @@
                     credentials: "same-origin"
                 }).then(function(r) { return r.json(); })
                   .then(function(res) {
+                      setGenerateLoading(false);
                       try { sessionStorage.setItem('posGeneratedResponse', JSON.stringify(res)); } catch (e) {}
                       showGeneratedPosModal(res);
                   })
                   .catch(function() {
+                      setGenerateLoading(false);
                       showGeneratedPosModal({ status: "infeasible", message: "Request to generate POS failed. Please try again.", pos: [] });
                   });
             } else {
+                setGenerateLoading(false);
                 showGeneratedPosErrorPopup('Failed to save grades. Please try again.', 'infeasible');
             }
         });
@@ -2182,6 +2377,18 @@
 
         function getCodesAlreadyInSection(sectionIndex) {
             var codes = new Set();
+            // If picker is opened from Edit modal, use the live rows in edit table.
+            // This allows removed courses to reappear in "Add courses" immediately.
+            if (addCoursesButtonSource === 'edit-modal' &&
+                editTbody &&
+                editSectionIndex !== null &&
+                String(editSectionIndex) === String(sectionIndex)) {
+                editTbody.querySelectorAll('tr[data-course-code]').forEach(function(row) {
+                    var code = row.getAttribute('data-course-code');
+                    if (code) codes.add(code);
+                });
+                return codes;
+            }
             var mainDiv = document.getElementById('main-sem-' + sectionIndex);
             if (mainDiv) {
                 mainDiv.querySelectorAll('tbody tr[data-course-code]').forEach(function(row) {
@@ -2242,7 +2449,7 @@
                 tr.setAttribute('data-course-code', c.code);
                 var codeCell = (c.display_code || displayPosCourseCode(c.code));
                 tr.innerHTML = '<td class="text-center">' + codeCell + '</td><td class="course-title-cell">' + c.title + '</td>' +
-                    '<td class="text-center">' + c.units + '</td><td class="text-center">' + c.lec + '</td><td class="text-center">' + c.lab + '</td>' +
+                    '<td class="text-center">' + asWholeUnits(c.units) + '</td><td class="text-center">' + c.lec + '</td><td class="text-center">' + c.lab + '</td>' +
                     '<td class="small text-muted text-center">' + (c.prereq || '') + '</td><td class="small text-muted text-center">' + (c.coreq || '') + '</td>';
                 tr.addEventListener('click', function() {
                     if (modalSelectedCodes.has(c.code)) {
@@ -2366,7 +2573,7 @@
                 if (tbody.querySelector('tr[data-course-code="' + code + '"]')) return;
                 var row = document.createElement('tr');
                 row.setAttribute('data-course-code', code);
-                row.setAttribute('data-units', String(c.units != null ? c.units : 0));
+                row.setAttribute('data-units', asWholeUnits(c.units != null ? c.units : 0));
                 row.classList.add('just-added');
                 var tdGrade = document.createElement('td');
                 var gradeSel = buildGradeSelect(code, sectionGrades[code]);
@@ -2376,7 +2583,7 @@
                 initGradeDropdowns(tdGrade);
                 var showCode = (c.display_code || displayPosCourseCode(c.code));
                 row.innerHTML = '<td class="text-center">' + showCode + '</td><td class="course-title-cell">' + c.title + '</td>' +
-                    '<td class="text-center">' + c.units + '</td><td class="text-center">' + c.lec + '</td><td class="text-center">' + c.lab + '</td>' +
+                    '<td class="text-center">' + asWholeUnits(c.units) + '</td><td class="text-center">' + c.lec + '</td><td class="text-center">' + c.lab + '</td>' +
                     '<td class="small text-muted text-center">' + (c.prereq || '') + '</td><td class="small text-muted text-center">' + (c.coreq || '') + '</td>';
                 row.appendChild(tdGrade);
                 tbody.appendChild(row);

@@ -12,6 +12,10 @@
         html, body {
             overflow-x: hidden;
         }
+        html {
+            /* Reserve scrollbar space to prevent horizontal page jump when modals open */
+            scrollbar-gutter: stable;
+        }
 
         body {
             font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
@@ -21,6 +25,7 @@
             display: flex;
             flex-direction: column;
             min-height: 100vh;
+            overflow-y: auto;
         }
 
         .pos-header-bar {
@@ -78,12 +83,38 @@
 
         .pos-navbar .nav-link:focus {
             outline: none;
-            box-shadow: 0 0 0 0.15rem rgba(160, 22, 28, 0.2);
+            box-shadow: inset 0 0 0 0.15rem rgba(160, 22, 28, 0.28);
+        }
+
+        .pos-navbar .nav-link:active,
+        .pos-navbar .nav-link:focus:active {
+            box-shadow: inset 0 0 0 0.16rem rgba(160, 22, 28, 0.34);
         }
 
         .pos-navbar .nav-link.active {
             color: #ffffff;
             background-color: #a0161c;
+        }
+
+        /* Global modal behavior: instant open/close, backdrop always behind popup */
+        .modal {
+            z-index: 2000 !important;
+        }
+        .modal-backdrop {
+            z-index: 1990 !important;
+            background-color: rgba(45, 45, 52, 0.45) !important;
+        }
+        .modal.fade,
+        .modal.fade .modal-dialog,
+        .modal-backdrop.fade {
+            transition: none !important;
+        }
+        .modal .modal-header .btn-close {
+            display: none !important;
+        }
+        body.modal-open {
+            padding-right: 0 !important;
+            overflow-y: auto !important;
         }
 
         /* Utility: justify text (Bootstrap 5 dropped .text-justify) */
@@ -567,7 +598,7 @@
     </footer>
     {% endblock footer %}
 
-    <div class="modal fade" id="privacyPolicyModal" tabindex="-1" aria-labelledby="privacyPolicyModalLabel" aria-hidden="true">
+    <div class="modal" id="privacyPolicyModal" tabindex="-1" aria-labelledby="privacyPolicyModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
             <div class="modal-content">
                 <div class="modal-header">
@@ -612,6 +643,69 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            function stabilizeModalLayoutShift() {
+                // Neutralize Bootstrap scrollbar compensation that causes horizontal jump,
+                // especially when opening a second modal on top of another.
+                document.body.style.paddingRight = "0px";
+                document.body.style.marginRight = "0px";
+                var stickyWrap = document.querySelector(".pos-sticky-header-wrapper");
+                if (stickyWrap) {
+                    stickyWrap.style.paddingRight = "0px";
+                    stickyWrap.style.marginRight = "0px";
+                }
+                document.querySelectorAll(".fixed-top, .fixed-bottom, .sticky-top").forEach(function(el) {
+                    el.style.paddingRight = "0px";
+                    el.style.marginRight = "0px";
+                });
+            }
+
+            function normalizeModalBackdrops() {
+                var backdrops = Array.prototype.slice.call(document.querySelectorAll("body > .modal-backdrop"));
+                if (!backdrops.length) return;
+
+                // Keep only one backdrop to prevent stacked dark overlays.
+                for (var i = 0; i < backdrops.length - 1; i++) {
+                    backdrops[i].remove();
+                }
+
+                var topBackdrop = backdrops[backdrops.length - 1];
+                if (!topBackdrop) return;
+                topBackdrop.classList.remove("fade");
+                topBackdrop.style.transition = "none";
+                topBackdrop.style.animation = "none";
+            }
+
+            // Keep all modals at body level so Bootstrap backdrop layering is consistent.
+            document.querySelectorAll(".modal").forEach(function (modalEl) {
+                if (modalEl.parentNode !== document.body) {
+                    document.body.appendChild(modalEl);
+                }
+            });
+
+            document.addEventListener("show.bs.modal", function () {
+                // Wait one frame so Bootstrap inserts backdrop first.
+                requestAnimationFrame(function() {
+                    stabilizeModalLayoutShift();
+                    normalizeModalBackdrops();
+                });
+            });
+
+            document.addEventListener("shown.bs.modal", function() {
+                stabilizeModalLayoutShift();
+                normalizeModalBackdrops();
+            });
+
+            document.addEventListener("hidden.bs.modal", function () {
+                // Cleanup any leftover duplicated backdrops after close.
+                requestAnimationFrame(function() {
+                    stabilizeModalLayoutShift();
+                    normalizeModalBackdrops();
+                });
+            });
+        });
+    </script>
     {% block extra_scripts %}{% endblock %}
 </body>
 </html>

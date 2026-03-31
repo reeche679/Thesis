@@ -70,3 +70,34 @@ class POSRecord(models.Model):
 
     class Meta:
         ordering = ['-generated_at']
+
+
+class SignatoryOption(models.Model):
+    ROLE_ADVISER = "adviser"
+    ROLE_DEPARTMENT_CHAIR = "department_chair"
+    ROLE_PROGRAM_CHAIR = "program_chair"
+    ROLE_CHOICES = [
+        (ROLE_ADVISER, "Adviser"),
+        (ROLE_DEPARTMENT_CHAIR, "Department Chair"),
+        (ROLE_PROGRAM_CHAIR, "Program Chair"),
+    ]
+
+    role = models.CharField(max_length=32, choices=ROLE_CHOICES)
+    name = models.CharField(max_length=160)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["role", "name"]
+        unique_together = [["role", "name"]]
+
+    def __str__(self):
+        return f"{self.get_role_display()}: {self.name}"
+
+
+class SignatoryPreference(models.Model):
+    student = models.OneToOneField(Student, on_delete=models.CASCADE, related_name="signatory_preference")
+    adviser_name = models.CharField(max_length=160, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["student_id"]

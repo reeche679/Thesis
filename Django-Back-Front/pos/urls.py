@@ -12,6 +12,10 @@ from .views import (
     pos_history,
     pos_about,
     save_preview_pos_to_history,
+    get_signatory_options,
+    add_signatory_option,
+    delete_signatory_option,
+    update_signatory_option,
     login_view,
     register_view,
     sign_out,
@@ -53,6 +57,10 @@ urlpatterns = [
     path("preview/download-pdf/", download_pos_pdf, name="download_pos_pdf"),
     path("preview/download-generated-pdf/", download_generated_pos_pdf, name="download_generated_pos_pdf"),
     path("preview/save-to-history/", save_preview_pos_to_history, name="save_preview_pos_to_history"),
+    path("preview/signatories/", get_signatory_options, name="get_signatory_options"),
+    path("preview/signatories/add/", add_signatory_option, name="add_signatory_option"),
+    path("preview/signatories/delete/", delete_signatory_option, name="delete_signatory_option"),
+    path("preview/signatories/update/", update_signatory_option, name="update_signatory_option"),
 
     path("history/<int:record_id>/delete/", delete_pos_record, name="delete_pos_record"),
     path(

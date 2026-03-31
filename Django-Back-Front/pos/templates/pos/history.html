@@ -90,6 +90,7 @@
         </table>
     </div>
 
+    {% if pos_records %}
     <div class="d-flex justify-content-end mt-3">
         <form method="post" action="{% url 'delete_all_pos_records' %}" class="history-delete-all-form">
             {% csrf_token %}
@@ -98,10 +99,11 @@
             </button>
         </form>
     </div>
+    {% endif %}
 </div>
 </div>
 
-<div class="modal fade" id="historyConfirmModal" tabindex="-1" aria-labelledby="historyConfirmModalLabel" aria-hidden="true">
+<div class="modal" id="historyConfirmModal" tabindex="-1" aria-labelledby="historyConfirmModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
             <div class="modal-header border-0 pb-0">
