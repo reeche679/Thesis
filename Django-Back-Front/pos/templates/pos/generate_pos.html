@@ -467,6 +467,10 @@
             margin-left: 0;
             max-width: 100%;
         }
+        /* Semester outer vertical borders on wrapper layer (outside scroll content) */
+        .main-sem .table-responsive {
+            box-shadow: -1px 0 0 #dee2e6, 1px 0 0 #dee2e6;
+        }
         .main-sem .table,
         #irreg-edit-modal .table,
         #irregular-add-modal .table {
@@ -481,7 +485,8 @@
         #irregular-add-modal .table-responsive thead tr:first-child th:first-child,
         #irregular-add-modal .table-responsive tbody td:first-child {
             position: sticky;
-            left: 0 !important;
+            left: -1px !important;
+            top: auto !important;
         }
         .main-sem .table-responsive thead tr:first-child th:first-child::before,
         .main-sem .table-responsive tbody td:first-child::before,
@@ -494,11 +499,11 @@
             content: "";
             position: absolute;
             left: -1px;
-            top: -1px;
-            bottom: -1px;
-            width: 2px;
+            top: 0;
+            bottom: 0;
+            width: 3px;
             background: #fff;
-            z-index: 7;
+            z-index: 20;
             pointer-events: none;
         }
         .main-sem .table-responsive thead tr:first-child th:first-child,
@@ -829,6 +834,13 @@
     @media (max-width: 575.98px) {
         #pos-action-buttons { flex-wrap: nowrap; gap: 0.35rem; }
         #pos-action-buttons .pos-actions-right { gap: 0.35rem; }
+        .pos-gear-btn {
+            width: 1.75rem;
+            height: 1.75rem;
+        }
+        .pos-gear-btn .bi {
+            font-size: 0.85rem;
+        }
         #pos-action-buttons .btn {
             padding: 0.35rem 0.5rem;
             font-size: 0.72rem;

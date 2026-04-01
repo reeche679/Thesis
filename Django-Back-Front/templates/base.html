@@ -36,8 +36,8 @@
         }
 
         .pos-header-logo {
-            width: 48px;
-            height: 48px;
+            width: 56px;
+            height: 56px;
             object-fit: contain;
         }
 
@@ -46,6 +46,8 @@
             font-weight: 600;
             letter-spacing: 0.03em;
         }
+        .pos-header-title .pos-header-title-full { display: inline; }
+        .pos-header-title .pos-header-title-mobile { display: none; }
 
         .pos-header-subtitle {
             font-size: 0.75rem;
@@ -54,9 +56,21 @@
 
         .pos-navbar {
             background-color: #ffffff;
+            background-image:
+                linear-gradient(rgba(255, 255, 255, 0.68), rgba(255, 255, 255, 0.68)),
+                url('{% static "img/BSU_Background.jpg" %}');
+            background-repeat: no-repeat;
+            background-position: left bottom;
+            background-size: 320% auto; /* zoomed/cropped; larger left focus */
             border-bottom: 1px solid #dee2e6;
             padding-top: 0.4rem !important;
             padding-bottom: 0.4rem !important;
+        }
+        @media (max-width: 767.98px) {
+            .pos-navbar {
+                background-size: 390% auto; /* stronger crop on small screens */
+                background-position: left bottom;
+            }
         }
 
         .pos-navbar .nav-link {
@@ -187,6 +201,13 @@
 
         body:not(.no-sticky-header) .pos-main {
             padding-top: 1.5rem;
+        }
+        @media (max-width: 767.98px) {
+            /* Mobile only: nav bar is hidden, so reduce extra gap before page titles */
+            .pos-main,
+            body:not(.no-sticky-header) .pos-main {
+                padding-top: 0.75rem;
+            }
         }
 
         .pos-card {
@@ -412,7 +433,9 @@
         @media (max-width: 575.98px) {
             .pos-header-title { font-size: 0.7rem; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
             .pos-header-subtitle { font-size: 0.6rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-            .pos-header-logo { width: 36px; height: 36px; flex-shrink: 0; }
+            .pos-header-logo { width: 40px; height: 40px; flex-shrink: 0; }
+            .pos-header-title .pos-header-title-full { display: none; }
+            .pos-header-title .pos-header-title-mobile { display: inline; }
 
             /* Mobile: unify dropdown size (all selects) */
             .pos-main select,
@@ -511,6 +534,133 @@
         @media (max-width: 575.98px) {
             .pos-nav-signout { margin-left: 0.35rem; }
         }
+
+        /* Mobile side navigation drawer (keeps desktop navbar unchanged) */
+        .pos-mobile-drawer,
+        .pos-mobile-drawer-overlay {
+            display: none;
+        }
+        .pos-header-logo-trigger {
+            border: 0;
+            background: transparent;
+            padding: 0;
+            margin: 0;
+            line-height: 1;
+            border-radius: 999px;
+        }
+        .pos-header-logo-trigger:focus-visible {
+            outline: 2px solid rgba(255, 255, 255, 0.75);
+            outline-offset: 2px;
+        }
+        @media (max-width: 767.98px) {
+            /* Hide existing top icon-strip nav on mobile; drawer replaces it */
+            .pos-navbar {
+                display: none;
+            }
+
+            .pos-mobile-drawer-overlay {
+                display: block;
+                position: fixed;
+                inset: 0;
+                background: rgba(214, 214, 214, 0.55);
+                opacity: 0;
+                pointer-events: none;
+                transition: opacity 0.22s ease;
+                z-index: 1300;
+            }
+            .pos-mobile-drawer {
+                display: block;
+                position: fixed;
+                top: 0;
+                left: 0;
+                bottom: 0;
+                width: min(76vw, 275px);
+                background-color: #fff;
+                background-image:
+                    linear-gradient(rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0.62)),
+                    url('{% static "img/BSU_Background.jpg" %}');
+                background-repeat: no-repeat;
+                background-position: left bottom;
+                background-size: 420% auto;
+                box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22);
+                transform: translateX(-104%);
+                transition: transform 0.24s ease;
+                z-index: 1310;
+                overflow-y: auto;
+                -webkit-overflow-scrolling: touch;
+            }
+            .pos-mobile-drawer-header {
+                display: flex;
+                align-items: center;
+                gap: 0.55rem;
+                padding: 0.9rem 0.85rem;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.22);
+                background: linear-gradient(180deg, #b4151d 0%, #960f17 100%);
+                color: #fff;
+            }
+            .pos-mobile-drawer-header-logo {
+                width: 28px;
+                height: 28px;
+                object-fit: contain;
+                flex: 0 0 auto;
+                border-radius: 0;
+                background: transparent;
+            }
+            .pos-mobile-drawer-header-text {
+                font-size: 0.78rem;
+                font-weight: 700;
+                line-height: 1.2;
+                letter-spacing: 0.01em;
+            }
+            .pos-mobile-drawer-nav {
+                padding: 0.45rem 0.4rem 0.75rem;
+            }
+            .pos-mobile-drawer-link {
+                display: flex;
+                align-items: center;
+                gap: 0.72rem;
+                min-height: 2.8rem;
+                border-radius: 0.65rem;
+                padding: 0.55rem 0.72rem;
+                color: #2f2f2f;
+                text-decoration: none;
+                font-weight: 500;
+                font-size: 0.93rem;
+            }
+            .pos-mobile-drawer-link i {
+                width: 1.15rem;
+                text-align: center;
+                font-size: 1rem;
+                color: #6d6d6d;
+                flex: 0 0 auto;
+            }
+            .pos-mobile-drawer-link:hover,
+            .pos-mobile-drawer-link:focus-visible {
+                background: rgba(160, 22, 28, 0.08);
+                color: #111;
+                outline: none;
+            }
+            .pos-mobile-drawer-link.active {
+                background: rgba(160, 22, 28, 0.12);
+                color: #7e1217;
+                font-weight: 700;
+            }
+            .pos-mobile-drawer-link.active i {
+                color: #a0161c;
+            }
+
+            body.pos-mobile-drawer-open {
+                overflow: hidden;
+                touch-action: pan-y;
+            }
+            body.pos-mobile-drawer-open .pos-mobile-drawer-overlay {
+                opacity: 1;
+                pointer-events: auto;
+            }
+            body.pos-mobile-drawer-open .pos-mobile-drawer {
+                transform: translateX(0);
+            }
+        }
     </style>
     {% block extra_head %}{% endblock %}
 </head>
@@ -520,10 +670,13 @@
     <header class="pos-header-bar">
         <div class="container pos-container-wide d-flex align-items-center">
             <div class="d-flex align-items-center pos-header-brand">
-                <img src="{% static 'img/BSU_Logo.png' %}" alt="Batangas State University Logo" class="pos-header-logo me-3">
+                <button type="button" class="pos-header-logo-trigger me-3" id="pos-mobile-logo-btn" aria-label="Open navigation menu">
+                    <img src="{% static 'img/BSU_Logo.png' %}" alt="Batangas State University Logo" class="pos-header-logo">
+                </button>
                 <div>
                     <div class="pos-header-title">
-                        Batangas State University – The National Engineering University
+                        <span class="pos-header-title-full">Batangas State University – The National Engineering University</span>
+                        <span class="pos-header-title-mobile">Batangas State University - TNEU</span>
                     </div>
                     <div class="pos-header-subtitle">
                         Program of Study Generation System
@@ -567,6 +720,24 @@
         </div>
     </nav>
     {% endblock navbar %}
+
+    <!-- Mobile side drawer navigation -->
+    <div class="pos-mobile-drawer-overlay" id="pos-mobile-drawer-overlay" aria-hidden="true"></div>
+    <aside class="pos-mobile-drawer" id="pos-mobile-drawer" aria-hidden="true">
+        <div class="pos-mobile-drawer-header">
+            <img src="{% static 'img/BSU_Logo.png' %}" alt="BSU Logo" class="pos-mobile-drawer-header-logo">
+            <span class="pos-mobile-drawer-header-text">POS Generation System</span>
+        </div>
+        <nav class="pos-mobile-drawer-nav" aria-label="Mobile navigation">
+            <a class="pos-mobile-drawer-link" href="{% url 'pos_home' %}" data-nav-key="home"><i class="bi bi-house-door-fill" aria-hidden="true"></i><span>Home</span></a>
+            <a class="pos-mobile-drawer-link" href="{% if has_complete_info %}{% url 'pos_generate' %}{% else %}{% url 'pos_home' %}?required=1{% endif %}" data-nav-key="generate"><i class="bi bi-journal-plus" aria-hidden="true"></i><span>Generate POS</span></a>
+            <a class="pos-mobile-drawer-link" href="{% if has_complete_info %}{% url 'pos_preview' %}{% else %}{% url 'pos_home' %}?required=1{% endif %}" data-nav-key="preview"><i class="bi bi-eye-fill" aria-hidden="true"></i><span>Preview POS</span></a>
+            <a class="pos-mobile-drawer-link" href="{% if has_complete_info %}{% url 'pos_history' %}{% else %}{% url 'pos_home' %}?required=1{% endif %}" data-nav-key="history"><i class="bi bi-clock-history" aria-hidden="true"></i><span>History</span></a>
+            <a class="pos-mobile-drawer-link" href="{% url 'contact_us' %}" data-nav-key="contact"><i class="bi bi-envelope-fill" aria-hidden="true"></i><span>Contact Us</span></a>
+            <a class="pos-mobile-drawer-link" href="{% url 'help' %}" data-nav-key="help"><i class="bi bi-question-circle-fill" aria-hidden="true"></i><span>Help</span></a>
+            <a class="pos-mobile-drawer-link" href="{% url 'sign_out' %}" data-nav-key="signout"><i class="bi bi-box-arrow-right" aria-hidden="true"></i><span>Sign Out</span></a>
+        </nav>
+    </aside>
     </div>
 
     <main class="pos-main">
@@ -704,6 +875,137 @@
                     normalizeModalBackdrops();
                 });
             });
+        });
+    </script>
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            var mqMobile = window.matchMedia("(max-width: 767.98px)");
+            var body = document.body;
+            var drawer = document.getElementById("pos-mobile-drawer");
+            var overlay = document.getElementById("pos-mobile-drawer-overlay");
+            var logoBtn = document.getElementById("pos-mobile-logo-btn");
+            if (!drawer || !overlay || !logoBtn) return;
+
+            var drawerOpen = false;
+            var swipeState = null;
+            var SWIPE_MIN_DISTANCE = 48;
+            var EDGE_OPEN_ZONE_PX = 28;
+
+            function isMobile() {
+                return mqMobile.matches;
+            }
+
+            function openDrawer() {
+                if (!isMobile() || drawerOpen) return;
+                drawerOpen = true;
+                body.classList.add("pos-mobile-drawer-open");
+                drawer.setAttribute("aria-hidden", "false");
+                overlay.setAttribute("aria-hidden", "false");
+            }
+
+            function closeDrawer() {
+                if (!drawerOpen) return;
+                drawerOpen = false;
+                body.classList.remove("pos-mobile-drawer-open");
+                drawer.setAttribute("aria-hidden", "true");
+                overlay.setAttribute("aria-hidden", "true");
+            }
+
+            function syncDrawerActiveLink() {
+                var links = drawer.querySelectorAll(".pos-mobile-drawer-link");
+                if (!links.length) return;
+                var currentPath = (window.location.pathname || "").replace(/\/+$/, "") || "/";
+                links.forEach(function (link) {
+                    link.classList.remove("active");
+                    var href = link.getAttribute("href") || "";
+                    if (!href || href.charAt(0) === "#") return;
+                    var normalizedHref = href.split("#")[0].replace(/\/+$/, "") || "/";
+                    if (normalizedHref === currentPath) {
+                        link.classList.add("active");
+                    }
+                });
+            }
+
+            function hasHorizontalScrollConflict(target) {
+                var el = target;
+                while (el && el !== document.body) {
+                    try {
+                        var style = window.getComputedStyle(el);
+                        var overflowX = style ? style.overflowX : "";
+                        if ((overflowX === "auto" || overflowX === "scroll") && el.scrollWidth > el.clientWidth + 2) {
+                            return true;
+                        }
+                    } catch (e) {}
+                    el = el.parentElement;
+                }
+                return false;
+            }
+
+            function isInteractiveTarget(target) {
+                if (!target || !(target instanceof Element)) return false;
+                if (target.closest("a,button,input,select,textarea,label,[role='button'],[role='link'],[contenteditable='true'],.modal,.dropdown-menu,.table,.card")) {
+                    return true;
+                }
+                return hasHorizontalScrollConflict(target);
+            }
+
+            function handleTouchStart(e) {
+                if (!isMobile() || !e.touches || e.touches.length !== 1) {
+                    swipeState = null;
+                    return;
+                }
+                var t = e.touches[0];
+                var startX = t.clientX;
+                var startY = t.clientY;
+                var target = e.target;
+                var interactive = isInteractiveTarget(target);
+                var canOpenSwipe = !drawerOpen && startX <= EDGE_OPEN_ZONE_PX && !interactive;
+                var canCloseSwipe = drawerOpen && !interactive;
+                swipeState = {
+                    startX: startX,
+                    startY: startY,
+                    canOpenSwipe: canOpenSwipe,
+                    canCloseSwipe: canCloseSwipe
+                };
+            }
+
+            function handleTouchEnd(e) {
+                if (!swipeState || !e.changedTouches || !e.changedTouches.length) return;
+                var t = e.changedTouches[0];
+                var dx = t.clientX - swipeState.startX;
+                var dy = t.clientY - swipeState.startY;
+                var absDx = Math.abs(dx);
+                var absDy = Math.abs(dy);
+                if (absDx < SWIPE_MIN_DISTANCE || absDx < absDy) {
+                    swipeState = null;
+                    return;
+                }
+                if (swipeState.canOpenSwipe && dx > 0) {
+                    openDrawer();
+                } else if (swipeState.canCloseSwipe && dx < 0) {
+                    closeDrawer();
+                }
+                swipeState = null;
+            }
+
+            logoBtn.addEventListener("click", function () {
+                if (!isMobile()) return;
+                openDrawer();
+            });
+            overlay.addEventListener("click", closeDrawer);
+            document.addEventListener("keydown", function (e) {
+                if (e.key === "Escape") closeDrawer();
+            });
+            drawer.querySelectorAll(".pos-mobile-drawer-link").forEach(function (link) {
+                link.addEventListener("click", closeDrawer);
+            });
+            document.addEventListener("touchstart", handleTouchStart, { passive: true });
+            document.addEventListener("touchend", handleTouchEnd, { passive: true });
+            window.addEventListener("resize", function () {
+                if (!isMobile()) closeDrawer();
+            });
+
+            syncDrawerActiveLink();
         });
     </script>
     {% block extra_scripts %}{% endblock %}
