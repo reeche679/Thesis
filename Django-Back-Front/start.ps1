@@ -25,6 +25,9 @@ Write-Host "Starting Django server (localhost + same Wi-Fi)..." -ForegroundColor
 Write-Host "  On this PC:  http://127.0.0.1:8000" -ForegroundColor Gray
 Write-Host "  On phone:    http://${ip}:8000  (same Wi-Fi)" -ForegroundColor Gray
 Write-Host ""
+# Local development: enable DEBUG so static files are served from /static directly
+# (no collectstatic/restart mismatch for newly added images).
+$env:DEBUG = "1"
 python manage.py runserver 0.0.0.0:8000
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Server exited. Press Enter to close." -ForegroundColor Yellow

@@ -136,16 +136,16 @@
 
     /* Irregular "WHEN YOU BECAME IRREGULAR" dropdown: keep neutral gray when empty */
     #irreg-start-sem {
-        border-color: #989b9e !important;
-        color: #505559 !important;
+        border-color: #7f868d !important;
+        color: #3f454b !important;
         box-shadow: none !important;
-        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%236c757d' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2.5 5.5l5.5 5.5 5.5-5.5'/%3e%3c/svg%3e") !important;
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23495057' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2.5 5.5l5.5 5.5 5.5-5.5'/%3e%3c/svg%3e") !important;
         background-repeat: no-repeat !important;
         background-position: right 0.65rem center !important;
         background-size: 12px 10px !important;
     }
     #irreg-start-sem:focus {
-        border-color: #adb5bd !important;
+        border-color: #6f7780 !important;
         box-shadow: none !important;
     }
 
@@ -217,35 +217,36 @@
         display: flex;
     }
     .generate-loading-card {
-        width: min(330px, 92vw);
-        background: #eef0f2;
+        width: min(380px, 94vw);
+        background: #fdfdfd;
         border-radius: 14px;
         border: 1px solid rgba(0, 0, 0, 0.08);
         box-shadow: 0 18px 40px rgba(0, 0, 0, 0.22);
-        padding: 0.95rem 1rem 0.9rem;
+        padding: 1rem;
     }
     .generate-loading-title {
         font-size: 0.94rem;
         font-weight: 700;
         color: #2f3438;
-        margin-bottom: 0.55rem;
+        margin-top: 0.45rem;
+        text-align: center;
     }
     .generate-loading-gif-wrap {
-        height: 118px;
-        border-radius: 10px;
-        background: #f7f7f8;
-        border: 1px solid rgba(0, 0, 0, 0.08);
+        height: 165px;
+        background: #fdfdfd;
         display: flex;
         align-items: center;
         justify-content: center;
         overflow: hidden;
     }
     .generate-loading-gif {
-        width: 100%;
+        width: auto;
+        max-width: 100%;
         height: 100%;
         object-fit: contain;
         display: block;
         opacity: 0.95;
+        border-radius: 12px;
     }
     .generate-loading-sub {
         margin-top: 0.55rem;
@@ -273,15 +274,15 @@
        The red outline above is for all empty semester dropdown display buttons;
        we override it only for this specific dropdown. */
     .pos-select-display-btn.irreg-sem-black-empty:not(.has-value) {
-        border-color: #ced4da !important;
-        color: #6c757d !important;
-        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%236c757d' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e") !important;
+        border-color: #8b939b !important;
+        color: #495057 !important;
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23495057' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e") !important;
         background-repeat: no-repeat !important;
         background-position: right 0.15rem center !important;
         background-size: 12px 10px !important;
     }
     .pos-select-display-btn.irreg-sem-black-empty:not(.has-value):focus {
-        box-shadow: 0 0 0 0.15rem rgba(108, 117, 125, 0.2) !important;
+        box-shadow: 0 0 0 0.15rem rgba(73, 80, 87, 0.22) !important;
     }
 
     @media (max-width: 575.98px) {
@@ -1314,10 +1315,10 @@
 
     <div id="generate-loading-overlay" aria-hidden="true">
         <div class="generate-loading-card" role="status" aria-live="polite" aria-label="Generating POS">
-            <div class="generate-loading-title">Generating Program of Study...</div>
             <div class="generate-loading-gif-wrap" aria-hidden="true">
                 <img class="generate-loading-gif" src="{% static 'img/paper_pen.gif' %}" alt="Generating animation">
             </div>
+            <div class="generate-loading-title">Generating Program of Study...</div>
         </div>
     </div>
 </div>

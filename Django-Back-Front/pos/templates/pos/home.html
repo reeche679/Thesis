@@ -448,7 +448,7 @@
                     <div class="home-academic-year-select home-select-wrap">
                         <button type="button" class="home-select-display-btn" id="home-academic-year-btn"></button>
                         <select name="academic_year" id="id_academic_year" class="form-select form-select-sm home-academic-year-select" style="position:absolute;opacity:0;pointer-events:none;width:0;height:0;padding:0;margin:0;">
-                            <option value="">-- Select --</option>
+                            <option value="">-- Select Academic Year --</option>
                             {% for value, label in academic_year_choices %}
                             <option value="{{ value }}" {% if session_academic_year == value %}selected{% endif %}>{{ label }}</option>
                             {% endfor %}
@@ -528,9 +528,46 @@
                 }
 
                 var rect = ayBtn.getBoundingClientRect();
+                var edgePad = 8;
+                var gap = 4;
+                var viewportH = window.innerHeight || document.documentElement.clientHeight || 0;
+                var viewportW = window.innerWidth || document.documentElement.clientWidth || 0;
+                var spaceBelow = Math.max(0, viewportH - rect.bottom - edgePad);
+                var spaceAbove = Math.max(0, rect.top - edgePad);
+
                 ayMenu.style.minWidth = rect.width + 'px';
-                ayMenu.style.top = (rect.bottom + window.scrollY + 4) + 'px';
-                ayMenu.style.left = (rect.left + window.scrollX) + 'px';
+                ayMenu.style.maxHeight = Math.max(120, Math.min(240, spaceBelow)) + 'px';
+                ayMenu.style.display = 'block';
+                ayMenu.style.visibility = 'hidden';
+
+                var naturalHeight = ayMenu.offsetHeight || 0;
+                var desiredHeight = Math.min(naturalHeight, 240);
+                var shouldOpenUp = spaceBelow < desiredHeight && spaceAbove > spaceBelow;
+                var availableHeight = shouldOpenUp ? spaceAbove : spaceBelow;
+                ayMenu.style.maxHeight = Math.max(120, Math.min(240, availableHeight)) + 'px';
+
+                // Re-measure after max-height update to position accurately.
+                var menuHeight = ayMenu.offsetHeight || desiredHeight;
+                var top = shouldOpenUp
+                    ? (rect.top + window.scrollY - menuHeight - gap)
+                    : (rect.bottom + window.scrollY + gap);
+
+                // Keep popup inside viewport bounds.
+                var minTop = window.scrollY + edgePad;
+                var maxTop = window.scrollY + viewportH - menuHeight - edgePad;
+                if (top < minTop) top = minTop;
+                if (top > maxTop) top = maxTop;
+
+                var left = rect.left + window.scrollX;
+                var menuWidth = ayMenu.offsetWidth || rect.width;
+                var minLeft = window.scrollX + edgePad;
+                var maxLeft = window.scrollX + viewportW - menuWidth - edgePad;
+                if (left < minLeft) left = minLeft;
+                if (left > maxLeft) left = maxLeft;
+
+                ayMenu.style.top = top + 'px';
+                ayMenu.style.left = left + 'px';
+                ayMenu.style.visibility = 'visible';
                 ayMenu.style.display = 'block';
                 backdrop.style.display = 'block';
             }

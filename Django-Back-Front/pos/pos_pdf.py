@@ -12,7 +12,7 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from reportlab.lib.utils import ImageReader
 from reportlab.platypus import (
-    SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image,
+    SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image, KeepTogether,
 )
 
 # Course table column widths (inches). Student info table is scaled to the same total width for alignment.
@@ -93,7 +93,7 @@ POS_CURRICULUM = [
         ("CpEE 401", "Elective Course 1", 3, 2, 3, "2nd Year Standing", ""),
         ("ECE 405", "Electronic Circuits: Devices and Analysis", 4, 3, 3, "EE 212", ""),
         ("ENGG 114", "Basic Occupational Safety and Health", 3, 3, 0, "", ""),
-        ("MATH 104", "Numerical Methods", 3, 3, 0, "Math 103", ""),
+        ("MATH 104", "Numerical Methods", 3, 3, 0, "MATH 103", ""),
         ("AI 102", "Probability and Statistics for AI", 3, 3, 0, "MATH 102", ""),
         ("PATHFit 4", "Choice of Dance, Sports, Martial Arts, Group Exercise, Outdoor, and Adventure Activities 2", 2, 2, 0, "PATHFit 1 & 2", ""),
     ]),
@@ -1156,6 +1156,9 @@ def build_preview_pos_pdf(
         if lbl:
             preview_label_to_ui_index[lbl] = ui_idx
 
+    # Special exemption: hide Second Year - Midterm entirely when empty (no LOA row).
+    second_year_midterm_ui_idx = 5
+
     def _grade_cell(grade_str):
         if not grade_str:
             return ""
@@ -1191,7 +1194,7 @@ def build_preview_pos_pdf(
             pass
         return ""
 
-    def _render_section_table(section_label, rows, total_units_value=None):
+    def _render_section_table(section_label, rows, total_units_value=None, show_loa_row=False):
         table_data = [
             [Paragraph("<b>" + (section_label or "") + "</b>", ParagraphStyle(name="SectionLabelPrev", parent=normal, alignment=1, fontName="Times-Bold", fontSize=10))] + [""] * (len(col_widths) - 1),
             [""] * len(col_widths),
@@ -1236,6 +1239,12 @@ def build_preview_pos_pdf(
                 Paragraph(_requisite_display_text(coreq).replace("&", "&amp;") or " ", cell_style_center),
                 _grade_cell(grade),
             ])
+
+        if show_loa_row and not (rows or []):
+            table_data.append(
+                [Paragraph("Leave of Absence", ParagraphStyle(name="LoaRowPrev", parent=normal, fontName="Times-Roman", fontSize=10, alignment=1))]
+                + [""] * (len(col_widths) - 1)
+            )
 
         # Only show Total Units; leave Lec/Lab totals blank (matches requirement).
         # Prefer `total_units_value` when provided (e.g., Preview server value),
@@ -1302,44 +1311,24 @@ def build_preview_pos_pdf(
                 ("FONTNAME", (0, -1), (-1, -1), "Times-Bold"),
             ])
         )
+        if show_loa_row and not (rows or []):
+            loa_row_idx = 4
+            t.setStyle(
+                TableStyle([
+                    ("SPAN", (0, loa_row_idx), (ncols - 1, loa_row_idx)),
+                    ("ALIGN", (0, loa_row_idx), (ncols - 1, loa_row_idx), "CENTER"),
+                    ("VALIGN", (0, loa_row_idx), (ncols - 1, loa_row_idx), "MIDDLE"),
+                    ("FONTNAME", (0, loa_row_idx), (ncols - 1, loa_row_idx), "Times-Italic"),
+                ])
+            )
         return t
 
-    # Render server preview sections first (exact course list shown on Preview page)
-    for section in (preview_sections or []):
-        section_label = section.get("label") or ""
-        rows = section.get("rows") or []
-        ui_idx = preview_label_to_ui_index.get(section_label)
-        total_units_value = None
-        if ui_idx is not None:
-            total_units_value = pos_total_units_by_ui_index.get(ui_idx)
-        if total_units_value is None:
-            try:
-                total_units_value = int(section.get("total_units", 0) or 0)
-            except (TypeError, ValueError):
-                total_units_value = 0
-        # IMPORTANT: Preview total_units is already the correct integer total for that table.
-        # Use it to avoid any mismatch from float parsing / unit coercion.
-        try:
-            preview_total_units = int(float(section.get("total_units", 0) or 0))
-        except (TypeError, ValueError):
-            preview_total_units = None
-        story.append(
-            _render_section_table(
-                section_label,
-                rows,
-                total_units_value=preview_total_units if preview_total_units is not None else total_units_value,
-            )
-        )
-        story.append(Paragraph("Evaluated by: ______________________________", evaluated_style))
-
-    # Render future solver sections after the preview cut-off
     try:
         boundary_idx = int(boundary_section_index) if boundary_section_index is not None else None
     except (TypeError, ValueError):
         boundary_idx = None
 
-    # Mirror the Preview UI behavior: only render solver semesters up to the last
-    # semester that actually has courses (avoid trailing blank semesters).
+    # Only render solver semesters up to the last semester that has courses.
     max_solver_semester_index_with_courses = None
     for sem in (future_pos or []):
         if not isinstance(sem, dict):
@@ -1356,6 +1345,86 @@ def build_preview_pos_pdf(
         if has_courses:
             if max_solver_semester_index_with_courses is None or solver_sem_index_int > max_solver_semester_index_with_courses:
                 max_solver_semester_index_with_courses = solver_sem_index_int
+
+    # Mark empty semesters as LOA only when they are between semesters with courses.
+    course_ui_indices = set()
+    for section in (preview_sections or []):
+        if not isinstance(section, dict):
+            continue
+        section_label = section.get("label") or ""
+        ui_idx = preview_label_to_ui_index.get(section_label)
+        if ui_idx is None:
+            continue
+        rows = section.get("rows") or []
+        has_courses = isinstance(rows, list) and any((r.get("code") or "").strip() != "" for r in rows if isinstance(r, dict))
+        if has_courses:
+            course_ui_indices.add(ui_idx)
+
+    for sem in (future_pos or []):
+        if not isinstance(sem, dict):
+            continue
+        solver_sem_index = sem.get("semester_index")
+        try:
+            ui_section_index = int(solver_sem_index) - 1 if solver_sem_index is not None else None
+        except (TypeError, ValueError):
+            ui_section_index = None
+        if ui_section_index is None:
+            continue
+        if boundary_idx is not None and ui_section_index <= boundary_idx:
+            continue
+        if max_solver_semester_index_with_courses is not None:
+            try:
+                if int(solver_sem_index) > max_solver_semester_index_with_courses:
+                    continue
+            except (TypeError, ValueError):
+                pass
+        courses = sem.get("courses") or []
+        has_courses = isinstance(courses, list) and any(
+            (c.get("code") or "").strip() != '' for c in courses if isinstance(c, dict)
+        )
+        if has_courses:
+            course_ui_indices.add(ui_section_index)
+
+    min_ui_idx_with_courses = min(course_ui_indices) if course_ui_indices else None
+    max_ui_idx_with_courses = max(course_ui_indices) if course_ui_indices else None
+
+    # Render server preview sections first (exact course list shown on Preview page)
+    for section in (preview_sections or []):
+        section_label = section.get("label") or ""
+        rows = section.get("rows") or []
+        ui_idx = preview_label_to_ui_index.get(section_label)
+        if ui_idx == second_year_midterm_ui_idx and not (rows or []):
+            continue
+        total_units_value = None
+        if ui_idx is not None:
+            total_units_value = pos_total_units_by_ui_index.get(ui_idx)
+        if total_units_value is None:
+            try:
+                total_units_value = int(section.get("total_units", 0) or 0)
+            except (TypeError, ValueError):
+                total_units_value = 0
+        # IMPORTANT: Preview total_units is already the correct integer total for that table.
+        # Use it to avoid any mismatch from float parsing / unit coercion.
+        try:
+            preview_total_units = int(float(section.get("total_units", 0) or 0))
+        except (TypeError, ValueError):
+            preview_total_units = None
+        show_loa_row = (
+            ui_idx is not None
+            and not (rows or [])
+            and min_ui_idx_with_courses is not None
+            and max_ui_idx_with_courses is not None
+            and min_ui_idx_with_courses < ui_idx < max_ui_idx_with_courses
+        )
+        story.append(
+            _render_section_table(
+                section_label,
+                rows,
+                total_units_value=preview_total_units if preview_total_units is not None else total_units_value,
+                show_loa_row=show_loa_row,
+            )
+        )
+        story.append(Paragraph("Evaluated by: ______________________________", evaluated_style))
 
     for sem in (future_pos or []):
         if not isinstance(sem, dict):
@@ -1405,11 +1474,19 @@ def build_preview_pos_pdf(
                 "grade": "",
             })
 
-        story.append(_render_section_table(label, future_rows, total_units_value=total_units_value))
+        if ui_section_index == second_year_midterm_ui_idx and not future_rows:
+            continue
+
+        show_loa_row = (
+            min_ui_idx_with_courses is not None
+            and max_ui_idx_with_courses is not None
+            and not future_rows
+            and min_ui_idx_with_courses < ui_section_index < max_ui_idx_with_courses
+        )
+        story.append(_render_section_table(label, future_rows, total_units_value=total_units_value, show_loa_row=show_loa_row))
         story.append(Paragraph("Evaluated by: ______________________________", evaluated_style))
 
     # Footer/signatories in a single row (3 columns).
-    story.append(Spacer(1, 0.4 * inch))
     sign_table_data = [
         [
             Paragraph("Checked and Reviewed:", sign_style),
@@ -1437,7 +1514,7 @@ def build_preview_pos_pdf(
             Paragraph("Date:", sign_style),
         ],
     ]
-    sign_table = Table(sign_table_data, colWidths=[doc.width / 3.0] * 3, hAlign="LEFT")
+    sign_table = Table(sign_table_data, colWidths=[doc.width / 3.0] * 3, hAlign="LEFT", splitByRow=0)
     sign_table.setStyle(
         TableStyle(
             [
@@ -1449,7 +1526,7 @@ def build_preview_pos_pdf(
             ]
         )
     )
-    story.append(sign_table)
+    story.append(KeepTogether([Spacer(1, 0.4 * inch), sign_table]))
 
     def page_canvas(canvas, doc):
         _page_header_canvas(canvas, logo_path)

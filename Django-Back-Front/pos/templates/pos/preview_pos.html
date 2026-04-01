@@ -123,6 +123,45 @@
         align-items: center;
         justify-content: center;
     }
+    .preview-label-with-info {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+    }
+    .preview-info-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 0.9rem !important;
+        height: 0.9rem !important;
+        min-width: 0 !important;
+        min-height: 0 !important;
+        border-radius: 50% !important;
+        border: 1px solid #6c757d;
+        color: #495057;
+        background: #fff;
+        font-size: 0.58rem;
+        font-weight: 600;
+        line-height: 1;
+        padding: 0 !important;
+        box-sizing: border-box;
+    }
+    .preview-info-btn:hover,
+    .preview-info-btn:focus {
+        border-color: #495057;
+        color: #212529;
+        background: #f8f9fa;
+        box-shadow: none;
+    }
+    .popover.preview-info-popover {
+        border-radius: 0.5rem;
+    }
+    .popover.preview-info-popover .popover-body {
+        font-size: 0.74rem;
+        line-height: 1.2;
+        padding: 0.45rem 0.55rem;
+        max-width: 235px;
+    }
 
     .preview-photo-box {
         width: 100px;
@@ -623,7 +662,7 @@
                         <h6 class="modal-title mb-0" id="preview-signatory-error-title">Required Field</h6>
                     </div>
                     <div class="modal-body" id="preview-signatory-error-message">
-                        Please choose your adviser..
+                        Please choose an Adviser.
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-primary btn-sm" id="preview-signatory-error-ok-btn">OK</button>
@@ -714,7 +753,7 @@
 
         <div class="mt-3 d-flex justify-content-between align-items-center">
             <div class="d-flex align-items-center">
-                <button id="pos-edit-toggle" type="button" class="btn btn-outline-secondary btn-sm" style="min-width: 110px;" title="Edit and drag ungraded courses">
+                <button id="pos-edit-toggle" type="button" class="btn btn-outline-secondary btn-sm d-inline-flex align-items-center justify-content-center px-2" style="min-width: 96px;" title="Edit and drag ungraded courses">
                     <span id="pos-edit-toggle-icon" class="me-1" aria-hidden="true">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
                             <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
@@ -724,8 +763,22 @@
                 </button>
                 <div class="ms-3">
                     <div class="form-check form-switch">
-                        <input class="form-check-input" type="checkbox" role="switch" id="pos-feasible-move-toggle">
-                        <label class="form-check-label small text-muted" for="pos-feasible-move-toggle">Show feasible move targets</label>
+                        <input class="form-check-input" type="checkbox" role="switch" id="pos-feasible-move-toggle" aria-label="Show feasible move targets">
+                        <div class="form-check-label small text-muted preview-label-with-info">
+                            <span>Show feasible move targets</span>
+                            <button
+                                type="button"
+                                class="btn preview-info-btn"
+                                data-preview-info="popover"
+                                data-bs-toggle="popover"
+                                data-bs-trigger="click"
+                                data-bs-placement="right"
+                                data-bs-html="false"
+                                data-bs-custom-class="preview-info-popover"
+                                data-bs-content="Highlights semesters where a selected course can be moved while keeping prerequisite and sequence rules valid (may be slow)."
+                                aria-label="Show feasible move targets info"
+                            >i</button>
+                        </div>
                         <span id="pos-feasible-move-spinner"
                               class="spinner-border spinner-border-sm ms-2 align-middle"
                               role="status"
@@ -816,6 +869,25 @@
                 try {
                     previewTooltipInstances.push(new bootstrap.Tooltip(el));
                 } catch (e) {}
+            });
+        }
+
+        function initPreviewInfoPopovers(scope) {
+            if (!(window.bootstrap && window.bootstrap.Popover)) return;
+            var root = scope || document;
+            root.querySelectorAll('[data-preview-info="popover"]').forEach(function(el) {
+                try { new bootstrap.Popover(el, { container: 'body' }); } catch (e) {}
+            });
+            if (initPreviewInfoPopovers._boundDocClick) return;
+            initPreviewInfoPopovers._boundDocClick = true;
+            document.addEventListener('click', function(e) {
+                var trigger = e.target.closest('[data-preview-info="popover"]');
+                var insidePopover = e.target.closest('.popover');
+                if (trigger || insidePopover) return;
+                document.querySelectorAll('[data-preview-info="popover"]').forEach(function(el) {
+                    var pop = bootstrap.Popover.getInstance(el);
+                    if (pop) pop.hide();
+                });
             });
         }
 
@@ -1159,9 +1231,9 @@
 
             var signatories = getPreviewSignatoryParams();
             var missing = [];
-            if (!signatories.adviser) missing.push('ADVISER');
-            if (!signatories.department_chair) missing.push('DEPARTMENT CHAIR');
-            if (!signatories.program_chair) missing.push('PROGRAM CHAIR');
+            if (!signatories.adviser) missing.push('an Adviser');
+            if (!signatories.program_chair) missing.push('a Program Chair');
+            if (!signatories.department_chair) missing.push('a Department Chair');
 
             if (!missing.length) {
                 return true;
@@ -1169,7 +1241,15 @@
 
             var msgEl = document.getElementById('preview-signatory-error-message');
             if (msgEl) {
-                msgEl.textContent = 'Please select: ' + missing.join(', ') + '.';
+                var message = '';
+                if (missing.length === 1) {
+                    message = 'Please choose ' + missing[0] + '.';
+                } else if (missing.length === 2) {
+                    message = 'Please choose ' + missing[0] + ' and ' + missing[1] + '.';
+                } else {
+                    message = 'Please choose ' + missing[0] + ', ' + missing[1] + ', and ' + missing[2] + '.';
+                }
+                msgEl.textContent = message;
             }
             var errModalEl = document.getElementById('preview-signatory-error-modal');
             if (errModalEl) errModalEl.classList.add('is-open');
@@ -1361,6 +1441,7 @@
         initPreviewSignatoryDropdowns();
         bindSignatoryEditActions();
         initPreviewTooltips(document);
+        initPreviewInfoPopovers(document);
 
         var previewDlBtn = document.getElementById('preview-download-pdf-btn');
         if (previewDlBtn) {
@@ -2331,6 +2412,7 @@
                 if (label) label.textContent = enabled ? 'Apply' : 'Edit';
                 var iconEl = document.getElementById('pos-edit-toggle-icon');
                 if (iconEl) iconEl.innerHTML = enabled ? POS_CHECK_SVG : POS_PENCIL_SVG;
+                btn.title = enabled ? 'Apply Changes' : 'Edit and drag ungraded courses';
                 btn.disabled = !!posEditState.saving || !!posEditState.validating;
             }
             document.body.classList.toggle('pos-editing', enabled);
