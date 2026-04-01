@@ -146,14 +146,17 @@
             order: 2;
             margin-bottom: 0.6rem;
         }
-        .preview-feasible-wrap {
-            margin-left: 0 !important;
-            order: 1;
-            margin-top: 0.75rem; /* space from signatory dropdown section */
+        .preview-signatory-row {
             margin-bottom: 0.7rem;
-            text-align: left;
-            align-self: flex-start;
         }
+    .preview-feasible-wrap {
+        margin-left: 0 !important;
+        order: 1;
+        margin-top: 0.75rem; /* space from signatory dropdown section */
+        margin-bottom: 0.7rem;
+        text-align: left;
+        align-self: flex-start;
+    }
         .preview-feasible-wrap .form-check,
         .preview-feasible-wrap .form-check-label {
             text-align: left !important;
@@ -178,6 +181,13 @@
         display: inline-flex;
         align-items: center;
         gap: 0.35rem;
+    }
+    /* Hide feasible-move controls unless user is actively editing. */
+    .preview-feasible-wrap {
+        display: none;
+    }
+    body.pos-editing .preview-feasible-wrap {
+        display: block;
     }
     .preview-info-btn {
         display: inline-flex;
@@ -246,29 +256,31 @@
     /* Match Generate POS mobile student profile layout (landscape, text left, horizontal scroll inside card) */
     @media (max-width: 767.98px) {
         .pos-student-profile-row .preview-photo-box {
-            width: 70px;
-            height: 70px;
-            min-width: 70px;
-            min-height: 70px;
+            width: 82px;
+            height: 82px;
+            min-width: 82px;
+            min-height: 82px;
         }
         .pos-student-profile-row { gap: 0.75rem; }
         .pos-student-profile-details .text-muted { font-size: 0.65rem; }
         .pos-student-profile-details .fw-semibold { font-size: 0.8rem; }
         .pos-student-profile-scroll {
-            overflow-x: auto;
+            overflow: visible;
             -webkit-overflow-scrolling: touch;
         }
         .pos-student-profile-details {
-            min-width: 540px;
+            min-width: 0;
             text-align: left;
         }
+        .pos-student-profile-details > .col-4:nth-child(n+2) { display: none; }
+        .pos-student-profile-details > .col-4:first-child { width: 100%; }
     }
     @media (max-width: 575.98px) {
         .pos-student-profile-row .preview-photo-box {
-            width: 64px;
-            height: 64px;
-            min-width: 64px;
-            min-height: 64px;
+            width: 74px;
+            height: 74px;
+            min-width: 74px;
+            min-height: 74px;
         }
         .pos-student-profile-row {
             gap: 0.5rem;
@@ -277,7 +289,7 @@
         .pos-student-profile-details .text-muted { font-size: 0.6rem; }
         .pos-student-profile-details .fw-semibold { font-size: 0.75rem; }
         .pos-student-profile-details {
-            min-width: 520px;
+            min-width: 0;
             text-align: left;
         }
     }
@@ -729,7 +741,7 @@
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
                     <div class="modal-body">
-                        <input type="password" class="form-control form-control-sm" id="preview-signatory-admin-password-input" placeholder="Enter admin password">
+                        <input type="password" class="form-control form-control-sm" id="preview-signatory-admin-password-input" placeholder="Enter Admin Password">
                         <div class="small text-danger mt-2" id="preview-signatory-admin-password-error" style="display:none;">Incorrect password.</div>
                     </div>
                     <div class="modal-footer justify-content-end">
@@ -2492,6 +2504,14 @@
             } else {
                 destroyPosSortables();
                 posEditState.validating = false;
+                var feasibleToggle = document.getElementById('pos-feasible-move-toggle');
+                if (feasibleToggle) feasibleToggle.checked = false;
+                clearFeasibleMoveHighlights();
+                clearFeasibleTargetSemesterHighlights();
+                posEditState.dragCourseCode = null;
+                posEditState.dragFeasibleTargetsRequestId += 1;
+                var spinEl = document.getElementById('pos-feasible-move-spinner');
+                if (spinEl) spinEl.style.display = 'none';
             }
         }
 
