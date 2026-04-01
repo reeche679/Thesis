@@ -247,7 +247,8 @@
 
     /* Registration error popup: dialog above backdrop; backdrop is full-screen gray behind only */
     #register-error-modal {
-        z-index: 1060 !important;
+        z-index: 2100 !important;
+        background: rgba(45, 45, 52, 0.55);
     }
     /* Backdrop sits under #register-error-modal (1060 > 1055) */
     body > .modal-backdrop {
@@ -276,6 +277,7 @@
     #register-error-modal .modal-dialog {
         margin-top: 1rem;
         max-width: 680px;
+        pointer-events: auto;
     }
     #register-error-modal:not(.fade) .modal-dialog {
         transform: none;
@@ -295,23 +297,67 @@
     document.addEventListener('DOMContentLoaded', function() {
         const registerErrorModalEl = document.getElementById('register-error-modal');
         const registerErrorModalBody = document.getElementById('register-error-modal-body');
+        const registerErrorOkBtn = document.getElementById('register-error-ok-btn');
         if (registerErrorModalEl && registerErrorModalEl.parentNode !== document.body) {
             document.body.appendChild(registerErrorModalEl);
         }
-        const registerErrorModal = (registerErrorModalEl && window.bootstrap)
-            ? new bootstrap.Modal(registerErrorModalEl, { backdrop: true, keyboard: true })
-            : null;
+        let registerErrorOpen = false;
+
+        function cleanupRegisterModalArtifacts() {
+            document.querySelectorAll('body > .modal-backdrop').forEach(function(backdrop) {
+                backdrop.remove();
+            });
+            document.body.classList.remove('modal-open');
+            document.body.style.paddingRight = '0px';
+            document.body.style.marginRight = '0px';
+        }
+
+        function openRegisterErrorModal() {
+            if (!registerErrorModalEl) return;
+            cleanupRegisterModalArtifacts();
+            registerErrorModalEl.style.display = 'block';
+            registerErrorModalEl.classList.add('show');
+            registerErrorModalEl.setAttribute('aria-hidden', 'false');
+            registerErrorModalEl.style.pointerEvents = 'auto';
+            registerErrorOpen = true;
+        }
+
+        function closeRegisterErrorModal() {
+            if (!registerErrorModalEl) return;
+            registerErrorModalEl.classList.remove('show');
+            registerErrorModalEl.setAttribute('aria-hidden', 'true');
+            registerErrorModalEl.style.display = 'none';
+            registerErrorOpen = false;
+            cleanupRegisterModalArtifacts();
+        }
 
         function showRegisterError(message) {
             if (registerErrorModalBody) {
                 registerErrorModalBody.textContent = message;
             }
-            if (registerErrorModal) {
-                registerErrorModal.show();
+            if (registerErrorModalEl) {
+                openRegisterErrorModal();
             } else {
-                // Fallback only if Bootstrap modal is unavailable.
                 window.alert(message);
             }
+        }
+
+        if (registerErrorOkBtn) {
+            registerErrorOkBtn.addEventListener('click', function() {
+                closeRegisterErrorModal();
+            });
+        }
+        if (registerErrorModalEl) {
+            registerErrorModalEl.addEventListener('click', function(e) {
+                if (e.target === registerErrorModalEl) {
+                    closeRegisterErrorModal();
+                }
+            });
+            document.addEventListener('keydown', function(e) {
+                if (registerErrorOpen && e.key === 'Escape') {
+                    closeRegisterErrorModal();
+                }
+            });
         }
 
         const serverErrorsData = document.getElementById('register-server-errors');
@@ -406,7 +452,7 @@
                     emailLocalEl.value = local;
                     if (!EMAIL_LOCAL_PATTERN.test(local)) {
                         emailLocalEl.focus();
-                        showRegisterError('Please enter a valid BSU email username: letters, numbers, dots, _ or - only (no spaces), up to ' + BSU_EMAIL_LOCAL_MAX_LEN + ' characters before @g.batstate-u.edu.ph.');
+                        showRegisterError('Wrong email input. Please enter a valid email e.g. 23-00000');
                         return;
                     }
                     emailHiddenEl.value = local + BSU_EMAIL_SUFFIX;
@@ -583,7 +629,7 @@
                 <div id="register-error-modal-body" class="small text-danger"></div>
             </div>
             <div class="modal-footer justify-content-start">
-                <button type="button" class="btn btn-primary btn-sm" data-bs-dismiss="modal">OK</button>
+                <button type="button" class="btn btn-primary btn-sm" id="register-error-ok-btn">OK</button>
             </div>
         </div>
     </div>
