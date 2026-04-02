@@ -1,3 +1,7 @@
 .env
 .env.prod
 .log
+
+# Cursor / agent debug dumps
+debug-*.log
+.cursor/debug-*.log

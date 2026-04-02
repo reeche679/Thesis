@@ -2048,6 +2048,17 @@
             var dyn = document.getElementById('pos-preview-dynamic');
             if (!dyn) return;
 
+            /* Mobile: bubbleScroll lets touch drags scroll the page — fights drag. Desktop: keep it for scroll-while-dragging. */
+            var mobilePreviewDnd = false;
+            try {
+                mobilePreviewDnd = window.matchMedia('(max-width: 767.98px)').matches;
+            } catch (e) {}
+
+            // Mobile edge auto-scroll is very sensitive to tuning on iOS/Android.
+            // Bump responsiveness only on mobile; keep desktop unchanged.
+            var dndScrollSensitivity = mobilePreviewDnd ? 240 : 120;
+            var dndScrollSpeed = mobilePreviewDnd ? 120 : 32;
+
             var semEls = dyn.querySelectorAll('.pos-dnd-semester[data-semester-index]');
             semEls.forEach(function(semEl) {
                 var semIndex = String(semEl.getAttribute('data-semester-index') || '').trim();
@@ -2084,11 +2095,12 @@
                     forceFallback: true,
                     fallbackOnBody: true,
                     fallbackTolerance: 2,
+                    // Window edge auto-scroll when the ghost nears top/bottom (keep on mobile + desktop).
                     scroll: true,
-                    // Faster auto-scroll so long-distance moves are easier (desktop + mobile).
-                    scrollSensitivity: 120,
-                    scrollSpeed: 32,
-                    bubbleScroll: true,
+                    scrollSensitivity: dndScrollSensitivity,
+                    scrollSpeed: dndScrollSpeed,
+                    // bubbleScroll: scroll nested overflow parents while dragging — good on desktop, breaks touch drag on mobile.
+                    bubbleScroll: !mobilePreviewDnd,
                     ghostClass: 'pos-dnd-ghost',
                     chosenClass: 'pos-dnd-chosen',
                     // onEnd fires after drop completes (including cross-list moves)
