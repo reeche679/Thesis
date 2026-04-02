@@ -1303,10 +1303,6 @@
                 </ul>
             </div>
 
-            <button type="button" class="btn btn-outline-secondary" id="validatePosBtn">
-                <span class="pos-action-btn-text-full">Validate POS</span>
-                <span class="pos-action-btn-text-short">Validate</span>
-            </button>
         </div>
 
         <div class="pos-actions-right">
@@ -1629,7 +1625,11 @@
         } else if (/missing grade/i.test(rawMsg)) {
             compactMsg = rawMsg;
         } else {
-            compactMsg = (rawMsg.split(/\r?\n/).find(function(line) { return (line || '').trim() !== ''; }) || rawMsg).trim();
+            compactMsg = rawMsg.trim();
+            // Avoid hiding the real solver error details; keep length bounded for UI.
+            if (compactMsg.length > 600) {
+                compactMsg = compactMsg.slice(0, 600).trim() + '...';
+            }
         }
 
         errorEl.classList.remove('d-none');
@@ -1944,29 +1944,6 @@
 
     // (Removed) Add Existing Grades (PDF upload/extract)
 
-    var validatePosBtn = document.getElementById('validatePosBtn');
-    if (validatePosBtn) {
-        validatePosBtn.addEventListener('click', function() {
-            var gradesBySection = mergedGradesForSave();
-            fetch("{% url 'validate_pos' %}", {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': getCookie('csrftoken')
-                },
-                body: JSON.stringify({ grades_by_section: gradesBySection }),
-                credentials: 'same-origin'
-            }).then(function(r) { return r.json(); }).then(function(data) {
-                if (data.ok) {
-                    alert(data.message || 'POS is valid.');
-                } else {
-                    var msg = (data.errors && data.errors.length) ? data.errors.join('\n') : (data.message || 'Validation failed.');
-                    showGeneratedPosErrorPopup(msg, 'infeasible');
-                }
-            }).catch(function() { showGeneratedPosErrorPopup('Validation request failed.', 'infeasible'); });
-        });
-    }
-
     function validateCurrentSectionForGenerate() {
         var sections = document.querySelectorAll('[id^="main-sem-"]');
         for (var s = 0; s < sections.length; s++) {
@@ -2217,8 +2194,11 @@
                 } else if (/missing grade/i.test(rawMsg)) {
                     compactMsg = rawMsg;
                 } else {
-                    // Fallback to first non-empty line only.
-                    compactMsg = (rawMsg.split(/\r?\n/).find(function(line) { return (line || '').trim() !== ''; }) || rawMsg).trim();
+                    compactMsg = rawMsg.trim();
+                    // Avoid hiding solver details; keep length bounded for the modal.
+                    if (compactMsg.length > 600) {
+                        compactMsg = compactMsg.slice(0, 600).trim() + '...';
+                    }
                 }
                 errorEl.style.whiteSpace = 'normal';
                 errorEl.textContent = compactMsg;
@@ -2251,23 +2231,43 @@
 
         saveGradesToServer(gradesBySection, function(data) {
             if (data && data.ok) {
-                setGenerateLoading(true);
-                // Call solver API and store response for Preview page to render dynamically
-                var solverPayload = buildSolverPayloadFromGrades(gradesBySection);
-                fetch("{% url 'generate_pos_api' %}", {
+                // Validate with CP-SAT first so we don't generate when prerequisites are violated.
+                fetch("{% url 'validate_pos' %}", {
                     method: "POST",
                     headers: { "Content-Type": "application/json", "X-CSRFToken": getCookie('csrftoken') },
-                    body: JSON.stringify(solverPayload),
+                    body: JSON.stringify({ grades_by_section: gradesBySection }),
                     credentials: "same-origin"
                 }).then(function(r) { return r.json(); })
-                  .then(function(res) {
-                      setGenerateLoading(false);
-                      try { sessionStorage.setItem('posGeneratedResponse', JSON.stringify(res)); } catch (e) {}
-                      showGeneratedPosModal(res);
+                  .then(function(validationRes) {
+                      if (validationRes && validationRes.ok) {
+                          setGenerateLoading(true);
+                          // Call solver API and store response for Preview page to render dynamically
+                          var solverPayload = buildSolverPayloadFromGrades(gradesBySection);
+                          fetch("{% url 'generate_pos_api' %}", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json", "X-CSRFToken": getCookie('csrftoken') },
+                              body: JSON.stringify(solverPayload),
+                              credentials: "same-origin"
+                          }).then(function(r2) { return r2.json(); })
+                            .then(function(res) {
+                                setGenerateLoading(false);
+                                try { sessionStorage.setItem('posGeneratedResponse', JSON.stringify(res)); } catch (e) {}
+                                showGeneratedPosModal(res);
+                            })
+                            .catch(function() {
+                                setGenerateLoading(false);
+                                showGeneratedPosModal({ status: "infeasible", message: "Request to generate POS failed. Please try again.", pos: [] });
+                            });
+                      } else {
+                          setGenerateLoading(false);
+                          var st = (validationRes && validationRes.status) ? validationRes.status : "infeasible";
+                          var msg = (validationRes && validationRes.message) ? validationRes.message : "POS cannot be generated.";
+                          showGeneratedPosModal({ status: st, message: msg, pos: [] });
+                      }
                   })
                   .catch(function() {
                       setGenerateLoading(false);
-                      showGeneratedPosModal({ status: "infeasible", message: "Request to generate POS failed. Please try again.", pos: [] });
+                      showGeneratedPosModal({ status: "infeasible", message: "Validation request failed.", pos: [] });
                   });
             } else {
                 setGenerateLoading(false);
@@ -2512,6 +2512,7 @@
             updateSelectAllState();
             // Apply current search term (if user typed before reopening modal).
             applyCourseSearchFilter();
+
             var bsModal = typeof bootstrap !== 'undefined' && bootstrap.Modal ? new bootstrap.Modal(irregularModal) : null;
             if (bsModal) bsModal.show(); else irregularModal.classList.add('show'); irregularModal.style.display = 'block';
         }

@@ -31,6 +31,7 @@ from .views import (
     set_generated_pos_option,
     validate_tuned_pos,
     feasible_move_marks,
+    feasible_add_courses_for_section,
     save_tuned_pos,
 )
 
@@ -48,6 +49,7 @@ urlpatterns = [
     path("generate/validate-pos/", validate_pos, name="validate_pos"),
     path("generate/delete-pos/", delete_pos_data, name="delete_pos_data"),
     path("generate/api/", generate_pos_api, name="generate_pos_api"),
+    path("generate/feasible-add-courses/", feasible_add_courses_for_section, name="feasible_add_courses_for_section"),
 
     path("preview/", pos_preview, name="pos_preview"),
     path("preview/set-option/", set_generated_pos_option, name="set_generated_pos_option"),

@@ -80,6 +80,28 @@ def _feasible_dest_cache_put(cache_key: tuple, value: bool) -> None:
 # #endregion
 
 
+# #region feasible-add-courses cache (cross-request)
+_FEASIBLE_ADD_COURSES_CACHE_MAXSIZE = 2048
+_FEASIBLE_ADD_COURSES_CACHE: "OrderedDict[tuple, bool]" = OrderedDict()
+
+
+def _feasible_add_courses_cache_get(cache_key: tuple) -> bool | None:
+    if cache_key in _FEASIBLE_ADD_COURSES_CACHE:
+        _FEASIBLE_ADD_COURSES_CACHE.move_to_end(cache_key)
+        return _FEASIBLE_ADD_COURSES_CACHE[cache_key]
+    return None
+
+
+def _feasible_add_courses_cache_put(cache_key: tuple, value: bool) -> None:
+    _FEASIBLE_ADD_COURSES_CACHE[cache_key] = value
+    _FEASIBLE_ADD_COURSES_CACHE.move_to_end(cache_key)
+    if len(_FEASIBLE_ADD_COURSES_CACHE) > _FEASIBLE_ADD_COURSES_CACHE_MAXSIZE:
+        _FEASIBLE_ADD_COURSES_CACHE.popitem(last=False)
+
+
+# #endregion
+
+
 def _is_password_strong(password):
     if len(password) < 6:
         return False
@@ -1319,7 +1341,15 @@ def delete_pos_data(request):
 @_require_student
 @require_POST
 def validate_pos(request):
-    """Validate POS: check grades_by_section for failed-unit ratio and completeness. Returns JSON { ok, message, errors }."""
+    """
+    Validate POS feasibility using CP-SAT, based on the student's current passed/failed grades.
+
+    This is used by the `/generate` page "Validate POS" button, and should fail when
+    prerequisite validity is violated (e.g., failed Differential Calculus must block
+    schedules that depend on Integral Calculus).
+
+    Returns JSON { ok, status, message, errors }.
+    """
     try:
         data = json.loads(request.body)
     except json.JSONDecodeError:
@@ -1359,12 +1389,186 @@ def validate_pos(request):
             errors.append("{}: 75% or more of units failed. Cannot generate POS.".format(section_label))
         elif ratio >= 0.50:
             errors.append("{}: 50% or more of units failed. Please proceed to the department for manual evaluation.".format(section_label))
-    ok = len(errors) == 0
-    return JsonResponse({
-        'ok': ok,
-        'message': 'POS is valid.' if ok else 'Validation failed.',
-        'errors': errors,
-    })
+    # Fast fail: unit-failure ratio guard (keeps existing behavior and avoids unnecessary solver calls).
+    if errors:
+        return JsonResponse(
+            {
+                'ok': False,
+                'status': 'infeasible',
+                'message': 'Validation failed.',
+                'errors': errors,
+            }
+        )
+
+    # Build passed/failed sets from the user grade profile and also keep the semester
+    # where each course was passed so we can enforce "prereq must be passed earlier".
+    passed_ui: set[str] = set()
+    failed_ui: set[str] = set()
+    passed_sem_by_solver: dict[str, set[int]] = {}
+    passed_occurrences: list[tuple[str, int]] = []  # (solver_code, solver_sem)
+
+    solver_meta = get_solver_metadata() or {}
+    solver_courses = solver_meta.get("courses") if isinstance(solver_meta.get("courses"), dict) else {}
+    year_standing_rules = solver_meta.get("year_standing_rules") if isinstance(solver_meta.get("year_standing_rules"), dict) else {}
+
+    for section_key, section_grades in (grades_by_section or {}).items():
+        try:
+            ui_si = int(section_key)
+        except (TypeError, ValueError):
+            continue
+
+        # UI semester index is 0-based; solver semester index is 1-based.
+        solver_si = ui_si + 1
+
+        if not isinstance(section_grades, dict):
+            continue
+
+        for code_ui, grade in (section_grades or {}).items():
+            if not code_ui:
+                continue
+            if grade is None:
+                continue
+            if isinstance(grade, str) and not grade.strip():
+                continue
+            code_s = str(code_ui).strip()
+            if not code_s:
+                continue
+
+            solver_code = _UI_TO_SOLVER_ELECTIVE.get(code_s, code_s)
+
+            if _is_passing_grade(grade):
+                passed_ui.add(code_s)
+                passed_sem_by_solver.setdefault(solver_code, set()).add(solver_si)
+                passed_occurrences.append((solver_code, solver_si))
+            else:
+                failed_ui.add(code_s)
+
+    # If a course appears in both passed and failed (retake), treat it as passed.
+    for c in list(failed_ui):
+        if c in passed_ui:
+            failed_ui.discard(c)
+
+    # 1) Strict prereq validation based on your rule:
+    #    if a course was FAILED, it cannot be used as a prerequisite until the student
+    #    inputs a PASS for that prerequisite in an earlier semester.
+    for solver_code, course_sem in passed_occurrences:
+        cinfo = solver_courses.get(solver_code) if isinstance(solver_courses, dict) else None
+        if not isinstance(cinfo, dict):
+            continue
+
+        pre_list = cinfo.get("pre-requisites") or []
+        if not isinstance(pre_list, list) or not pre_list:
+            continue
+
+        orig_sem_c = cinfo.get("orig_sem")
+
+        for pre in pre_list:
+            if not isinstance(pre, str) or not pre.strip():
+                continue
+            pre_code = pre.strip()
+            # Course prerequisite (exact course code)
+            if pre_code in solver_courses:
+                pre_passes = passed_sem_by_solver.get(pre_code) or set()
+                if not any(pre_sem < course_sem for pre_sem in pre_passes):
+                    return JsonResponse(
+                        {
+                            'ok': False,
+                            'status': 'infeasible',
+                            'message': f"Schedule is infeasible: prerequisite not satisfied ({solver_code} requires {pre_code} to be passed before the selected semester).",
+                            'errors': [],
+                        }
+                    )
+            # Year-standing prerequisite token
+            elif pre_code in year_standing_rules:
+                try:
+                    if orig_sem_c is None:
+                        continue
+                    orig_sem_c_i = int(orig_sem_c)
+                except (TypeError, ValueError):
+                    continue
+
+                total_units_prefix = 0.0
+                earned_units_prefix = 0.0
+                for pc, pinfo in solver_courses.items():
+                    if not isinstance(pinfo, dict):
+                        continue
+                    p_orig_sem = pinfo.get("orig_sem")
+                    if p_orig_sem is None:
+                        continue
+                    try:
+                        if int(p_orig_sem) >= orig_sem_c_i:
+                            continue
+                    except (TypeError, ValueError):
+                        continue
+
+                    units = float(pinfo.get("units", 0) or 0)
+                    total_units_prefix += units
+
+                    # Earned only if passed before this course's semester.
+                    pre_passes = passed_sem_by_solver.get(pc) or set()
+                    if any(pre_sem < course_sem for pre_sem in pre_passes):
+                        earned_units_prefix += units
+
+                required_units_prefix = float(math.ceil(0.9 * total_units_prefix)) if total_units_prefix > 0 else 0.0
+                if earned_units_prefix < required_units_prefix:
+                    return JsonResponse(
+                        {
+                            'ok': False,
+                            'status': 'infeasible',
+                            'message': "Schedule is infeasible: year-standing prerequisite not satisfied for the selected semester.",
+                            'errors': [],
+                        }
+                    )
+            else:
+                # Unknown prereq token: don't block on it here.
+                continue
+
+    # 2) CP-SAT check for offering windows / other constraints.
+    #    Note: CP-SAT itself does not treat `failed_courses` as prerequisite blockers, so we
+    #    keep the strict grade-table prereq validation above. CP-SAT is still valuable for
+    #    other constraints (offering windows, unit caps, etc.).
+    year_level = request.session.get('year_level')
+    semester = request.session.get('semester')
+    current_section_index = _year_semester_to_section_index(year_level, semester)
+    if current_section_index is None:
+        return JsonResponse(
+            {
+                'ok': False,
+                'status': 'infeasible',
+                'message': 'Please select your Last Semester Enrolled to proceed.',
+                'errors': [],
+            }
+        )
+
+    current_sem_solver = int(current_section_index) + 2  # keep same convention as frontend
+
+    passed_solver = [_UI_TO_SOLVER_ELECTIVE.get(c, c) for c in passed_ui]
+    failed_solver = [_UI_TO_SOLVER_ELECTIVE.get(c, c) for c in failed_ui]
+    payload = {
+        'current_sem': current_sem_solver,
+        'passed_courses': passed_solver,
+        'failed_courses': failed_solver,
+        'with_petition': False,
+        'alternative_algorithm': None,  # enforce CP-SAT exactness
+    }
+
+    solver_result = validate_pos_via_solver(
+        payload=payload,
+        with_petition=False,
+        forced_semester_map=None,
+    )
+    status = solver_result.get('status')
+    message = solver_result.get('message') or 'Schedule is infeasible.'
+    ok = status == 'ok'
+
+    return JsonResponse(
+        {
+            'ok': ok,
+            'status': status,
+            'message': 'POS is valid.' if ok else message,
+            'errors': [],
+        }
+    )
 
 
 
@@ -2017,6 +2221,126 @@ def feasible_move_marks(request):
             if _is_solver_feasible_dest(solver_code, dest_si):
                 feasible_courses.add(code_ui)
                 break
+
+    return JsonResponse({"ok": True, "feasible_courses": sorted(feasible_courses)})
+
+
+@csrf_exempt
+@require_POST
+def feasible_add_courses_for_section(request):
+    """
+    Backend endpoint used by the `/generate` page to filter the `+ Add courses`
+    modal by CP-SAT feasibility (exact validity) given the student's current
+    passed/failed grade profile.
+
+    Request JSON:
+      - section_index: int (UI semester index, 0-based)
+      - with_petition: bool (optional)
+      - solver_payload: { current_sem, passed_courses, failed_courses, ... }
+      - candidate_codes: [<UI course code strings>] to test
+
+    Response JSON:
+      - { ok: bool, feasible_courses: [<UI course code strings>] }
+    """
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"ok": False, "error": "Invalid JSON"}, status=400)
+
+    if not isinstance(data, dict):
+        return JsonResponse({"ok": False, "error": "Expected JSON object"}, status=400)
+
+    section_index_raw = data.get("section_index")
+    try:
+        section_index = int(section_index_raw)
+    except (TypeError, ValueError):
+        return JsonResponse({"ok": False, "error": "Invalid section_index"}, status=400)
+
+    with_petition = bool(data.get("with_petition", True))
+    solver_payload = data.get("solver_payload") or {}
+    if not isinstance(solver_payload, dict):
+        return JsonResponse({"ok": False, "error": "solver_payload must be an object"}, status=400)
+
+    candidate_codes = data.get("candidate_codes") or []
+    if not isinstance(candidate_codes, list):
+        return JsonResponse({"ok": False, "error": "candidate_codes must be an array"}, status=400)
+
+    # Translate UI-elective codes (CpEE 401/402/403) into solver course keys.
+    raw_passed = solver_payload.get("passed_courses") or []
+    raw_failed = solver_payload.get("failed_courses") or []
+    if not isinstance(raw_passed, list):
+        raw_passed = []
+    if not isinstance(raw_failed, list):
+        raw_failed = []
+
+    passed_courses_solver = [_UI_TO_SOLVER_ELECTIVE.get(str(c).strip(), str(c).strip()) for c in raw_passed if str(c).strip()]
+    failed_courses_solver = [_UI_TO_SOLVER_ELECTIVE.get(str(c).strip(), str(c).strip()) for c in raw_failed if str(c).strip()]
+
+    try:
+        current_sem = int(solver_payload.get("current_sem"))
+    except (TypeError, ValueError):
+        return JsonResponse({"ok": False, "error": "solver_payload.current_sem must be an integer"}, status=400)
+
+    # UI section_index is 0-based, solver semesters are 1-based.
+    forced_solver_sem = section_index + 1
+
+    # Fingerprint base payload for stable cache keys.
+    _base_payload_fp = hashlib.sha256(
+        repr((current_sem, tuple(sorted(passed_courses_solver)), tuple(sorted(failed_courses_solver)))).encode("utf-8")
+    ).hexdigest()
+
+    feasibility_memo: dict[str, bool] = {}
+    feasible_courses: set[str] = set()
+
+    # Base payload for validation checks. We only add the forced assignment map.
+    payload_current = {
+        "current_sem": current_sem,
+        "passed_courses": passed_courses_solver,
+        "failed_courses": failed_courses_solver,
+        # Ensure we run exact CP-SAT for feasibility decisions.
+        "alternative_algorithm": None,
+    }
+
+    # Preserve optional configuration if supplied by the client.
+    if "configuration" in solver_payload:
+        payload_current["configuration"] = solver_payload.get("configuration")
+
+    for code_ui in candidate_codes:
+        if code_ui is None:
+            continue
+        code_ui_s = str(code_ui).strip()
+        if not code_ui_s:
+            continue
+        if code_ui_s in feasibility_memo:
+            if feasibility_memo[code_ui_s]:
+                feasible_courses.add(code_ui_s)
+            continue
+
+        solver_code = _UI_TO_SOLVER_ELECTIVE.get(code_ui_s, code_ui_s)
+
+        cache_key = (bool(with_petition), forced_solver_sem, _base_payload_fp, code_ui_s)
+        cached = _feasible_add_courses_cache_get(cache_key)
+        if cached is not None:
+            feasibility_memo[code_ui_s] = bool(cached)
+            if cached:
+                feasible_courses.add(code_ui_s)
+            continue
+
+        forced_map = {solver_code: forced_solver_sem}
+        try:
+            result = validate_pos_via_solver(
+                payload=payload_current,
+                with_petition=with_petition,
+                forced_semester_map=forced_map,
+            )
+            ok = (result.get("status") == "ok")
+        except Exception:
+            ok = False
+
+        feasibility_memo[code_ui_s] = bool(ok)
+        _feasible_add_courses_cache_put(cache_key, bool(ok))
+        if ok:
+            feasible_courses.add(code_ui_s)
 
     return JsonResponse({"ok": True, "feasible_courses": sorted(feasible_courses)})
 
