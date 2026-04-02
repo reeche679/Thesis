@@ -182,6 +182,10 @@
         align-items: center;
         gap: 0.35rem;
     }
+    /* While editing, hide Save/Download action group on all viewports. */
+    body.pos-editing .preview-bottom-right {
+        display: none !important;
+    }
     /* Hide feasible-move controls unless user is actively editing. */
     .preview-feasible-wrap {
         display: none;
@@ -319,9 +323,26 @@
 
     /* Feasible destination semester highlight (computed for the dragged course) */
     .pos-dnd-semester.pos-feasible-target-sem {
-        box-shadow: inset 0 0 0 2px rgba(25, 135, 84, 0.85);
-        background-color: rgba(25, 135, 84, 0.02);
+        position: relative;
+        box-shadow: inset 0 0 0 2px rgba(13, 110, 253, 0.9);
+        background-color: rgba(13, 202, 240, 0.12);
         border-radius: 0.25rem;
+    }
+    .pos-dnd-semester.pos-feasible-target-sem::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: rgba(13, 202, 240, 0.22);
+        border: 2px solid rgba(13, 110, 253, 0.9);
+        border-radius: 0.25rem;
+        pointer-events: none;
+        z-index: 3;
+    }
+    .pos-dnd-semester.pos-feasible-target-sem .table,
+    .pos-dnd-semester.pos-feasible-target-sem .table thead,
+    .pos-dnd-semester.pos-feasible-target-sem .table tbody,
+    .pos-dnd-semester.pos-feasible-target-sem .table tfoot {
+        background-color: rgba(13, 202, 240, 0.12);
     }
 
     /* Signatory dropdowns (Preview bottom controls) */
@@ -503,6 +524,72 @@
         border-top: 1px solid #dee2e6;
         justify-content: flex-start;
     }
+    /* Preview edit feedback at top of screen */
+    #preview-edit-success-toast {
+        position: fixed;
+        top: 0.8rem;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 2200;
+        display: none;
+        background: #198754;
+        color: #fff;
+        border-radius: 0.45rem;
+        padding: 0.5rem 0.8rem;
+        font-size: 0.82rem;
+        box-shadow: 0 0.5rem 1.2rem rgba(0, 0, 0, 0.22);
+    }
+    #preview-edit-success-toast.is-open {
+        display: block;
+    }
+    #preview-edit-error-modal {
+        position: fixed;
+        inset: 0;
+        z-index: 2210;
+        display: none;
+        align-items: flex-start;
+        justify-content: center;
+        padding-top: 0.8rem;
+    }
+    #preview-edit-error-modal.is-open {
+        display: flex;
+    }
+    #preview-edit-error-backdrop {
+        position: absolute;
+        inset: 0;
+        background: rgba(45, 45, 52, 0.55);
+    }
+    #preview-edit-error-card {
+        position: relative;
+        z-index: 1;
+        width: min(420px, calc(100vw - 1.25rem));
+        background: #fff;
+        border: 1px solid rgba(0, 0, 0, 0.14);
+        border-radius: 0.5rem;
+        overflow: hidden;
+        box-shadow: 0 1rem 2.25rem rgba(0, 0, 0, 0.25);
+    }
+    #preview-edit-error-card .modal-header {
+        background-color: #b00020;
+        color: #fff;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+        padding: 0.45rem 0.85rem;
+        min-height: 0;
+    }
+    #preview-edit-error-card .modal-title {
+        color: #fff;
+        font-size: 0.9rem;
+        line-height: 1.25;
+        font-weight: 600;
+    }
+    #preview-edit-error-card .modal-body {
+        padding: 0.85rem 0.95rem;
+    }
+    #preview-edit-error-card .modal-footer {
+        padding: 0.6rem 0.85rem 0.75rem;
+        border-top: 1px solid #dee2e6;
+        justify-content: flex-start;
+    }
     body > .modal-backdrop {
         z-index: 1060 !important;
         transition: none !important;
@@ -604,6 +691,21 @@
     </div>
 
     <div id="pos-validation-alert" class="alert alert-danger mb-3" style="display:none;"></div>
+    <div id="preview-edit-success-toast" role="status" aria-live="polite">Changes applied successfully.</div>
+    <div id="preview-edit-error-modal" aria-hidden="true">
+        <div id="preview-edit-error-backdrop"></div>
+        <div id="preview-edit-error-card" role="dialog" aria-modal="true" aria-labelledby="preview-edit-error-title">
+            <div class="modal-header">
+                <h6 class="modal-title mb-0" id="preview-edit-error-title">Invalid Course Move</h6>
+            </div>
+            <div class="modal-body" id="preview-edit-error-message">
+                One or more moved courses violate prerequisite/sequence rules.
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary btn-sm" id="preview-edit-error-ok-btn">OK</button>
+            </div>
+        </div>
+    </div>
 
     <div id="pos-preview-server">
     {% for section in preview_sections %}
@@ -1978,8 +2080,15 @@
                 var sortable = new Sortable(tbody, {
                     group: { name: 'pos-semester-group', pull: true, put: true },
                     animation: 150,
+                    // Use fallback dragging so users can still use page scrollbar while dragging.
+                    forceFallback: true,
+                    fallbackOnBody: true,
+                    fallbackTolerance: 2,
                     scroll: true,
-                    scrollSensitivity: 60,
+                    // Faster auto-scroll so long-distance moves are easier (desktop + mobile).
+                    scrollSensitivity: 120,
+                    scrollSpeed: 32,
+                    bubbleScroll: true,
                     ghostClass: 'pos-dnd-ghost',
                     chosenClass: 'pos-dnd-chosen',
                     // onEnd fires after drop completes (including cross-list moves)
@@ -2079,6 +2188,8 @@
         function applyFeasibleTargetSemesterHighlights(feasibleTargetIndices) {
             var dyn = document.getElementById('pos-preview-dynamic');
             if (!dyn) return;
+            // Only show destination highlights while a course is actively being dragged.
+            if (!posEditState.dragCourseCode) return;
             var targetSet = new Set(Array.isArray(feasibleTargetIndices) ? feasibleTargetIndices.map(function(x) { return Number(x); }) : []);
             dyn.querySelectorAll('.pos-dnd-semester[data-semester-index]').forEach(function(semEl) {
                 var idxRaw = semEl.getAttribute('data-semester-index');
@@ -2329,9 +2440,15 @@
                           alertEl.style.display = 'none';
                           alertEl.innerHTML = '';
                       }
+                      var movedSuccessMsg = buildMovedCourseSuccessMessage(latestMovedCodes);
+                      if (movedSuccessMsg) {
+                          showPreviewEditSuccessToast(movedSuccessMsg);
+                      }
                       markFeasibleMovesFromDOM();
                       return;
                   }
+
+                  showPreviewEditErrorPopup('One or more moved courses are invalid. Please review the errors and try again.');
 
                   if (alertEl) {
                       // data.message may contain very long solver logs; we keep the UI focused on the moved-course violations instead.
@@ -2436,9 +2553,11 @@
                       if (movedUl) {
                           // Show only the moved-course violations (remove the long general solver message).
                           alertEl.innerHTML = movedUl;
+                          showPreviewEditErrorPopup(movedUl, true);
                       } else {
                           // Fallback: if we couldn't compute moved courses, show a short generic message.
                           alertEl.innerHTML = '<strong>Invalid POS schedule.</strong>';
+                          showPreviewEditErrorPopup('<strong>Invalid POS schedule.</strong>', true);
                       }
                       alertEl.style.display = '';
                   }
@@ -2449,6 +2568,7 @@
                   markFeasibleMovesFromDOM();
                   setSortablesDisabled(true);
               }).catch(function() {
+                  showPreviewEditErrorPopup('Validation error. Could not validate the moved course arrangement.');
                   if (alertEl) {
                       alertEl.innerHTML = '<strong>Validation error.</strong> Could not validate the tuned POS.';
                       alertEl.style.display = '';
@@ -2465,6 +2585,72 @@
 
         var POS_PENCIL_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>';
         var POS_CHECK_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>';
+        var previewEditSuccessTimer = null;
+
+        function showPreviewEditSuccessToast(message) {
+            var toast = document.getElementById('preview-edit-success-toast');
+            if (!toast) return;
+            if (message) toast.textContent = message;
+            toast.classList.add('is-open');
+            if (previewEditSuccessTimer) clearTimeout(previewEditSuccessTimer);
+            previewEditSuccessTimer = setTimeout(function() {
+                toast.classList.remove('is-open');
+            }, 1500);
+        }
+
+        function closePreviewEditErrorPopup() {
+            var modal = document.getElementById('preview-edit-error-modal');
+            if (!modal) return;
+            modal.classList.remove('is-open');
+            modal.setAttribute('aria-hidden', 'true');
+        }
+
+        function showPreviewEditErrorPopup(message, allowHtml) {
+            var modal = document.getElementById('preview-edit-error-modal');
+            var msg = document.getElementById('preview-edit-error-message');
+            if (!modal || !msg) return;
+            if (allowHtml) {
+                msg.innerHTML = message || 'One or more moved courses are invalid.';
+            } else {
+                msg.textContent = message || 'One or more moved courses are invalid.';
+            }
+            modal.classList.add('is-open');
+            modal.setAttribute('aria-hidden', 'false');
+        }
+
+        function buildMovedCourseSuccessMessage(latestMovedCodes) {
+            var dyn = document.getElementById('pos-preview-dynamic');
+            if (!dyn || !latestMovedCodes || !latestMovedCodes.size) return '';
+            var movedCode = '';
+            latestMovedCodes.forEach(function(code) {
+                if (!movedCode) movedCode = String(code || '').trim();
+            });
+            if (!movedCode) return '';
+            var row = dyn.querySelector('tr.pos-course-row[data-course-code="' + movedCode + '"]');
+            if (!row) return '';
+            var titleCell = row.querySelector('td.course-title-cell');
+            var courseTitle = titleCell ? String(titleCell.textContent || '').trim() : '';
+            var semEl = row.closest('.pos-dnd-semester');
+            var semIndex = semEl ? parseInt(semEl.getAttribute('data-semester-index') || '', 10) : NaN;
+            var semLabel = (!isNaN(semIndex) && semIndex > 0) ? (semLabelFromSolverIndex(semIndex) || ('Semester ' + semIndex)) : 'selected semester';
+            if (courseTitle) {
+                return 'Successfully moved ' + movedCode + ' - ' + courseTitle + ' to ' + semLabel + '.';
+            }
+            return 'Successfully moved ' + movedCode + ' to ' + semLabel + '.';
+        }
+
+        (function wirePreviewEditErrorPopup() {
+            var modal = document.getElementById('preview-edit-error-modal');
+            var backdrop = document.getElementById('preview-edit-error-backdrop');
+            var okBtn = document.getElementById('preview-edit-error-ok-btn');
+            if (okBtn) okBtn.addEventListener('click', closePreviewEditErrorPopup);
+            if (backdrop) backdrop.addEventListener('click', closePreviewEditErrorPopup);
+            if (modal) {
+                modal.addEventListener('click', function(e) {
+                    if (e.target === modal) closePreviewEditErrorPopup();
+                });
+            }
+        })();
 
         function setPosEditMode(enabled) {
             var wasEditing = posEditState.editing;
@@ -2490,6 +2676,10 @@
             var saveBtn = document.getElementById('preview-save-history-btn');
             if (saveBtn) {
                 if (enabled) saveBtn.disabled = true;
+            }
+            var previewRightActions = document.querySelector('.preview-bottom-right');
+            if (previewRightActions) {
+                previewRightActions.style.display = enabled ? 'none' : '';
             }
 
             if (enabled) {
@@ -2565,14 +2755,22 @@
                 }).then(function(r) { return r.json(); })
                   .then(function(data) {
                       if (data && data.ok) {
+                          try {
+                              // Keep refreshed Preview in sync with the applied tuned schedule.
+                              // Store as legacy/simple shape so renderDynamicPOS uses res.pos directly.
+                              sessionStorage.setItem('posGeneratedResponse', JSON.stringify({ pos: data.pos || [] }));
+                          } catch (e) {}
                           setPosEditMode(false);
                           enablePreviewSave();
+                          showPreviewEditSuccessToast('Changes applied successfully.');
                       } else {
                           // If save fails, keep edit mode so user can try again.
                           console.error('Save tuned POS failed:', data);
+                          showPreviewEditErrorPopup((data && data.error) ? data.error : 'Unable to apply changes. Please try again.');
                       }
                   }).catch(function(err) {
                       console.error('Save tuned POS error:', err);
+                      showPreviewEditErrorPopup('Unable to apply changes right now. Please try again.');
                   }).finally(function() {
                       posEditState.saving = false;
                       setSortablesDisabled(false);

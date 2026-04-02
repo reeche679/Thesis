@@ -1,1 +1,0 @@
-{"sessionId": "ab886b", "runId": "run1", "hypothesisId": "H1", "location": "CP-SAT.py:_run_core:branch", "message": "solver_branch_selection", "data": {"ALTERNATIVE_ALGORITHM": null, "branch": "cp_sat", "CONFIGURATION": "config1_baseline"}, "timestamp": 1775015187243}
