@@ -625,7 +625,16 @@ def _build_pos_from_state(state, current_sem, passed_courses):
     return pos
 
 
-def _state_violation_summary(state, current_sem, passed_courses, with_petition: bool):
+def _state_violation_summary(
+    state,
+    current_sem,
+    passed_courses,
+    with_petition: bool,
+    valid_map_override: dict[str, set[int]] | None = None,
+    course_code_index: dict[str, str] | None = None,
+    prereq_alias_map: dict[str, str] | None = None,
+    year_standing_map: dict[str, str] | None = None,
+):
     """
     Fast in-Python constraint check/penalty model for alternative algorithms.
     Returns dict with violation counts and summary features.
@@ -642,9 +651,17 @@ def _state_violation_summary(state, current_sem, passed_courses, with_petition: 
         if s is None:
             violation_count += 1
             continue
-        valid = _valid_semesters_for_course(c, info, current_sem, with_petition)
-        if s not in valid:
-            violation_count += 1
+        if valid_map_override is not None:
+            valid = valid_map_override.get(c)
+            if valid is None:
+                # Fallback: should only happen if caller didn't include c.
+                valid = set(_valid_semesters_for_course(c, info, current_sem, with_petition))
+            if s not in valid:
+                violation_count += 1
+        else:
+            valid = _valid_semesters_for_course(c, info, current_sem, with_petition)
+            if s not in valid:
+                violation_count += 1
         if s in load_by_sem:
             load_by_sem[s] += info.get("units", 0)
 
@@ -671,9 +688,12 @@ def _state_violation_summary(state, current_sem, passed_courses, with_petition: 
                         violation_count += 1
 
     # 3) Prerequisite/co-requisite checks (with CP-SAT-like year-standing check)
-    course_code_index = {_normalize_code(code): code for code in courses}
-    prereq_alias_map = {_normalize_code(k): v for k, v in PREREQ_ALIASES.items()}
-    year_standing_map = {_normalize_code(k): v for k, v in YEAR_STANDING_RULES.items()}
+    if course_code_index is None:
+        course_code_index = {_normalize_code(code): code for code in courses}
+    if prereq_alias_map is None:
+        prereq_alias_map = {_normalize_code(k): v for k, v in PREREQ_ALIASES.items()}
+    if year_standing_map is None:
+        year_standing_map = {_normalize_code(k): v for k, v in YEAR_STANDING_RULES.items()}
 
     def resolve_course(code: str):
         if not isinstance(code, str):
@@ -818,10 +838,17 @@ def _state_violation_summary(state, current_sem, passed_courses, with_petition: 
         if sem_course <= sem_prereq:
             violation_count += penalty
 
-    _strict_after("ECE 405", "EE 212")
-    _strict_after("MATH 102", "MATH 101")
-    _strict_after("EE 212", "PHYS 103")
-    _strict_after("CpE 302", "ECE 405")
+    _strict_after("ECE 405", "EE 212", penalty=10_000_000)
+
+    _strict_after("MATH 102", "MATH 101", penalty=10_000_000)
+    _strict_after("EE 212", "PHYS 103", penalty=10_000_000)
+    _strict_after("CpE 302", "ECE 405", penalty=10_000_000)
+    # Additional critical CpE prerequisite ordering to prevent early placement.
+    _strict_after("CpE 308", "CpE 302", penalty=10_000_0000)   # Microprocessors after Logic Circuits/Design
+    _strict_after("CpE 311", "CpE 308", penalty=10_000_000)   # Computer Architecture after Microprocessors
+    # CpE 310 depends on BOTH CpE 305 and CpE 306.
+    _strict_after("CpE 310", "CpE 305", penalty=10_000_000)
+    _strict_after("CpE 310", "CpE 306", penalty=10_000_000)
 
     remaining = [c for c in courses if c not in passed_courses]
     if remaining:
@@ -899,6 +926,11 @@ def _run_alternative_core(current_sem, passed_courses, failed_courses, with_peti
         c: tuple(_valid_semesters_for_course(c, courses[c], current_sem, with_petition))
         for c in remaining
     }
+    # Precompute maps once so the discrete_opt hot loop doesn't rebuild them.
+    valid_map_override = {c: set(sems) for c, sems in valid_map.items()}
+    course_code_index = {_normalize_code(code): code for code in courses}
+    prereq_alias_map = {_normalize_code(k): v for k, v in PREREQ_ALIASES.items()}
+    year_standing_map = {_normalize_code(k): v for k, v in YEAR_STANDING_RULES.items()}
 
     # Seed with earliest feasible-by-window semester; perturb lightly for exploration.
     rng_init = random.Random(42)
@@ -910,7 +942,14 @@ def _run_alternative_core(current_sem, passed_courses, failed_courses, with_peti
             initial_state[c] = rng_init.choice(choices[: min(3, len(choices))])
 
     initial_v = _state_violation_summary(
-        initial_state, current_sem, passed_courses, with_petition
+        initial_state,
+        current_sem,
+        passed_courses,
+        with_petition,
+        valid_map_override=valid_map_override,
+        course_code_index=course_code_index,
+        prereq_alias_map=prereq_alias_map,
+        year_standing_map=year_standing_map,
     )
     _debug_log(
         "H2",
@@ -937,11 +976,42 @@ def _run_alternative_core(current_sem, passed_courses, failed_courses, with_peti
     )
     # #endregion
 
+    # Discrete-opt speedup: the adapter evaluates both `violation_summary_fn(state)`
+    # and `score_fn(state)` for the *same* candidate `state`. Cache the last
+    # `_state_violation_summary(state, ...)` result so we don't recompute the full
+    # violation model twice per candidate.
+    _last_eval_key: tuple[int, ...] | None = None
+    _last_eval_v: dict[str, float] | None = None
+
+    def _state_key(st: dict[str, int]) -> tuple[int, ...]:
+        # Remaining courses are always assigned by `discrete_opt_adapter`.
+        return tuple(int(st.get(c, -1)) for c in remaining)
+
+    def _eval_v(st: dict[str, int]) -> dict[str, float]:
+        nonlocal _last_eval_key, _last_eval_v
+        k = _state_key(st)
+        if _last_eval_key == k and _last_eval_v is not None:
+            return _last_eval_v
+        _last_eval_key = k
+        _last_eval_v = _state_violation_summary(
+            st,
+            current_sem,
+            passed_courses,
+            with_petition,
+            valid_map_override=valid_map_override,
+            course_code_index=course_code_index,
+            prereq_alias_map=prereq_alias_map,
+            year_standing_map=year_standing_map,
+        )
+        return _last_eval_v
+
+    violation_summary_fn = _eval_v
+
     def feasible_fn(state):
-        return _state_violation_summary(state, current_sem, passed_courses, with_petition)["violations"] == 0
+        return _eval_v(state)["violations"] == 0
 
     def score_fn(state):
-        v = _state_violation_summary(state, current_sem, passed_courses, with_petition)
+        v = _eval_v(state)
         # Keep hard-constraint penalties dominant.
         return (
             (1_000_000.0 * v["violations"])
@@ -958,9 +1028,7 @@ def _run_alternative_core(current_sem, passed_courses, failed_courses, with_peti
                 initial_state=initial_state,
                 score_fn=score_fn,
                 feasible_fn=feasible_fn,
-                violation_summary_fn=lambda st: _state_violation_summary(
-                    st, current_sem, passed_courses, with_petition
-                ),
+                violation_summary_fn=violation_summary_fn,
                 remaining=remaining,
                 valid_map=valid_map,
             )
@@ -1002,7 +1070,14 @@ def _run_alternative_core(current_sem, passed_courses, failed_courses, with_peti
             }
 
     violations = _state_violation_summary(
-        best_state, current_sem, passed_courses, with_petition
+        best_state,
+        current_sem,
+        passed_courses,
+        with_petition,
+        valid_map_override=valid_map_override,
+        course_code_index=course_code_index,
+        prereq_alias_map=prereq_alias_map,
+        year_standing_map=year_standing_map,
     )
     changed_assignments = sum(
         1 for c in remaining if initial_state.get(c) != best_state.get(c)
@@ -1237,9 +1312,13 @@ def run_pos_with_state(current_sem, passed_courses, failed_courses, with_petitio
                 )
         print("\n" + "\n".join(lines))
         try:
+            algo_component = ALTERNATIVE_ALGORITHM if ALTERNATIVE_ALGORITHM is not None else "cp_sat"
             pdf_path = export_generated_pos_pdf(
                 result.get("pos") or [],
                 solver_used=f"{_algo_terminal} | config: {CONFIGURATION}",
+                solve_time_seconds=_solve_secs,
+                algorithm_used_for_filename=algo_component,
+                failed_courses=failed_courses,
             )
             print(f"\nPDF exported: {pdf_path}")
             _open_file_with_default_app(Path(pdf_path))

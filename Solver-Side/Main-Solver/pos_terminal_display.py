@@ -10,12 +10,17 @@ from __future__ import annotations
 from datetime import datetime
 import importlib.util
 from pathlib import Path
+import re
+from typing import Sequence
 
 
 def export_generated_pos_pdf(
     pos_sections: list[dict],
     output_dir: str | Path | None = None,
     solver_used: str | None = None,
+    solve_time_seconds: float | None = None,
+    algorithm_used_for_filename: str | None = None,
+    failed_courses: Sequence[str] | None = None,
 ) -> Path:
     """
     Export solver POS sections to a simple PDF file.
@@ -31,8 +36,34 @@ def export_generated_pos_pdf(
     target_dir = Path(output_dir) if output_dir else (base_dir / "generated_pos_pdf")
     target_dir.mkdir(parents=True, exist_ok=True)
 
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_path = target_dir / f"generated_pos_terminal_{timestamp}.pdf"
+    def _sanitize_filename_component(s: str) -> str:
+        s = s.strip()
+        if not s:
+            return "N/A"
+        # Keep it filesystem-safe; collapse whitespace/punctuation into underscores.
+        s = s.replace(" ", "")
+        s = re.sub(r"[^A-Za-z0-9._-]+", "_", s)
+        return s.strip("_") or "N_A"
+
+    def _failed_courses_component(courses: Sequence[str] | None) -> str:
+        if not courses:
+            return "no_failed_courses"
+        # Course codes in this codebase contain spaces (e.g. "CpE 308"), so drop spaces.
+        cleaned = [str(c).replace(" ", "") for c in courses]
+        return _sanitize_filename_component("-".join(cleaned))
+
+    algo_component = _sanitize_filename_component(
+        algorithm_used_for_filename
+        or (str(solver_used).split("|", 1)[0].strip() if solver_used else "solver")
+    )
+    failed_component = _failed_courses_component(failed_courses)
+
+    base_name = f"{algo_component}_{failed_component}.pdf"
+    output_path = target_dir / base_name
+    # Avoid overwrite: if the exact name exists, append a timestamp suffix.
+    if output_path.exists():
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_path = target_dir / f"{algo_component}_{failed_component}_{timestamp}.pdf"
 
     # Reuse the existing Django PDF generator logic for consistent formatting.
     django_project = base_dir.parents[1] / "Django-Back-Front"
@@ -54,6 +85,7 @@ def export_generated_pos_pdf(
         pos=pos_sections or [],
         eval_date=datetime.now().date(),
         solver_used=solver_used,
+        solve_time_seconds=solve_time_seconds,
         logo_path=str(django_project / "static" / "img" / "BSU_Logo.png"),
         grades_by_section=None,
         boundary_section_index=None,

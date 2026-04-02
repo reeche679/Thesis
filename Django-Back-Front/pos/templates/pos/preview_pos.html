@@ -945,10 +945,21 @@
                             >i</button>
                         </div>
                         <span id="pos-feasible-move-spinner"
-                              class="spinner-border spinner-border-sm ms-2 align-middle"
+                              class="ms-2 align-middle text-primary"
                               role="status"
                               aria-hidden="true"
-                              style="display:none;"></span>
+                              style="display:none;">
+                            <svg width="20" height="20" viewBox="0 0 44 44">
+                                <circle cx="22" cy="22" r="18" stroke="currentColor" stroke-width="4" fill="none" opacity="0.18"></circle>
+                                <circle id="pos-feasible-move-spinner-ring"
+                                        cx="22" cy="22" r="18"
+                                        stroke="currentColor" stroke-width="4" fill="none"
+                                        stroke-linecap="round"
+                                        stroke-dasharray="113.097"
+                                        stroke-dashoffset="113.097"
+                                        transform="rotate(-90 22 22)"></circle>
+                            </svg>
+                        </span>
                     </div>
                 </div>
             </div>
@@ -2324,11 +2335,45 @@
             clearFeasibleMoveHighlights();
             posEditState.feasibleComputing = true;
 
+            function _setFeasibleMoveSpinnerProgress(p01) {
+                var ring = document.getElementById('pos-feasible-move-spinner-ring');
+                if (!ring) return;
+                var p = Math.max(0, Math.min(1, p01));
+                // circumference for r=18 (2*pi*18) ~ 113.097
+                var circumference = 113.097;
+                ring.style.strokeDashoffset = String(circumference * (1 - p));
+            }
+
+            function _startFeasibleMoveSpinnerProgress() {
+                var spinEl = document.getElementById('pos-feasible-move-spinner');
+                if (!spinEl) return;
+                var start = performance.now();
+                var durationMs = 10000; // visual only; max progress capped until response returns
+                _setFeasibleMoveSpinnerProgress(0);
+                spinEl.style.display = '';
+                function tick() {
+                    // If request finished, markFeasibleMovesFromDOM finally() will hide the spinner.
+                    if (spinEl.style.display === 'none') return;
+                    var elapsed = performance.now() - start;
+                    var p = Math.min(0.85, (elapsed / durationMs) * 0.85);
+                    _setFeasibleMoveSpinnerProgress(p);
+                    requestAnimationFrame(tick);
+                }
+                requestAnimationFrame(tick);
+            }
+
+            function _stopFeasibleMoveSpinnerProgress() {
+                var spinEl = document.getElementById('pos-feasible-move-spinner');
+                if (!spinEl) return;
+                _setFeasibleMoveSpinnerProgress(1);
+                spinEl.style.display = 'none';
+            }
+
             // Buffer UX: show a loading spinner while computing row-level feasible-move highlights.
             var feasibleToggleEl = document.getElementById('pos-feasible-move-toggle');
             if (feasibleToggleEl) feasibleToggleEl.disabled = true;
             var spinEl = document.getElementById('pos-feasible-move-spinner');
-            if (spinEl) spinEl.style.display = '';
+            _startFeasibleMoveSpinnerProgress();
             // #region agent log
             _dbg41755c(
                 'H1',
@@ -2402,7 +2447,7 @@
                 var feasibleToggleEl2 = document.getElementById('pos-feasible-move-toggle');
                 if (feasibleToggleEl2) feasibleToggleEl2.disabled = false;
                 var spinEl2 = document.getElementById('pos-feasible-move-spinner');
-                if (spinEl2) spinEl2.style.display = 'none';
+                _stopFeasibleMoveSpinnerProgress();
                 // #region agent log
                 _dbg41755c(
                     'H1',
@@ -2714,6 +2759,8 @@
                 posEditState.dragFeasibleTargetsRequestId += 1;
                 var spinEl = document.getElementById('pos-feasible-move-spinner');
                 if (spinEl) spinEl.style.display = 'none';
+                var ringEl = document.getElementById('pos-feasible-move-spinner-ring');
+                if (ringEl) ringEl.style.strokeDashoffset = '113.097';
             }
         }
 
@@ -2742,6 +2789,8 @@
                     posEditState.dragFeasibleTargetsRequestId += 1; // invalidate in-flight responses
                     var spinEl1 = document.getElementById('pos-feasible-move-spinner');
                     if (spinEl1) spinEl1.style.display = 'none';
+                    var ringEl1 = document.getElementById('pos-feasible-move-spinner-ring');
+                    if (ringEl1) ringEl1.style.strokeDashoffset = '113.097';
                 }
             });
         }

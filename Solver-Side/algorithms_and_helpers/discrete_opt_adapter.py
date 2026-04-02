@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import Callable, Sequence
 import math
 import random
+import time
 
 
 State = dict[str, int]
@@ -22,17 +23,23 @@ ViolationSummaryFn = Callable[[State], dict[str, float]]
 @dataclass(frozen=True)
 class DiscreteOptConfig:
     seed: int = 42
-    max_iterations: int = 2200
-    restarts: int = 6
+    # "Balanced fast" defaults tuned to reach feasibility more often
+    # while keeping per-request runtime under ~10s.
+    max_iterations: int = 800
+    restarts: int = 3
     initial_temperature: float = 160.0
     cooling_rate: float = 0.995
     min_temperature: float = 0.05
     early_stop_on_feasible: bool = False
-    repair_max_iterations: int = 1400
-    repair_sample_neighbors: int = 18
+    repair_max_iterations: int = 600
+    repair_sample_neighbors: int = 12
     violation_worsen_accept_prob: float = 0.0
-    repair_scan_passes: int = 6
-    compact_passes: int = 10
+    repair_scan_passes: int = 5
+    compact_passes: int = 3
+    # Hard stop to prevent long runs when feasibility is hard.
+    # Note: CP-SAT.py's total "Solve time" includes some overhead outside the
+    # heuristic; keep this a bit below 10 seconds.
+    time_budget_seconds: float = 8.5
 
 
 class DiscreteOptUnavailableError(RuntimeError):
@@ -71,6 +78,10 @@ def run_discrete_opt_search(
     _ensure_library_present()
     cfg = config or DiscreteOptConfig()
     rem = list(remaining)
+    t_end = time.perf_counter() + float(cfg.time_budget_seconds) if cfg.time_budget_seconds else None
+
+    def _time_exceeded() -> bool:
+        return t_end is not None and time.perf_counter() >= t_end
 
     if not rem:
         s0 = dict(initial_state)
@@ -168,7 +179,9 @@ def run_discrete_opt_search(
 
     best_global = dict(initial_state)
     best_global_key = _summary_tuple(best_global)
-    best_feasible: State | None = dict(best_global) if feasible_fn(best_global) else None
+    # In this codebase, `feasible_fn` is equivalent to `violations == 0`.
+    # Use the already-computed key to avoid an extra evaluator call.
+    best_feasible: State | None = dict(best_global) if best_global_key[0] <= 0.0 else None
     best_feasible_key = best_global_key if best_feasible is not None else (float("inf"),) * 4
 
     for r in range(cfg.restarts):
@@ -179,12 +192,14 @@ def run_discrete_opt_search(
 
         if _is_better(current_key, best_global_key):
             best_global, best_global_key = dict(current), current_key
-        if feasible_fn(current) and _is_better(current_key, best_feasible_key):
+        if current_key[0] <= 0.0 and _is_better(current_key, best_feasible_key):
             best_feasible, best_feasible_key = dict(current), current_key
             if cfg.early_stop_on_feasible:
                 return dict(best_feasible), float(best_feasible_key[3]), True
 
         for _ in range(cfg.max_iterations):
+            if _time_exceeded():
+                break
             candidate = _neighbor(current, rrng)
             cand_key = _summary_tuple(candidate)
             delta = (
@@ -206,18 +221,29 @@ def run_discrete_opt_search(
             if _is_better(current_key, best_global_key):
                 best_global, best_global_key = dict(current), current_key
 
-            if feasible_fn(current) and _is_better(current_key, best_feasible_key):
+            if current_key[0] <= 0.0 and _is_better(current_key, best_feasible_key):
                 best_feasible, best_feasible_key = dict(current), current_key
                 if cfg.early_stop_on_feasible:
                     return dict(best_feasible), float(best_feasible_key[3]), True
 
             temperature = max(cfg.min_temperature, temperature * cfg.cooling_rate)
+        if _time_exceeded():
+            break
 
     # Repair phase: deterministic local improvement focused on reducing violations.
+    if _time_exceeded():
+        best_state = best_feasible if best_feasible is not None else best_global
+        best_key = best_feasible_key if best_feasible is not None else best_global_key
+        return dict(best_state), float(best_key[3]), bool(best_key[0] <= 0.0)
+
     repair_state = dict(best_feasible if best_feasible is not None else best_global)
     repair_key = _summary_tuple(repair_state)
     repair_rng = random.Random(cfg.seed + 88_777)
     for _ in range(cfg.repair_max_iterations):
+        if _time_exceeded():
+            best_state = best_feasible if best_feasible is not None else best_global
+            best_key = best_feasible_key if best_feasible is not None else best_global_key
+            return dict(best_state), float(best_key[3]), bool(best_key[0] <= 0.0)
         if repair_key[0] <= 0.0:
             break
         candidates: list[tuple[tuple[float, float, float, float], State]] = []
@@ -249,6 +275,10 @@ def run_discrete_opt_search(
     # Deterministic scan repair: for each course, try all valid semesters and
     # keep moves that improve the feasible-first tuple (especially violations).
     for _ in range(cfg.repair_scan_passes):
+        if _time_exceeded():
+            best_state = best_feasible if best_feasible is not None else best_global
+            best_key = best_feasible_key if best_feasible is not None else best_global_key
+            return dict(best_state), float(best_key[3]), bool(best_key[0] <= 0.0)
         improved_any = False
         for c in repair_rng.sample(rem, len(rem)):
             current_sem = repair_state.get(c)
@@ -284,10 +314,14 @@ def run_discrete_opt_search(
 
     # Feasible compaction pass: once feasible, pull courses earlier where allowed
     # to prioritize earlier graduation without breaking constraints.
-    if feasible_fn(final_state):
+    if final_key[0] <= 0.0:
+        if _time_exceeded():
+            return dict(final_state), float(final_key[3]), True
         compact_state = dict(final_state)
         compact_key = _summary_tuple(compact_state)
         for _ in range(cfg.compact_passes):
+            if _time_exceeded():
+                return dict(compact_state), float(compact_key[3]), bool(compact_key[0] <= 0.0)
             moved = False
             by_latest = sorted(rem, key=lambda c: compact_state.get(c, 10**9), reverse=True)
             for c in by_latest:
@@ -300,9 +334,9 @@ def run_discrete_opt_search(
                 for sem in earlier:
                     cand = dict(compact_state)
                     cand[c] = sem
-                    if not feasible_fn(cand):
-                        continue
                     cand_key = _summary_tuple(cand)
+                    if cand_key[0] > 0.0:
+                        continue
                     if _is_better(cand_key, compact_key):
                         compact_state, compact_key = cand, cand_key
                         moved = True
@@ -311,4 +345,4 @@ def run_discrete_opt_search(
                 break
         final_state, final_key = compact_state, compact_key
 
-    return dict(final_state), float(final_key[3]), bool(feasible_fn(final_state))
+    return dict(final_state), float(final_key[3]), bool(final_key[0] <= 0.0)

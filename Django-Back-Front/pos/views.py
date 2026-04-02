@@ -6,6 +6,8 @@ import re
 import os
 import copy
 import math
+import hashlib
+from collections import OrderedDict
 from pathlib import Path
 from django.conf import settings
 from django.shortcuts import render, redirect, get_object_or_404
@@ -53,6 +55,29 @@ def _dbg41755c(hypothesis_id: str, location: str, message: str, data: dict, run_
     except Exception:
         pass
     # #endregion
+
+
+# #region feasible-move-speed cache (cross-request)
+# Module-level LRU cache to speed up exact feasibility checks for feasible move highlights.
+_FEASIBLE_DEST_CACHE_MAXSIZE = 4096
+_FEASIBLE_DEST_CACHE: "OrderedDict[tuple, bool]" = OrderedDict()
+
+
+def _feasible_dest_cache_get(cache_key: tuple) -> bool | None:
+    if cache_key in _FEASIBLE_DEST_CACHE:
+        _FEASIBLE_DEST_CACHE.move_to_end(cache_key)
+        return _FEASIBLE_DEST_CACHE[cache_key]
+    return None
+
+
+def _feasible_dest_cache_put(cache_key: tuple, value: bool) -> None:
+    _FEASIBLE_DEST_CACHE[cache_key] = value
+    _FEASIBLE_DEST_CACHE.move_to_end(cache_key)
+    if len(_FEASIBLE_DEST_CACHE) > _FEASIBLE_DEST_CACHE_MAXSIZE:
+        _FEASIBLE_DEST_CACHE.popitem(last=False)
+
+
+# #endregion
 
 
 def _is_password_strong(password):
@@ -1602,6 +1627,27 @@ def feasible_move_marks(request):
       - feasible_targets: [<solver semester indices>] (when request has `course_code`)
       - debug: optional details when ok=false
     """
+    # #region debug-32a60e: show_feasible_targets (backend feasibility) instrumentation
+    def _dbg32a60e(hypothesis_id: str, location: str, message: str, data: dict) -> None:
+        try:
+            log_path = Path(__file__).resolve().parents[2] / "debug-32a60e.log"
+            payload = {
+                "sessionId": "32a60e",
+                "id": f"dbg32a60e_{int(__import__('time').time() * 1000)}",
+                "timestamp": int(__import__("time").time() * 1000),
+                "runId": "run1",
+                "hypothesisId": hypothesis_id,
+                "location": location,
+                "message": message,
+                "data": data,
+            }
+            with log_path.open("a", encoding="utf-8") as f:
+                f.write(json.dumps(payload, ensure_ascii=True) + "\n")
+        except Exception:
+            # Never break POS preview UX because of debug logging.
+            pass
+
+    # #endregion
     try:
         data = json.loads(request.body)
     except json.JSONDecodeError:
@@ -1735,6 +1781,12 @@ def feasible_move_marks(request):
         _ui_to_solver_code(code_ui): si for code_ui, si in tuned_sem_map_ui.items()
     }
 
+    # Solver metadata needed for safe, fast pre-pruning (unit caps, offering windows).
+    solver_meta = get_solver_metadata() or {}
+    solver_courses = solver_meta.get("courses") if isinstance(solver_meta.get("courses"), dict) else {}
+    max_units_for_sem_fn = solver_meta.get("max_units_for_sem")
+    config_key: str | None = None
+
     # Base passed courses are already solver-side keys in the stored payload.
     passed_courses_solver = []
     try:
@@ -1744,14 +1796,100 @@ def feasible_move_marks(request):
 
     with_petition = mode == "with_petition"
     solver_payload = dict(base_payload)
+    # Feasible-move highlighting must use exact CP-SAT validity, not heuristic status.
+    solver_payload["alternative_algorithm"] = None
+    config_key = str(solver_payload.get("configuration") or "")
 
     # Memoize solver calls within this request.
     feasibility_memo = {}
+    # Precompute fingerprints for cross-request caching.
+    _base_payload_fp = hashlib.sha256(
+        repr(
+            (
+                int(solver_payload.get("current_sem", 0) or 0),
+                tuple(sorted((solver_payload.get("passed_courses") or []))),
+                tuple(sorted((solver_payload.get("failed_courses") or []))),
+                str(solver_payload.get("configuration") or ""),
+            )
+        ).encode("utf-8")
+    ).hexdigest()
+    _forced_base_fp = hashlib.sha256(
+        repr(tuple(sorted(((forced_semester_map_base or {}).items())))).encode("utf-8")
+    ).hexdigest()
+    # #region debug-32a60e counter (sample first few solver checks only)
+    _dbg32_solver_check_samples = 0
+    # #endregion
+    _dbg32_cache_hit_logged = 0
+    _dbg32_cache_miss_logged = 0
 
     def _is_solver_feasible_dest(solver_code: str, dest_si: int) -> bool:
+        nonlocal _dbg32_cache_hit_logged, _dbg32_cache_miss_logged, _dbg32_solver_check_samples
         key = (solver_code, int(dest_si))
         if key in feasibility_memo:
             return feasibility_memo[key]
+
+        # Cross-request cache lookup: exact CP-SAT feasibility for forced assignments.
+        cache_key = (bool(with_petition), _base_payload_fp, _forced_base_fp, solver_code, int(dest_si))
+        cached = _feasible_dest_cache_get(cache_key)
+        if cached is not None:
+            feasibility_memo[key] = bool(cached)
+            if _dbg32_cache_hit_logged < 3:
+                _dbg32a60e(
+                    "H3",
+                    "views.py:feasible_move_marks:cache_hit",
+                    "feasible dest cache hit",
+                    {
+                        "solver_code": solver_code,
+                        "dest_si": int(dest_si),
+                        "cacheValue": bool(cached),
+                    },
+                )
+                _dbg32_cache_hit_logged += 1
+            return feasibility_memo[key]
+
+        # --- Validity-preserving pruning (safe rejections only) ---
+        # 1) Unit cap pruning for destination semester.
+        moved_code_ui = _SOLVER_TO_UI_ELECTIVE.get(solver_code, solver_code)
+        moved_units = float(course_units.get(moved_code_ui, 0.0) or 0.0)
+        dest_courses_ui = sem_courses_ui.get(int(dest_si), set())
+        dest_units_existing = sum(float(course_units.get(code_ui, 0.0) or 0.0) for code_ui in dest_courses_ui)
+        if callable(max_units_for_sem_fn):
+            cap = int(max_units_for_sem_fn(int(dest_si)))
+            # If the moved course is not already in dest, it's being added for this check.
+            if cap and (dest_units_existing + moved_units) > cap:
+                _feasible_dest_cache_put(cache_key, False)
+                feasibility_memo[key] = False
+                return feasibility_memo[key]
+
+        # 2) Offering-window pruning (only for config1_baseline to match solver logic).
+        if config_key == "config1_baseline":
+            cinfo = solver_courses.get(solver_code) or {}
+            category = cinfo.get("category", "Rigid")
+            orig_sem = cinfo.get("orig_sem")
+            if orig_sem is not None:
+                try:
+                    orig_sem_i = int(orig_sem)
+                    sem_type = int(dest_si) % 3
+                    orig_type = orig_sem_i % 3
+                    allowed = True
+                    if category == "Rigid":
+                        allowed = sem_type == orig_type
+                    elif category == "Bottleneck":
+                        allowed = bool(with_petition) or (sem_type == orig_type)
+                    elif category == "Flexible":
+                        allowed = (
+                            (orig_type in [1, 2] and sem_type in [1, 2])
+                            or (orig_type == 0 and sem_type == 0)
+                        )
+                    else:
+                        allowed = True
+                    if not allowed:
+                        _feasible_dest_cache_put(cache_key, False)
+                        feasibility_memo[key] = False
+                        return feasibility_memo[key]
+                except Exception:
+                    # If metadata parsing fails, fall back to exact solver check.
+                    pass
 
         forced_map = dict(forced_semester_map_base or {})
         forced_map[solver_code] = int(dest_si)
@@ -1762,6 +1900,39 @@ def feasible_move_marks(request):
             forced_semester_map=forced_map,
         )
         ok = (result.get("status") == "ok")
+        _feasible_dest_cache_put(cache_key, bool(ok))
+        if _dbg32_cache_miss_logged < 3:
+            _dbg32a60e(
+                "H4",
+                "views.py:feasible_move_marks:cache_miss",
+                "feasible dest cache miss; ran solver",
+                {
+                    "solver_code": solver_code,
+                    "dest_si": int(dest_si),
+                    "result_status": result.get("status"),
+                },
+            )
+            _dbg32_cache_miss_logged += 1
+        # #region debug-32a60e: log solver return shape
+        if _dbg32_solver_check_samples < 3:
+            msg = result.get("message")
+            try:
+                msg_s = (str(msg) if msg is not None else "")[:160]
+            except Exception:
+                msg_s = ""
+            _dbg32a60e(
+                "H1",
+                "views.py:feasible_move_marks:solver_result_sample",
+                "solver returned status/message for forced dest",
+                {
+                    "solver_code": solver_code,
+                    "dest_si": int(dest_si),
+                    "result_status": result.get("status"),
+                    "message_prefix": msg_s,
+                },
+            )
+            _dbg32_solver_check_samples += 1
+        # #endregion
         # #region agent log
         _dbg41755c(
             "H5",
@@ -1779,12 +1950,26 @@ def feasible_move_marks(request):
         return feasibility_memo[key]
 
     if course_code_ui:
+        if isinstance(course_code_ui, str):
+            _dbg32a60e(
+                "H0",
+                "views.py:feasible_move_marks:course_code_branch",
+                "course_code present; logging feasibility targets computation",
+                {
+                    "mode": mode,
+                    "course_code_ui": course_code_ui,
+                    "editable_sem_indices": editable_sem_indices,
+                    "candidate_codes_count": len(candidate_codes),
+                },
+            )
         src_si = course_to_sem_ui.get(course_code_ui)
         if src_si is None:
             return JsonResponse({"ok": True, "feasible_targets": []})
 
         solver_code = _ui_to_solver_code(course_code_ui)
         feasible_targets = set()
+        _checked_dest_count = 0
+        _logged_dest_samples = 0
 
         for dest_si in editable_sem_indices:
             if dest_si == src_si:
@@ -1793,7 +1978,20 @@ def feasible_move_marks(request):
                 continue
 
             if _is_solver_feasible_dest(solver_code, dest_si):
+                if _logged_dest_samples < 3:
+                    _dbg32a60e(
+                        "H2",
+                        "views.py:feasible_move_marks:dest_check_sample",
+                        "solver returned status ok for this forced destination",
+                        {
+                            "solver_code": solver_code,
+                            "dest_si": int(dest_si),
+                            "check_index": _checked_dest_count,
+                        },
+                    )
+                    _logged_dest_samples += 1
                 feasible_targets.add(int(dest_si))
+            _checked_dest_count += 1
 
         return JsonResponse({"ok": True, "feasible_targets": sorted(feasible_targets)})
 

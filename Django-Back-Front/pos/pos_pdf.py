@@ -813,6 +813,7 @@ def build_generated_pos_pdf(
     pos,
     eval_date=None,
     solver_used=None,
+    solve_time_seconds=None,
     logo_path=None,
     grades_by_section=None,
     boundary_section_index=None,
@@ -877,10 +878,15 @@ def build_generated_pos_pdf(
     story = []
     story.append(Paragraph("Generated Program of Study", title_style))
     solver_text = (str(solver_used).strip() if solver_used is not None else "") or "N/A"
+    solve_time_fragment = (
+        f" &nbsp;&nbsp;|&nbsp;&nbsp; Solve time: {float(solve_time_seconds):.3f} s"
+        if solve_time_seconds is not None
+        else ""
+    )
     story.append(
         Paragraph(
             f"{student_name} &nbsp;&nbsp;|&nbsp;&nbsp; {sr_code} &nbsp;&nbsp;|&nbsp;&nbsp; {academic_year} "
-            f"&nbsp;&nbsp;|&nbsp;&nbsp; Evaluated: {date_str} &nbsp;&nbsp;|&nbsp;&nbsp; Solver: {solver_text}",
+            f"&nbsp;&nbsp;|&nbsp;&nbsp; Evaluated: {date_str} &nbsp;&nbsp;|&nbsp;&nbsp; Solver: {solver_text}{solve_time_fragment}",
             meta_style,
         )
     )

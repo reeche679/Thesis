@@ -18,7 +18,7 @@ CONFIGURATION = "config1_baseline"
 # - None -> use pure CP-SAT configuration flow
 # - "discrete_opt" -> use discrete-optimization simulated annealing branch
 # - "cpmpy_minizinc" -> use CPMpy exact model with MiniZinc backend (Chuffed)
-ALTERNATIVE_ALGORITHM = "cpmpy_minizinc"
+ALTERNATIVE_ALGORITHM = None
 
 # Graduation trio enforcement switch
 ENFORCE_GRADUATION_TRIO_ONLY_SEMESTER = True
