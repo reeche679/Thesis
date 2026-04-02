@@ -18,13 +18,13 @@ from reportlab.platypus import (
 # Course table column widths (inches). Student info table is scaled to the same total width for alignment.
 _POS_COURSE_COL_WIDTHS_INCH = (
     0.88,  # Course Code
-    2.45,  # Course Title (slightly shorter)
-    0.60,  # Credit Units
-    0.42,  # Lec
-    0.42,  # Lab
-    1.05,  # Prerequisite(s)
-    1.00,  # Co-requisite(s)
-    0.68,  # Grade (wider for GWA/value visibility)
+    2.82,  # Course Title (increased; removed Remarks column width)
+    0.57,  # Credit Units
+    0.39,  # Lec
+    0.39,  # Lab
+    1.00,  # Prerequisite(s)
+    0.95,  # Co-requisite(s)
+    0.50,  # Grade
 )
 _POS_COURSE_TABLE_TOTAL_INCH = sum(_POS_COURSE_COL_WIDTHS_INCH)
 # Original info block label/value proportions (sum 7.2 in); scaled to match course table width.
@@ -219,29 +219,6 @@ def _cell_style_center():
         leftIndent=0,
         rightIndent=0,
     )
-
-
-def _compute_semester_gwa_from_rows(section_rows):
-    """
-    Compute semester GWA = total numeric grades / total number of courses in the semester table.
-    Non-numeric/blank grades count as 0 in the numerator, while all course rows are included
-    in the denominator per requested formula.
-    """
-    if not section_rows:
-        return ""
-    total_grade_value = 0.0
-    total_courses = len(section_rows)
-    has_numeric_grade = False
-    for row in section_rows:
-        grade_str = (row[7] if len(row) > 7 else "") or ""
-        try:
-            total_grade_value += float(str(grade_str).strip())
-            has_numeric_grade = True
-        except (ValueError, TypeError):
-            total_grade_value += 0.0
-    if not has_numeric_grade:
-        return ""
-    return f"{(total_grade_value / float(total_courses)):.4f}"
 
 
 def _resolve_logo_path(logo_path):
@@ -721,17 +698,7 @@ def build_pos_pdf(
                 Paragraph(_requisite_display_text(coreq).replace("&", "&amp;") or " ", cell_style_center),
                 _grade_cell(grade),
             ])
-        gwa_value = _compute_semester_gwa_from_rows(section_rows)
-        table_data.append([
-            "Total",
-            "",
-            str(sum_units),
-            "",
-            "",
-            "",
-            Paragraph("<b>GWA:</b>", cell_style_center) if gwa_value else "",
-            Paragraph(f"<b>{gwa_value}</b>", cell_style_center) if gwa_value else "",
-        ])
+        table_data.append(["Total", "", str(sum_units), str(sum_lec), str(sum_lab), "", "", ""])
 
         t = Table(table_data, colWidths=col_widths, repeatRows=0)
         ncols = len(col_widths)
@@ -945,7 +912,6 @@ def build_generated_pos_pdf(
             ]
         ]
 
-        section_rows_for_gwa = []
         for c in (sem.get("courses") or []):
             code = str(c.get("code", "") or "")
             # course_lookup stores tuples (title, units, lec, lab, prereq, coreq) in pos_pdf.py
@@ -976,23 +942,20 @@ def build_generated_pos_pdf(
                     _grade_cell(grade_str),
                 ]
             )
-            section_rows_for_gwa.append((code, title, units, lec, lab, prereq, coreq, grade_str))
 
-        gwa_value = _compute_semester_gwa_from_rows(section_rows_for_gwa)
-        table_data.append([
-            Paragraph("<b>Total</b>", cell_style_center),
-            "",
-            "",
-            "",
-            "",
-            "",
-            Paragraph("<b>GWA:</b>", cell_style_center) if gwa_value else "",
-            Paragraph(f"<b>{gwa_value}</b>", cell_style_center) if gwa_value else "",
-        ])
-
+        # Estimated width sum should be <= available content width
         t = Table(
             table_data,
-            colWidths=[w * inch for w in _POS_COURSE_COL_WIDTHS_INCH],
+            colWidths=[
+                0.8 * inch,   # code
+                2.0 * inch,   # title
+                0.5 * inch,   # units
+                0.35 * inch,  # lec
+                0.35 * inch,  # lab
+                1.0 * inch,   # prereq
+                1.0 * inch,   # coreq
+                0.5 * inch,   # grade
+            ],
             repeatRows=1,
         )
         t.setStyle(
@@ -1286,7 +1249,7 @@ def build_preview_pos_pdf(
                 + [""] * (len(col_widths) - 1)
             )
 
-        # Only show Total Units; Lec/Lab/Pre-req are merged in the total row.
+        # Only show Total Units; leave Lec/Lab totals blank (matches requirement).
         # Prefer `total_units_value` when provided (e.g., Preview server value),
         # otherwise total from displayed course rows.
         if total_units_value is not None:
@@ -1299,29 +1262,7 @@ def build_preview_pos_pdf(
                 total_units_display = str(int(round(float(sum_units))))
             except (TypeError, ValueError):
                 total_units_display = "0"
-        numeric_rows = []
-        for r in (rows or []):
-            numeric_rows.append((
-                r.get("code", "") or "",
-                r.get("title", "") or "",
-                r.get("units", 0) or 0,
-                r.get("lec", 0) or 0,
-                r.get("lab", 0) or 0,
-                r.get("prereq", "") or "",
-                r.get("coreq", "") or "",
-                (r.get("grade", "") or "").strip(),
-            ))
-        gwa_value = _compute_semester_gwa_from_rows(numeric_rows)
-        table_data.append([
-            "Total",
-            "",
-            total_units_display,
-            "",
-            "",
-            "",
-            Paragraph("<b>GWA:</b>", cell_style_center) if gwa_value else "",
-            Paragraph(f"<b>{gwa_value}</b>", cell_style_center) if gwa_value else "",
-        ])
+        table_data.append(["Total", "", total_units_display, "", "", "", "", ""])
 
         t = Table(table_data, colWidths=col_widths, repeatRows=0)
         ncols = len(col_widths)
