@@ -455,6 +455,16 @@
             }
         }
 
+        /*
+         * iOS Safari often paints <select> and unstyled <button> text as link-blue.
+         * Force body text color so Android/desktop stay unchanged but iOS matches.
+         */
+        .pos-main select,
+        .pos-main .form-select {
+            color: #212529;
+            -webkit-text-fill-color: #212529;
+        }
+
         /* Global: allow long course titles to wrap in tables */
         .table .course-title-cell,
         .table .elective-course-cell {
