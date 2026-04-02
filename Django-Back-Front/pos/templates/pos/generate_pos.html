@@ -744,21 +744,19 @@
         #pos-action-buttons .d-flex { flex-wrap: wrap; }
         #pos-action-buttons .btn { min-width: 0; }
         .pos-student-profile-scroll {
-            overflow: visible;
+            overflow-x: auto;
             -webkit-overflow-scrolling: touch;
         }
         .pos-student-profile-details {
-            min-width: 0;
+            min-width: 540px;
             text-align: left;
         }
         .pos-student-profile-row .generate-photo-box {
-            width: 82px;
-            height: 82px;
-            min-width: 82px;
-            min-height: 82px;
+            width: 70px;
+            height: 70px;
+            min-width: 70px;
+            min-height: 70px;
         }
-        .pos-student-profile-details > .col-4:nth-child(n+2) { display: none; }
-        .pos-student-profile-details > .col-4:first-child { width: 100%; }
         .pos-student-profile-row { gap: 0.75rem; }
         .pos-student-profile-details .text-muted { font-size: 0.65rem; }
         .pos-student-profile-details .fw-semibold { font-size: 0.8rem; }
@@ -767,10 +765,10 @@
         .main-sem .d-flex.justify-content-between.align-items-center.mb-2 { flex-wrap: wrap; gap: 0.5rem; }
         .main-sem .d-flex.align-items-center[style*="min-width: 120px"] { min-width: 0; }
         .pos-student-profile-row .generate-photo-box {
-            width: 74px;
-            height: 74px;
-            min-width: 74px;
-            min-height: 74px;
+            width: 64px;
+            height: 64px;
+            min-width: 64px;
+            min-height: 64px;
         }
         .pos-student-profile-row {
             gap: 0.5rem;
@@ -779,7 +777,7 @@
         .pos-student-profile-details .text-muted { font-size: 0.6rem; }
         .pos-student-profile-details .fw-semibold { font-size: 0.75rem; }
         .pos-student-profile-details {
-            min-width: 0;
+            min-width: 520px;
             text-align: left;
         }
     }
@@ -837,11 +835,11 @@
         #pos-action-buttons { flex-wrap: nowrap; gap: 0.35rem; }
         #pos-action-buttons .pos-actions-right { gap: 0.35rem; }
         .pos-gear-btn {
-            width: 1.55rem;
-            height: 1.55rem;
+            width: 1.75rem;
+            height: 1.75rem;
         }
         .pos-gear-btn .bi {
-            font-size: 0.75rem;
+            font-size: 0.85rem;
         }
         #pos-action-buttons .btn {
             padding: 0.35rem 0.5rem;
@@ -849,9 +847,8 @@
             line-height: 1.1;
             white-space: nowrap;
         }
-        #pos-action-buttons .pos-action-btn-text-full { display: inline; }
-        #pos-action-buttons .pos-action-btn-text-short { display: none; }
-        #generatePosBtn { min-width: 6.35rem; }
+        #pos-action-buttons .pos-action-btn-text-full { display: none; }
+        #pos-action-buttons .pos-action-btn-text-short { display: inline; }
     }
     /* Mobile: make header + Academic Term smaller on Generate POS */
     @media (max-width: 575.98px) {
@@ -1149,7 +1146,7 @@
     </div>
 </div>
 
-<div class="pos-card p-4" id="course-list-by-semester-card">
+<div class="pos-card p-4">
     <div class="mb-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
         <div class="pos-section-title mb-0">Course List by Semester</div>
     </div>
@@ -1743,20 +1740,6 @@
     }
 
     document.addEventListener('DOMContentLoaded', function() {
-        function scrollToCourseListCardIfRequested() {
-            var shouldScroll = false;
-            try {
-                shouldScroll = sessionStorage.getItem('posScrollToCourseList') === '1';
-                if (shouldScroll) sessionStorage.removeItem('posScrollToCourseList');
-            } catch (e) {}
-            if (!shouldScroll) return;
-            var card = document.getElementById('course-list-by-semester-card');
-            if (!card) return;
-            setTimeout(function() {
-                card.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }, 60);
-        }
-
         if (typeof bootstrap !== 'undefined' && bootstrap.Popover) {
             document.querySelectorAll('[data-pos-info="popover"]').forEach(function(el) {
                 new bootstrap.Popover(el, { container: 'body' });
@@ -1833,13 +1816,10 @@
                     } else {
                         url.searchParams.delete('section');
                     }
-                    try { sessionStorage.setItem('posScrollToCourseList', '1'); } catch (e) {}
                     window.location.href = url.toString();
                 });
             }
         }
-
-        scrollToCourseListCardIfRequested();
     });
 
     function clearAllGradesUIAndStorage() {
@@ -2706,39 +2686,11 @@
                 var params = [];
                 params.push('current_sem=' + encodeURIComponent(currentSem));
                 params.push('irreg_start=' + encodeURIComponent(startSem));
-                try { sessionStorage.setItem('posScrollToCourseList', '1'); } catch (e) {}
                 window.location.href = window.location.pathname + '?' + params.join('&');
             });
         }
 
         // --- Irregular check (save & lock) button ---
-        function isIrregularStartConfigured() {
-            var startEl = document.getElementById('irreg-start-sem');
-            return !!(startEl && (startEl.value || '').trim() !== '');
-        }
-
-        function refreshIrregularCheckButtonsVisibility() {
-            if (IS_REGULAR) return;
-            var shouldShowCheck = isIrregularStartConfigured();
-            document.querySelectorAll('.irreg-check-section-btn').forEach(function(btn) {
-                if (!btn) return;
-                if (!shouldShowCheck) {
-                    btn.style.display = 'none';
-                    return;
-                }
-                var sectionDiv = btn.closest('.main-sem');
-                if (sectionDiv && sectionDiv.getAttribute('data-curriculum-locked') === 'true') {
-                    btn.style.display = 'none';
-                    return;
-                }
-                btn.style.display = '';
-            });
-        }
-        var irregStartSelectForCheckBtn = document.getElementById('irreg-start-sem');
-        if (irregStartSelectForCheckBtn) {
-            irregStartSelectForCheckBtn.addEventListener('change', refreshIrregularCheckButtonsVisibility);
-        }
-
         function lockSectionToPreview(sectionDiv) {
             var si = sectionDiv.getAttribute('data-section-index');
             sectionDiv.querySelectorAll('.grade-select').forEach(function(sel) {
@@ -2884,7 +2836,7 @@
                 var editBtn = sectionDiv.querySelector('.irreg-edit-section-btn');
                 if (editBtn) { editBtn.classList.remove('irreg-edit-hidden'); editBtn.classList.add('irreg-edit-visible'); }
                 var checkBtn = sectionDiv.querySelector('.irreg-check-section-btn');
-                if (checkBtn) checkBtn.style.display = isIrregularStartConfigured() ? '' : 'none';
+                if (checkBtn) checkBtn.style.display = '';
                 saveGradesToStorage();
                 if (HAS_GENERATED_POS && sectionDiv.getAttribute('data-curriculum-locked') === 'true') {
                     lockSectionToPreview(sectionDiv);
@@ -2924,8 +2876,6 @@
                 }
             });
         }
-
-        refreshIrregularCheckButtonsVisibility();
     })();
 </script>
 {% endblock %}
