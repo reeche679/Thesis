@@ -12,7 +12,11 @@ import importlib.util
 from pathlib import Path
 
 
-def export_generated_pos_pdf(pos_sections: list[dict], output_dir: str | Path | None = None) -> Path:
+def export_generated_pos_pdf(
+    pos_sections: list[dict],
+    output_dir: str | Path | None = None,
+    solver_used: str | None = None,
+) -> Path:
     """
     Export solver POS sections to a simple PDF file.
 
@@ -49,6 +53,7 @@ def export_generated_pos_pdf(pos_sections: list[dict], output_dir: str | Path | 
         academic_year="A.Y. N/A",
         pos=pos_sections or [],
         eval_date=datetime.now().date(),
+        solver_used=solver_used,
         logo_path=str(django_project / "static" / "img" / "BSU_Logo.png"),
         grades_by_section=None,
         boundary_section_index=None,

@@ -12,7 +12,6 @@ if str(_main_solver_dir) not in sys.path:
 if str(_root) not in sys.path:
     sys.path.insert(0, str(_root))
 
-import bisect
 import math
 import random
 import json
@@ -49,11 +48,13 @@ except ModuleNotFoundError:
     ALTERNATIVE_ALGORITHM = _settings_module.ALTERNATIVE_ALGORITHM
     ENFORCE_GRADUATION_TRIO_ONLY_SEMESTER = _settings_module.ENFORCE_GRADUATION_TRIO_ONLY_SEMESTER
 from pos_terminal_display import export_generated_pos_pdf
-from algorithms_and_helpers.alternative_algorithms import (
-    run_firefly_search,
-    run_fuzzy_logic_search,
-    run_local_search,
-    run_tabu_search,
+from algorithms_and_helpers.discrete_opt_adapter import (
+    DiscreteOptUnavailableError,
+    run_discrete_opt_search,
+)
+from algorithms_and_helpers.cpmpy_minizinc_adapter import (
+    CpmPyMiniZincUnavailableError,
+    run_cpmpy_minizinc_search,
 )
 
 
@@ -273,21 +274,7 @@ def create_semester_variables(model, current_sem, passed_courses):
 # Single configuration selection is centralized in solver_settings.py.
 # CP-SAT configuration keys come from algorithms_and_helpers.Configurations.CONFIGURATIONS.
 
-ALTERNATIVE_ALGORITHMS = {
-    "local_search": run_local_search,
-    "fuzzy_logic": run_fuzzy_logic_search,
-    "tabu_search": run_tabu_search,
-    "firefly": run_firefly_search,
-}
-
-# Distinct streams for rng.choice() inside neighbor generation so greedy algorithms
-# that share score_fn (local vs tabu) do not replay identical neighbor lists.
-_ALT_NEIGHBOR_RNG_SALT = {
-    "local_search": 0,
-    "tabu_search": 10_007,
-    "fuzzy_logic": 20_011,
-    "firefly": 30_017,
-}
+ALTERNATIVE_ALGORITHMS = {"discrete_opt", "cpmpy_minizinc"}
 
 
 
@@ -683,14 +670,76 @@ def _state_violation_summary(state, current_sem, passed_courses, with_petition: 
                     if state.get(c) == ref_s:
                         violation_count += 1
 
-    # 3) Prerequisite/co-requisite checks (year-standing approximated via ordering)
+    # 3) Prerequisite/co-requisite checks (with CP-SAT-like year-standing check)
     course_code_index = {_normalize_code(code): code for code in courses}
     prereq_alias_map = {_normalize_code(k): v for k, v in PREREQ_ALIASES.items()}
+    year_standing_map = {_normalize_code(k): v for k, v in YEAR_STANDING_RULES.items()}
 
     def resolve_course(code: str):
         if not isinstance(code, str):
             return None
         return course_code_index.get(_normalize_code(code))
+
+    def resolve_year_standing(code: str):
+        if not isinstance(code, str):
+            return None
+        return year_standing_map.get(_normalize_code(code))
+
+    def _is_critical_foundation(token) -> bool:
+        """
+        Strongly penalize violations involving key foundation prereqs.
+        """
+        critical = {_normalize_code("MATH 102"), _normalize_code("EE 212")}
+        if isinstance(token, str):
+            return _normalize_code(token) in critical
+        if isinstance(token, (list, tuple)):
+            return any(isinstance(t, str) and _normalize_code(t) in critical for t in token)
+        return False
+
+    def _critical_prereq_pair_penalty(course_code: str, prereq_code: str) -> int:
+        """
+        Extra-heavy penalties for known critical chains that must preserve order.
+        """
+        cc = _normalize_code(course_code)
+        pc = _normalize_code(prereq_code)
+        critical_pairs = {
+            (_normalize_code("MATH 102"), _normalize_code("MATH 101")),
+            (_normalize_code("EE 212"), _normalize_code("PHYS 103")),
+            (_normalize_code("CPE 302"), _normalize_code("ECE 405")),
+        }
+        return 5000 if (cc, pc) in critical_pairs else 0
+
+    def year_standing_satisfied(course: str) -> bool:
+        """
+        Mirror CP-SAT's prefix-units standing rule used in add_year_standing():
+        when taking `course`, student must have >=90% of units from all courses
+        scheduled strictly before `course`'s original semester.
+        """
+        info_c = courses.get(course)
+        orig_sem_c = _first_semester(info_c)
+        if orig_sem_c is None:
+            return True
+
+        sem_c = state.get(course, current_sem)
+        total_units = 0
+        earned_before = 0
+        for code, info in courses.items():
+            orig_sem = _first_semester(info)
+            if orig_sem is None or orig_sem >= orig_sem_c:
+                continue
+            units = info.get("units", 0)
+            total_units += units
+            if code in passed_courses:
+                earned_before += units
+            else:
+                sem_code = state.get(code, 10**9)
+                if sem_code < sem_c:
+                    earned_before += units
+
+        if total_units <= 0:
+            return True
+        req_units = math.ceil(0.9 * total_units)
+        return earned_before >= req_units
 
     for c, info in courses.items():
         if c in passed_courses:
@@ -710,16 +759,35 @@ def _state_violation_summary(state, current_sem, passed_courses, with_petition: 
             if isinstance(prereq, (list, tuple)):
                 for alt in prereq:
                     alt_course = resolve_course(alt)
-                    if alt_course and (alt_course in passed_courses or state.get(alt_course, 10**9) < sem_c):
-                        satisfied = True
-                        break
+                    alt_year = resolve_year_standing(alt)
+                    if alt_course:
+                        if alt_course in passed_courses or state.get(alt_course, 10**9) < sem_c:
+                            satisfied = True
+                            break
+                    elif alt_year is not None:
+                        if year_standing_satisfied(c):
+                            satisfied = True
+                            break
             else:
                 pre_course = resolve_course(prereq)
+                pre_year = resolve_year_standing(prereq)
                 if pre_course:
                     satisfied = pre_course in passed_courses or state.get(pre_course, 10**9) < sem_c
+                elif pre_year is not None:
+                    satisfied = year_standing_satisfied(c)
 
             if not satisfied:
-                violation_count += 1
+                # Strict prerequisite enforcement:
+                # - very heavy default prereq penalty
+                # - extra-heavy penalty for key foundation dependency breaks
+                penalty = 5_000
+                if _is_critical_foundation(prereq):
+                    penalty = 20_000
+                if isinstance(prereq, str):
+                    pre_course_code = resolve_course(prereq)
+                    if pre_course_code:
+                        penalty += _critical_prereq_pair_penalty(c, pre_course_code)
+                violation_count += penalty
                 prereq_violations += 1
 
         # co-requisites
@@ -729,7 +797,31 @@ def _state_violation_summary(state, current_sem, passed_courses, with_petition: 
             co_course = resolve_course(coreq)
             if co_course and co_course not in passed_courses:
                 if state.get(co_course, -1) > sem_c:
-                    violation_count += 1
+                    # Co-requisite scheduled after dependent course: strongly penalize.
+                    violation_count += 3_000
+
+    # 4) Explicit near-hard prerequisite order guards for critical chains.
+    # These are intentionally very large to behave like hard constraints
+    # inside heuristic search/repair.
+    def _strict_after(course_code: str, prereq_code: str, penalty: int = 1_000_000):
+        nonlocal violation_count
+        if course_code in passed_courses:
+            return
+        sem_course = state.get(course_code)
+        if sem_course is None:
+            return
+        if prereq_code in passed_courses:
+            return
+        sem_prereq = state.get(prereq_code)
+        if sem_prereq is None:
+            return
+        if sem_course <= sem_prereq:
+            violation_count += penalty
+
+    _strict_after("ECE 405", "EE 212")
+    _strict_after("MATH 102", "MATH 101")
+    _strict_after("EE 212", "PHYS 103")
+    _strict_after("CpE 302", "ECE 405")
 
     remaining = [c for c in courses if c not in passed_courses]
     if remaining:
@@ -738,6 +830,18 @@ def _state_violation_summary(state, current_sem, passed_courses, with_petition: 
     else:
         max_sem = current_sem
         sum_sem = 0
+
+    # Count empty internal semesters between first scheduled and max scheduled.
+    # This helps produce CP-SAT-like compact plans (fewer "gap" semesters).
+    if remaining:
+        min_sem = min(state.get(c, current_sem) for c in remaining)
+        occupied = {state.get(c, current_sem) for c in remaining}
+        empty_gap_semesters = sum(1 for s in range(min_sem, max_sem + 1) if s not in occupied)
+        # Tail-empty semesters after last scheduled course up to MAX_SEMESTER.
+        tail_empty_semesters = max(0, u.MAX_SEMESTER - max_sem)
+    else:
+        empty_gap_semesters = 0
+        tail_empty_semesters = 0
 
     used_loads = [v for v in load_by_sem.values() if v > 0]
     if len(used_loads) >= 2:
@@ -752,6 +856,8 @@ def _state_violation_summary(state, current_sem, passed_courses, with_petition: 
         "prereq_violations": float(prereq_violations),
         "max_sem": float(max_sem),
         "sum_sem": float(sum_sem),
+        "empty_gap_semesters": float(empty_gap_semesters),
+        "tail_empty_semesters": float(tail_empty_semesters),
         "load_balance": float(load_balance),
     }
 
@@ -794,13 +900,6 @@ def _run_alternative_core(current_sem, passed_courses, failed_courses, with_peti
         for c in remaining
     }
 
-    def random_restart_state(rst_rng: random.Random):
-        st: dict = {}
-        for c in remaining:
-            ch = valid_map[c] if valid_map[c] else (current_sem,)
-            st[c] = rst_rng.choice(ch)
-        return st
-
     # Seed with earliest feasible-by-window semester; perturb lightly for exploration.
     rng_init = random.Random(42)
     initial_state = {}
@@ -838,80 +937,69 @@ def _run_alternative_core(current_sem, passed_courses, failed_courses, with_peti
     )
     # #endregion
 
-    algo = ALTERNATIVE_ALGORITHM
-    neighbor_rng = random.Random(42 + _ALT_NEIGHBOR_RNG_SALT[algo])
-
-    def neighbor_fn(state):
-        neighbors = []
-        for c in remaining:
-            choices = valid_map.get(c) or (state[c],)
-            if not choices:
-                continue
-            sc = state[c]
-            idx = bisect.bisect_left(choices, sc)
-            if idx >= len(choices) or choices[idx] != sc:
-                idx = 0
-            for nxt_idx in {max(0, idx - 1), min(len(choices) - 1, idx + 1)}:
-                if nxt_idx == idx:
-                    continue
-                nxt = dict(state)
-                nxt[c] = choices[nxt_idx]
-                neighbors.append(nxt)
-            if len(choices) > 2:
-                nxt = dict(state)
-                nxt[c] = neighbor_rng.choice(choices)
-                neighbors.append(nxt)
-        return neighbors
-
     def feasible_fn(state):
         return _state_violation_summary(state, current_sem, passed_courses, with_petition)["violations"] == 0
 
     def score_fn(state):
         v = _state_violation_summary(state, current_sem, passed_courses, with_petition)
         # Keep hard-constraint penalties dominant.
-        return (10_000.0 * v["violations"]) + (100.0 * v["max_sem"]) + v["sum_sem"]
+        return (
+            (1_000_000.0 * v["violations"])
+            + (20_000.0 * v["max_sem"])
+            + (10_000.0 * v.get("empty_gap_semesters", 0.0))
+            + (2_000.0 * v.get("tail_empty_semesters", 0.0))
+            + (10.0 * v["sum_sem"])
+        )
 
-    def fuzzy_feature_fn(state):
-        v = _state_violation_summary(state, current_sem, passed_courses, with_petition)
-        denom = max(1, len(remaining))
-        return {
-            "load_balance": v["load_balance"],
-            "prerequisite_pressure": v["prereq_violations"] / denom,
-            "delay_risk": (v["max_sem"] - current_sem) / max(1, (u.MAX_SEMESTER - current_sem + 1)),
-        }
-
-    def move_id_fn(cur, nxt):
-        for c in remaining:
-            if cur.get(c) != nxt.get(c):
-                return f"{c}:{cur.get(c)}->{nxt.get(c)}"
-        return "noop"
-
-    if algo == "local_search":
-        best_state, _ = run_local_search(
-            initial_state,
-            score_fn,
-            neighbor_fn,
-            feasible_fn,
-            random_restart_fn=random_restart_state,
-        )
-    elif algo == "fuzzy_logic":
-        best_state, _ = run_fuzzy_logic_search(
-            initial_state, neighbor_fn, fuzzy_feature_fn, feasible_fn
-        )
-    elif algo == "firefly":
-        best_state, _ = run_firefly_search(
-            initial_state,
-            score_fn,
-            feasible_fn,
-            remaining,
-            valid_map,
-            random_restart_fn=random_restart_state,
-            neighbor_fn=neighbor_fn,
-        )
-    else:  # tabu_search
-        best_state, _ = run_tabu_search(
-            initial_state, score_fn, neighbor_fn, feasible_fn, move_id_fn
-        )
+    algo = ALTERNATIVE_ALGORITHM
+    if algo == "discrete_opt":
+        try:
+            best_state, _, is_feasible = run_discrete_opt_search(
+                initial_state=initial_state,
+                score_fn=score_fn,
+                feasible_fn=feasible_fn,
+                violation_summary_fn=lambda st: _state_violation_summary(
+                    st, current_sem, passed_courses, with_petition
+                ),
+                remaining=remaining,
+                valid_map=valid_map,
+            )
+        except DiscreteOptUnavailableError as exc:
+            return {
+                "status": "discrete_opt_unavailable",
+                "message": str(exc),
+                "pos": [],
+            }
+    else:
+        try:
+            best_state, is_feasible, meta = run_cpmpy_minizinc_search(
+                current_sem=current_sem,
+                passed_courses=passed_courses,
+                with_petition=with_petition,
+                valid_map=valid_map,
+                courses=courses,
+                max_semester=u.MAX_SEMESTER,
+                max_units_for_sem=u.max_units_for_sem,
+                get_req_list=_get_req_list,
+                normalize_code=_normalize_code,
+                prereq_aliases=PREREQ_ALIASES,
+                year_standing_rules=YEAR_STANDING_RULES,
+                enforce_graduation_trio_only_semester=ENFORCE_GRADUATION_TRIO_ONLY_SEMESTER,
+                graduation_trio=GRADUATION_TRIO,
+                solver_name="chuffed",
+            )
+            if not is_feasible:
+                return {
+                    "status": "cpmpy_minizinc_infeasible",
+                    "message": f"CPMpy MiniZinc did not find a feasible solution ({meta.get('status')}).",
+                    "pos": [],
+                }
+        except CpmPyMiniZincUnavailableError as exc:
+            return {
+                "status": "cpmpy_minizinc_unavailable",
+                "message": str(exc),
+                "pos": [],
+            }
 
     violations = _state_violation_summary(
         best_state, current_sem, passed_courses, with_petition
@@ -927,7 +1015,6 @@ def _run_alternative_core(current_sem, passed_courses, failed_courses, with_peti
         "alternative_result_fingerprint",
         {
             "algorithm": algo,
-            "neighbor_rng_salt": _ALT_NEIGHBOR_RNG_SALT.get(algo, 0),
             "initial_fp": initial_fp,
             "final_fp": final_fp,
             "initial_eq_final": initial_fp == final_fp,
@@ -952,7 +1039,7 @@ def _run_alternative_core(current_sem, passed_courses, failed_courses, with_peti
     return {
         "status": "ok",
         "message": (
-            f"Generated using alternative algorithm '{algo}'. "
+            f"Generated using {algo} best-{'feasible' if is_feasible else 'so-far'} solution. "
             f"Estimated violations: {int(violations.get('violations', 0))}."
         ),
         "pos": _build_pos_from_state(best_state, current_sem, passed_courses),
@@ -1057,7 +1144,7 @@ def generate_pos(payload: dict) -> dict:
       - with_petition (bool, optional)
       - forced_semester_map (dict, optional) forcing course->semester
       - configuration (str, optional) CP-SAT configuration key
-      - alternative_algorithm (str | null, optional): local_search | fuzzy_logic | tabu_search
+      - alternative_algorithm (str | null, optional): discrete_opt | cpmpy_minizinc
       - enforce_graduation_trio_only_semester (bool, optional)
 
     Alternative algorithms use the same CONFIGURATION offering windows as CP-SAT
@@ -1092,7 +1179,7 @@ def generate_pos(payload: dict) -> dict:
 
     if requested_alternative is not None and requested_alternative not in ALTERNATIVE_ALGORITHMS:
         raise ValueError(
-            "payload['alternative_algorithm'] must be one of: local_search, fuzzy_logic, tabu_search, firefly, or null"
+            "payload['alternative_algorithm'] must be one of: discrete_opt, cpmpy_minizinc, or null"
         )
 
     # Apply payload-local solver selectors and restore afterwards so callers don't
@@ -1150,7 +1237,10 @@ def run_pos_with_state(current_sem, passed_courses, failed_courses, with_petitio
                 )
         print("\n" + "\n".join(lines))
         try:
-            pdf_path = export_generated_pos_pdf(result.get("pos") or [])
+            pdf_path = export_generated_pos_pdf(
+                result.get("pos") or [],
+                solver_used=f"{_algo_terminal} | config: {CONFIGURATION}",
+            )
             print(f"\nPDF exported: {pdf_path}")
             _open_file_with_default_app(Path(pdf_path))
         except Exception as e:

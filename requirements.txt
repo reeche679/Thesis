@@ -11,3 +11,6 @@ Pillow>=10.0.0
 easyocr>=1.7.0
 numpy>=1.20.0
 ortools>=9.8,<10
+discrete-optimization
+cpmpy
+minizinc

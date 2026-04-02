@@ -36,8 +36,8 @@
         }
 
         .pos-header-logo {
-            width: 62px;
-            height: 62px;
+            width: 56px;
+            height: 56px;
             object-fit: contain;
         }
 
@@ -204,16 +204,9 @@
         }
         @media (max-width: 767.98px) {
             /* Mobile only: nav bar is hidden, so reduce extra gap before page titles */
-            .pos-sticky-header-wrapper {
-                position: fixed;
-                top: 0;
-                left: 0;
-                right: 0;
-                z-index: 1400;
-            }
             .pos-main,
             body:not(.no-sticky-header) .pos-main {
-                padding-top: 4.9rem;
+                padding-top: 0.75rem;
             }
         }
 
@@ -438,9 +431,9 @@
         .pos-header-brand { min-width: 0; }
         .pos-header-brand > div { min-width: 0; }
         @media (max-width: 575.98px) {
-            .pos-header-title { font-size: 0.82rem; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
-            .pos-header-subtitle { font-size: 0.72rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-            .pos-header-logo { width: 46px; height: 46px; flex-shrink: 0; }
+            .pos-header-title { font-size: 0.7rem; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+            .pos-header-subtitle { font-size: 0.6rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+            .pos-header-logo { width: 40px; height: 40px; flex-shrink: 0; }
             .pos-header-title .pos-header-title-full { display: none; }
             .pos-header-title .pos-header-title-mobile { display: inline; }
 
@@ -554,70 +547,12 @@
             margin: 0;
             line-height: 1;
             border-radius: 999px;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            flex: 0 0 auto;
         }
         .pos-header-logo-trigger:focus-visible {
             outline: 2px solid rgba(255, 255, 255, 0.75);
             outline-offset: 2px;
         }
-        .pos-header-menu-trigger {
-            display: none;
-            border: 0;
-            background: transparent;
-            color: #ffffff;
-            padding: 0.2rem;
-            margin-right: 0.6rem;
-            line-height: 1;
-            border-radius: 0.45rem;
-            font-size: 1.45rem;
-            flex: 0 0 auto;
-        }
-        .pos-header-menu-trigger:focus-visible {
-            outline: 2px solid rgba(255, 255, 255, 0.75);
-            outline-offset: 2px;
-        }
         @media (max-width: 767.98px) {
-            .pos-header-menu-trigger {
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-            }
-            .pos-header-brand {
-                margin-left: 0;
-                display: inline-flex !important;
-                align-items: center;
-                gap: 0.55rem;
-                flex: 1 1 auto;
-                min-width: 0;
-            }
-            .pos-header-brand .pos-header-logo-trigger {
-                order: 2;
-                margin: 0 0 0 auto !important;
-            }
-            .pos-header-brand > div {
-                order: 1;
-                flex: 1 1 auto;
-                min-width: 0;
-                text-align: left;
-            }
-            .pos-header-brand .pos-header-title,
-            .pos-header-brand .pos-header-subtitle {
-                text-align: left;
-            }
-            .pos-header-brand .pos-header-title {
-                white-space: normal;
-                text-overflow: clip;
-            }
-            .pos-header-logo-trigger {
-                pointer-events: none;
-            }
-            .pos-header-logo-trigger img {
-                display: block;
-            }
-
             /* Hide existing top icon-strip nav on mobile; drawer replaces it */
             .pos-navbar {
                 display: none;
@@ -631,7 +566,7 @@
                 opacity: 0;
                 pointer-events: none;
                 transition: opacity 0.22s ease;
-                z-index: 1450;
+                z-index: 1300;
             }
             .pos-mobile-drawer {
                 display: block;
@@ -650,7 +585,7 @@
                 box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22);
                 transform: translateX(-104%);
                 transition: transform 0.24s ease;
-                z-index: 1460;
+                z-index: 1310;
                 overflow-y: auto;
                 -webkit-overflow-scrolling: touch;
             }
@@ -664,8 +599,8 @@
                 color: #fff;
             }
             .pos-mobile-drawer-header-logo {
-                width: 40px;
-                height: 40px;
+                width: 28px;
+                height: 28px;
                 object-fit: contain;
                 flex: 0 0 auto;
                 border-radius: 0;
@@ -734,11 +669,8 @@
     {% block header %}
     <header class="pos-header-bar">
         <div class="container pos-container-wide d-flex align-items-center">
-            <button type="button" class="pos-header-menu-trigger" id="pos-mobile-menu-btn" aria-label="Open navigation menu">
-                <i class="bi bi-list" aria-hidden="true"></i>
-            </button>
             <div class="d-flex align-items-center pos-header-brand">
-                <button type="button" class="pos-header-logo-trigger me-3" aria-label="Batangas State University Logo">
+                <button type="button" class="pos-header-logo-trigger me-3" id="pos-mobile-logo-btn" aria-label="Open navigation menu">
                     <img src="{% static 'img/BSU_Logo.png' %}" alt="Batangas State University Logo" class="pos-header-logo">
                 </button>
                 <div>
@@ -951,8 +883,8 @@
             var body = document.body;
             var drawer = document.getElementById("pos-mobile-drawer");
             var overlay = document.getElementById("pos-mobile-drawer-overlay");
-            var menuBtn = document.getElementById("pos-mobile-menu-btn");
-            if (!drawer || !overlay || !menuBtn) return;
+            var logoBtn = document.getElementById("pos-mobile-logo-btn");
+            if (!drawer || !overlay || !logoBtn) return;
 
             var drawerOpen = false;
             var swipeState = null;
@@ -1056,7 +988,7 @@
                 swipeState = null;
             }
 
-            menuBtn.addEventListener("click", function () {
+            logoBtn.addEventListener("click", function () {
                 if (!isMobile()) return;
                 openDrawer();
             });

@@ -1,0 +1,491 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Login | Program of Study Generation System{% endblock %}
+
+{% block extra_head %}
+<style>
+    body {
+        background: url('{% static "img/BSU_Background.jpg" %}') no-repeat center center fixed;
+        background-size: cover;
+        position: relative;
+        min-height: 100vh;
+        min-height: 100svh;
+        display: flex;
+        flex-direction: column;
+        margin: 0;
+        padding: 0;
+        font-family: Arial, sans-serif;
+        overflow-x: hidden;
+        overflow-y: auto;
+    }
+
+    html {
+        overflow-x: hidden;
+        overflow-y: auto;
+    }
+
+    .pos-sticky-header-wrapper,
+    header.pos-header-bar,
+    nav.pos-navbar {
+        display: none !important;
+    }
+
+    .pos-main {
+        padding: 0 !important;
+        margin: 0;
+        min-height: 0;
+        flex: 1 1 auto;
+        display: flex;
+        align-items: flex-start;
+        justify-content: center;
+        overflow-y: visible;
+    }
+
+    .auth-page-wrap {
+        width: 100%;
+        min-height: 0;
+        position: relative;
+        padding: 0;
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+        flex: 1 1 auto;
+    }
+
+    .outer-card {
+        position: relative;
+        z-index: 1;
+        background-color: rgba(255, 255, 255, 0.7);
+        max-width: 960px;
+        width: 92%;
+        min-height: 0;
+        margin: 0 auto;
+        padding: 0;
+        border-radius: 8px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        overflow: visible;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .header-image {
+        width: 100%;
+        height: auto;
+        max-height: none;
+        object-fit: cover;
+        object-position: left center;
+        display: block;
+        flex-shrink: 0;
+    }
+
+    .content-area {
+        position: relative;
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        overflow-y: auto;
+        min-height: 0;
+    }
+
+    .bg-logo {
+        position: absolute;
+        top: 40%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        opacity: 0.09;
+        max-width: 400px;
+        width: 50%;
+        z-index: 2;
+        pointer-events: none;
+    }
+
+    .inner-card {
+        position: relative;
+        z-index: 3;
+        background-color: transparent;
+        padding: 32px 32px;
+        text-align: left;
+        border: 2px solid #dee2e6;
+        border-radius: 12px;
+        width: 100%;
+        max-width: 720px;
+        margin: 0 auto;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+    }
+
+    .login-bottom-row {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+    }
+    .login-create-help-row {
+        display: flex;
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: center;
+        width: 100%;
+    }
+    .inner-card .help-links {
+        font-size: clamp(0.7rem, 1.8vw, 0.9rem);
+        margin-top: auto;
+        margin-bottom: 0;
+        text-align: right;
+        color: #666;
+    }
+
+    .inner-card .help-links a {
+        color: #a0161c;
+        text-decoration: none;
+    }
+
+    .inner-card .help-links a:hover {
+        text-decoration: underline;
+    }
+
+    @media (max-width: 575.98px) {
+        .login-bottom-row {
+            gap: 0.4rem;
+        }
+        .login-bottom-row .small,
+        .login-bottom-row .help-links {
+            white-space: nowrap;
+        }
+        .inner-card .help-links {
+            font-size: clamp(0.65rem, 2vw, 0.8rem);
+            text-align: right;
+        }
+    }
+
+    #loginHelpModal .modal-dialog,
+    #loginContactModal .modal-dialog {
+        max-width: 560px;
+    }
+    #loginHelpModal .modal-content,
+    #loginContactModal .modal-content {
+        border-radius: 12px;
+        border: 2px solid #dee2e6;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    }
+    #loginHelpModal .modal-header,
+    #loginContactModal .modal-header {
+        background-color: #7b0f15;
+        color: #fff;
+        border-bottom: 1px solid #dee2e6;
+        padding: 0.6rem 1rem;
+        border-radius: 12px 12px 0 0;
+    }
+    #loginHelpModal .modal-header .modal-title,
+    #loginContactModal .modal-header .modal-title {
+        font-size: 1rem;
+        font-weight: 600;
+        margin: 0;
+    }
+    #loginHelpModal .modal-body,
+    #loginContactModal .modal-body {
+        padding: 1.25rem 1.5rem;
+        font-size: 0.9rem;
+        line-height: 1.55;
+    }
+
+    .inner-card h1 {
+        font-size: 1.1rem;
+        font-weight: 600;
+    }
+
+    .inner-card p {
+        font-size: 0.85rem;
+    }
+
+    .inner-card .form-label {
+        text-align: left;
+        font-weight: 500;
+        font-size: 0.85rem;
+    }
+
+    .inner-card .form-control {
+        font-size: 0.85rem;
+        background-color: rgba(255, 255, 255, 0.58);
+    }
+
+    .inner-card .btn {
+        width: 170px;
+        border-radius: 25px;
+        padding: 8px 18px;
+        font-size: 0.8rem;
+        border: 1px solid #555;
+    }
+
+    .inner-card .small {
+        font-size: 0.8rem;
+    }
+
+    .inner-card .form-check {
+        font-size: 0.8rem;
+    }
+
+    .inner-card .form-check-input {
+        width: 0.9rem;
+        height: 0.9rem;
+        margin-top: 0.15rem;
+    }
+
+    .inner-card .form-check-label {
+        font-size: 0.8rem;
+    }
+
+    .inner-card .form-control::placeholder {
+        color: #999;
+        opacity: 1;
+    }
+
+    .inner-card .form-control::-webkit-input-placeholder {
+        color: #999;
+    }
+
+    .inner-card .form-control::-moz-placeholder {
+        color: #999;
+        opacity: 1;
+    }
+
+    .inner-card .form-control:-ms-input-placeholder {
+        color: #999;
+    }
+
+    @media (max-width: 575.98px) {
+        .pos-main { padding-bottom: 0.5rem !important; }
+        .pos-main {
+            min-height: 0;
+            overflow-y: visible;
+            flex-direction: column;
+            justify-content: flex-start;
+            align-items: stretch;
+        }
+        .content-area {
+            align-items: flex-start;
+            padding-top: 0.75rem;
+            padding-bottom: 2rem;
+        }
+        .outer-card {
+            width: calc(100% - 1rem);
+            margin: 1.1rem auto 0.9rem;
+            min-height: 0;
+            flex: 1 1 auto;
+        }
+        .inner-card {
+            padding: 24px 18px;
+            border-width: 1px;
+            min-height: 380px;
+        }
+        /* Space ABOVE the Student Login (inner) card on mobile */
+        .inner-card { margin-top: 1.1rem; }
+        /* BSU logo fixed to viewport so it doesn't move when scrolling */
+        .bg-logo {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+    }
+
+    .password-toggle-wrap .password-toggle-btn {
+        border-color: #ced4da;
+        background: rgba(255, 255, 255, 0.58);
+        padding: 0.25rem 0.4rem;
+        flex: 0 0 auto;
+        width: 2.25rem;
+        min-width: 2.25rem;
+        border-radius: 0.25rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .password-toggle-wrap .password-toggle-btn:hover {
+        background: #e9ecef;
+    }
+    .password-toggle-wrap .password-toggle-btn svg {
+        width: 14px;
+        height: 14px;
+        display: block;
+        flex-shrink: 0;
+    }
+
+    /* Footer: disable horizontal scrolling on auth pages */
+    .pos-footer .container {
+        overflow-x: hidden !important;
+    }
+</style>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const srCodeField = document.getElementById('sr_code');
+        if (srCodeField) {
+            srCodeField.setAttribute('maxlength', '8');
+            
+            srCodeField.addEventListener('input', function(e) {
+                let value = this.value.replace(/[^0-9]/g, '');
+
+                if (value.length > 7) {
+                    value = value.substring(0, 7);
+                }
+
+                if (value.length > 2) {
+                    value = value.substring(0, 2) + '-' + value.substring(2);
+                }
+                
+                this.value = value;
+            });
+            
+            srCodeField.addEventListener('keypress', function(e) {
+                const char = String.fromCharCode(e.which);
+                if (!/[0-9]/.test(char) && e.which !== 8 && e.which !== 46 && e.which !== 37 && e.which !== 39) {
+                    e.preventDefault();
+                }
+            });
+        }
+
+        document.querySelectorAll('.password-toggle-btn').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                const targetId = this.getAttribute('data-target');
+                const input = document.getElementById(targetId);
+                const eye = this.querySelector('.icon-eye');
+                const slash = this.querySelector('.icon-eye-slash');
+                if (!input || !eye || !slash) return;
+                if (input.type === 'password') {
+                    input.type = 'text';
+                    eye.classList.add('d-none');
+                    slash.classList.remove('d-none');
+                    this.setAttribute('aria-label', 'Hide password');
+                    this.setAttribute('title', 'Hide password');
+                } else {
+                    input.type = 'password';
+                    eye.classList.remove('d-none');
+                    slash.classList.add('d-none');
+                    this.setAttribute('aria-label', 'Show password');
+                    this.setAttribute('title', 'Show password');
+                }
+            });
+        });
+    });
+</script>
+{% endblock %}
+
+{% block header %}{% endblock header %}
+{% block navbar %}{% endblock navbar %}
+
+{% block content_container %}
+<div class="auth-page-wrap">
+    <img src="{% static 'img/BSU_Header.png' %}" alt="BSU Header" class="header-image d-block d-sm-none">
+    <div class="outer-card">
+        <img src="{% static 'img/BSU_Header.png' %}" alt="BSU Header" class="header-image d-none d-sm-block">
+        
+        <div class="content-area">
+            <img src="{% static 'img/BSU_Logo.png' %}" alt="BSU Logo" class="bg-logo">
+            <div class="inner-card">
+                <div>
+                <h1 class="fw-semibold mb-3">Student Login</h1>
+                <p class="text-muted mb-4">
+                    Sign in using your Batangas State University credentials.
+                </p>
+
+                <form method="post" action="{% url 'login' %}">
+                    {% csrf_token %}
+                    {% if error %}
+                    <div class="alert alert-danger small mb-3" role="alert">{{ error }}</div>
+                    {% endif %}
+                    <div class="mb-3">
+                        <label for="sr_code" class="form-label">SR-Code</label>
+                        <input type="text" class="form-control" id="sr_code" name="sr_code" placeholder="e.g. 23-00000" maxlength="8" required
+                               pattern="^\d{2}-\d{5}$"
+                               title="Please enter a valid SR-Code (e.g. 23-00000)">
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="password" class="form-label">Password</label>
+                        <div class="input-group password-toggle-wrap">
+                            <input type="password" class="form-control" id="password" name="password" placeholder="Enter your password" required>
+                            <button type="button" class="btn btn-outline-secondary password-toggle-btn" data-target="password" aria-label="Show password" title="Show password">
+                                <svg class="icon-eye" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                                <svg class="icon-eye-slash d-none" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                            </button>
+                        </div>
+                        <div class="mt-1" style="color: #dc3545; font-size: 0.6rem; margin-left: 0.35rem;">Password is case sensitive*</div>
+                    </div>
+
+                    <div class="d-grid gap-2 mb-3">
+                        <button type="submit" class="btn btn-danger mx-auto">
+                            Login
+                        </button>
+                    </div>
+                </form>
+
+                <hr class="my-4">
+
+                <div class="login-bottom-row">
+                    <div class="small mb-2">Don't have an account yet?</div>
+                    <div class="d-flex justify-content-between align-items-center login-create-help-row">
+                        <a href="{% url 'register' %}" class="text-decoration-none small">Create an account</a>
+                        <div class="help-links mb-0">
+                            <a href="#" data-bs-toggle="modal" data-bs-target="#loginHelpModal">Need Help?</a>
+                            &nbsp;|&nbsp;
+                            <a href="#" data-bs-toggle="modal" data-bs-target="#loginContactModal">Contact Us</a>
+                        </div>
+                    </div>
+                </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="loginHelpModal" tabindex="-1" aria-labelledby="loginHelpModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="loginHelpModalLabel">Need Help?</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-3">The Program of Study Generation System helps you create and manage your Program of Study (POS) for your degree. It automatically organizes subjects based on your curriculum, year level, and academic rules. This system reduces manual errors, saves time, and ensures that your study plan follows university policies.</p>
+                <ul class="mb-0 ps-3" style="text-align: justify;">
+                    <li>Use <strong>Create Account</strong> to register with your SR-Code and BSU email.</li>
+                    <li>Use <strong>Login</strong> to sign in with your SR-Code and password.</li>
+                </ul>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="loginContactModal" tabindex="-1" aria-labelledby="loginContactModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="loginContactModalLabel">Contact Us</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted small mb-2">Get in touch for support, inquiries, or feedback about the Program of Study Generation System.</p>
+                <h6>System support</h6>
+                <ul class="mb-3 ps-3">
+                    <li><strong>Email:</strong> pos-support@g.batstate-u.edu.ph</li>
+                    <li><strong>Office hours:</strong> Monday to Friday, 8:00 AM – 5:00 PM</li>
+                </ul>
+                <h6>University</h6>
+                <p class="mb-0 small">Batangas State University – The National Engineering University<br>Alangilan Campus, Batangas City, Philippines</p>
+                <p class="mt-2 mb-0 small text-muted">For academic or curriculum questions, please contact your academic adviser or the Registrar's Office.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+

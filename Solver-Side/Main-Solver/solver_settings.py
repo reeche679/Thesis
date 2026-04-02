@@ -16,10 +16,9 @@ CONFIGURATION = "config1_baseline"
 
 # Alternative algorithm selector:
 # - None -> use pure CP-SAT configuration flow
-# - "local_search" | "fuzzy_logic" | "tabu_search" | "firefly" -> use heuristic flow
-# Speed vs quality: edit *Config dataclass defaults in
-# algorithms_and_helpers/alternative_algorithms.py (iterations, early_stop_on_feasible, etc.).
-ALTERNATIVE_ALGORITHM = None
+# - "discrete_opt" -> use discrete-optimization simulated annealing branch
+# - "cpmpy_minizinc" -> use CPMpy exact model with MiniZinc backend (Chuffed)
+ALTERNATIVE_ALGORITHM = "cpmpy_minizinc"
 
 # Graduation trio enforcement switch
 ENFORCE_GRADUATION_TRIO_ONLY_SEMESTER = True
