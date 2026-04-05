@@ -245,49 +245,6 @@
         background-color: rgba(255, 255, 255, 0.6);
     }
 
-    /* Registration error popup: dialog above backdrop; backdrop is full-screen gray behind only */
-    #register-error-modal {
-        z-index: 2100 !important;
-        background: rgba(45, 45, 52, 0.55);
-    }
-    /* Backdrop sits under #register-error-modal (1060 > 1055) */
-    body > .modal-backdrop {
-        z-index: 1055;
-        background-color: rgba(45, 45, 52, 0.55);
-    }
-    #register-error-modal .modal-content {
-        position: relative;
-        z-index: 1;
-        box-shadow: 0 1rem 2.5rem rgba(0, 0, 0, 0.22), 0 0 0 1px rgba(0, 0, 0, 0.06);
-        border: 1px solid rgba(0, 0, 0, 0.1);
-    }
-    #register-error-modal .modal-header {
-        background-color: #b00020;
-        color: #fff;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.2);
-        padding: 0.8rem 0.85rem;
-        min-height: 2;
-    }
-    #register-error-modal .modal-title {
-        color: #fff;
-        font-size: 0.9rem;
-        line-height: 1.25;
-        font-weight: 600;
-    }
-    #register-error-modal .modal-dialog {
-        margin-top: 1rem;
-        max-width: 680px;
-        pointer-events: auto;
-    }
-    #register-error-modal:not(.fade) .modal-dialog {
-        transform: none;
-        transition: none;
-    }
-    #register-error-modal-body {
-        white-space: pre-line;
-        color: #7a0015;
-    }
-
     /* Footer: disable horizontal scrolling on auth pages */
     .pos-footer .container {
         overflow-x: hidden !important;
@@ -295,69 +252,13 @@
 </style>
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-        const registerErrorModalEl = document.getElementById('register-error-modal');
-        const registerErrorModalBody = document.getElementById('register-error-modal-body');
-        const registerErrorOkBtn = document.getElementById('register-error-ok-btn');
-        if (registerErrorModalEl && registerErrorModalEl.parentNode !== document.body) {
-            document.body.appendChild(registerErrorModalEl);
-        }
-        let registerErrorOpen = false;
-
-        function cleanupRegisterModalArtifacts() {
-            document.querySelectorAll('body > .modal-backdrop').forEach(function(backdrop) {
-                backdrop.remove();
-            });
-            document.body.classList.remove('modal-open');
-            document.body.style.paddingRight = '0px';
-            document.body.style.marginRight = '0px';
-        }
-
-        function openRegisterErrorModal() {
-            if (!registerErrorModalEl) return;
-            cleanupRegisterModalArtifacts();
-            registerErrorModalEl.style.display = 'block';
-            registerErrorModalEl.classList.add('show');
-            registerErrorModalEl.setAttribute('aria-hidden', 'false');
-            registerErrorModalEl.style.pointerEvents = 'auto';
-            registerErrorOpen = true;
-        }
-
-        function closeRegisterErrorModal() {
-            if (!registerErrorModalEl) return;
-            registerErrorModalEl.classList.remove('show');
-            registerErrorModalEl.setAttribute('aria-hidden', 'true');
-            registerErrorModalEl.style.display = 'none';
-            registerErrorOpen = false;
-            cleanupRegisterModalArtifacts();
-        }
-
         function showRegisterError(message) {
-            if (registerErrorModalBody) {
-                registerErrorModalBody.textContent = message;
-            }
-            if (registerErrorModalEl) {
-                openRegisterErrorModal();
+            var text = message != null ? String(message) : '';
+            if (typeof window.showAppSystemErrorModal === 'function') {
+                window.showAppSystemErrorModal('Registration Error', text);
             } else {
-                window.alert(message);
+                window.alert(text);
             }
-        }
-
-        if (registerErrorOkBtn) {
-            registerErrorOkBtn.addEventListener('click', function() {
-                closeRegisterErrorModal();
-            });
-        }
-        if (registerErrorModalEl) {
-            registerErrorModalEl.addEventListener('click', function(e) {
-                if (e.target === registerErrorModalEl) {
-                    closeRegisterErrorModal();
-                }
-            });
-            document.addEventListener('keydown', function(e) {
-                if (registerErrorOpen && e.key === 'Escape') {
-                    closeRegisterErrorModal();
-                }
-            });
         }
 
         const serverErrorsData = document.getElementById('register-server-errors');
@@ -614,22 +515,6 @@
                     Already have an account?
                     <a href="{% url 'login' %}" class="text-decoration-none">Login</a>
                 </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<div class="modal" id="register-error-modal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-scrollable">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h6 class="modal-title mb-0">Registration Error</h6>
-            </div>
-            <div class="modal-body">
-                <div id="register-error-modal-body" class="small text-danger"></div>
-            </div>
-            <div class="modal-footer justify-content-start">
-                <button type="button" class="btn btn-primary btn-sm" id="register-error-ok-btn">OK</button>
             </div>
         </div>
     </div>

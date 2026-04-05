@@ -118,6 +118,10 @@
             z-index: 1990 !important;
             background-color: rgba(45, 45, 52, 0.45) !important;
         }
+        /* System error above confirm if both are visible briefly */
+        #app-system-error-modal.modal.show {
+            z-index: 2060 !important;
+        }
         .modal.fade,
         .modal.fade .modal-dialog,
         .modal-backdrop.fade {
@@ -129,6 +133,94 @@
         body.modal-open {
             padding-right: 0 !important;
             overflow-y: auto !important;
+        }
+
+        /* System-wide popup skin (error + confirm): light card, danger message panel, top-aligned, responsive width */
+        #app-system-error-modal .app-system-error-ok-btn,
+        #app-system-confirm-modal .app-system-confirm-footer-btn {
+            padding: 0.28rem 0.85rem;
+            font-size: 0.85rem;
+            line-height: 1.2;
+            min-width: 3.25rem;
+        }
+        #app-system-error-modal .modal-body,
+        #app-system-confirm-modal .modal-body {
+            padding-top: 0.75rem;
+            padding-bottom: 0.75rem;
+        }
+        #app-system-error-modal .modal-content,
+        #app-system-confirm-modal .modal-content {
+            background: #f1f3f5;
+            border-radius: 0.6rem;
+            border: 1px solid rgba(0, 0, 0, 0.08);
+            box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.14), 0 0 0 1px rgba(0, 0, 0, 0.04);
+        }
+        #app-system-error-modal .modal-header,
+        #app-system-confirm-modal .modal-header {
+            padding: 0.65rem 0.85rem;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+            background: transparent;
+        }
+        #app-system-error-modal .modal-title,
+        #app-system-confirm-modal .modal-title {
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: #212529;
+            margin: 0;
+        }
+        #app-system-error-modal .modal-footer,
+        #app-system-confirm-modal .modal-footer {
+            padding: 0.55rem 0.85rem;
+            border-top: 1px solid rgba(0, 0, 0, 0.08);
+        }
+        #app-system-error-modal #app-system-error-modal-message,
+        #app-system-confirm-modal #app-system-confirm-modal-message {
+            font-size: 0.9rem;
+            line-height: 1.45;
+            margin-bottom: 0;
+            padding: 0.65rem 0.85rem;
+            white-space: pre-line;
+            word-break: break-word;
+            overflow-wrap: anywhere;
+            hyphens: auto;
+            color: #721c24;
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            border-radius: 0.35rem;
+        }
+        #app-system-error-modal.app-system-error-modal-active.modal.show,
+        #app-system-confirm-modal.app-system-error-modal-active.modal.show {
+            display: flex !important;
+            align-items: flex-start;
+            justify-content: center;
+            padding-top: max(0.5rem, env(safe-area-inset-top, 0px));
+        }
+        #app-system-error-modal.app-system-error-modal-active .modal-dialog.app-system-error-dialog,
+        #app-system-confirm-modal.app-system-error-modal-active .modal-dialog.app-system-error-dialog {
+            margin-left: auto;
+            margin-right: auto;
+            margin-top: 0;
+            margin-bottom: 1.5rem;
+            width: auto;
+            max-width: calc(100vw - 1rem);
+        }
+        @media (min-width: 576px) {
+            #app-system-error-modal.app-system-error-modal-active .modal-dialog.app-system-error-dialog,
+            #app-system-confirm-modal.app-system-error-modal-active .modal-dialog.app-system-error-dialog {
+                max-width: min(36rem, calc(100vw - 2rem));
+            }
+        }
+        @media (min-width: 768px) {
+            #app-system-error-modal.app-system-error-modal-active .modal-dialog.app-system-error-dialog,
+            #app-system-confirm-modal.app-system-error-modal-active .modal-dialog.app-system-error-dialog {
+                max-width: min(42rem, calc(100vw - 3rem));
+            }
+        }
+        @media (min-width: 1200px) {
+            #app-system-error-modal.app-system-error-modal-active .modal-dialog.app-system-error-dialog,
+            #app-system-confirm-modal.app-system-error-modal-active .modal-dialog.app-system-error-dialog {
+                max-width: min(48rem, calc(100vw - 4rem));
+            }
         }
 
         /* Utility: justify text (Bootstrap 5 dropped .text-justify) */
@@ -655,8 +747,9 @@
                     linear-gradient(rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0.62)),
                     url('{% static "img/BSU_Background.jpg" %}');
                 background-repeat: no-repeat;
-                background-position: left bottom;
-                background-size: 420% auto;
+                /* Gradient full bleed; photo: stay left-aligned, shift down (no horizontal nudge). */
+                background-position: left top, left calc(100% + 48px);
+                background-size: 100% 100%, 400% auto;
                 box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22);
                 transform: translateX(-104%);
                 transition: transform 0.24s ease;
@@ -791,7 +884,7 @@
                 </ul>
                 <ul class="navbar-nav mb-2 mb-lg-0 ms-auto flex-shrink-0">
                     <li class="nav-item">
-                        <a class="nav-link pos-nav-signout" href="{% url 'sign_out' %}" title="Sign Out"><i class="bi bi-box-arrow-right"></i><span class="nav-link-text">Sign Out</span></a>
+                        <a class="nav-link pos-nav-signout pos-app-sign-out-link" href="{% url 'sign_out' %}" title="Sign Out"><i class="bi bi-box-arrow-right"></i><span class="nav-link-text">Sign Out</span></a>
                     </li>
                 </ul>
             </div>
@@ -813,7 +906,7 @@
             <a class="pos-mobile-drawer-link" href="{% if has_complete_info %}{% url 'pos_history' %}{% else %}{% url 'pos_home' %}?required=1{% endif %}" data-nav-key="history"><i class="bi bi-clock-history" aria-hidden="true"></i><span>History</span></a>
             <a class="pos-mobile-drawer-link" href="{% url 'contact_us' %}" data-nav-key="contact"><i class="bi bi-envelope-fill" aria-hidden="true"></i><span>Contact Us</span></a>
             <a class="pos-mobile-drawer-link" href="{% url 'help' %}" data-nav-key="help"><i class="bi bi-question-circle-fill" aria-hidden="true"></i><span>Help</span></a>
-            <a class="pos-mobile-drawer-link" href="{% url 'sign_out' %}" data-nav-key="signout"><i class="bi bi-box-arrow-right" aria-hidden="true"></i><span>Sign Out</span></a>
+            <a class="pos-mobile-drawer-link pos-app-sign-out-link" href="{% url 'sign_out' %}" data-nav-key="signout"><i class="bi bi-box-arrow-right" aria-hidden="true"></i><span>Sign Out</span></a>
         </nav>
     </aside>
     </div>
@@ -846,6 +939,39 @@
         </div>
     </footer>
     {% endblock footer %}
+
+    <div class="modal fade" id="app-system-error-modal" tabindex="-1" aria-labelledby="app-system-error-modal-label" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="app-system-error-modal-label">Error</h5>
+                </div>
+                <div class="modal-body">
+                    <div id="app-system-error-modal-message" class="alert alert-danger mb-0" role="alert"></div>
+                </div>
+                <div class="modal-footer justify-content-end">
+                    <button type="button" class="btn btn-primary btn-sm app-system-error-ok-btn" data-bs-dismiss="modal">OK</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="app-system-confirm-modal" tabindex="-1" aria-labelledby="app-system-confirm-modal-label" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="app-system-confirm-modal-label">Confirm</h5>
+                </div>
+                <div class="modal-body">
+                    <div id="app-system-confirm-modal-message" class="alert alert-danger mb-0" role="alert"></div>
+                </div>
+                <div class="modal-footer justify-content-end flex-wrap gap-2">
+                    <button type="button" class="btn btn-outline-secondary btn-sm app-system-confirm-footer-btn" id="app-system-confirm-secondary">Cancel</button>
+                    <button type="button" class="btn btn-primary btn-sm app-system-confirm-footer-btn" id="app-system-confirm-primary">OK</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <div class="modal" id="privacyPolicyModal" tabindex="-1" aria-labelledby="privacyPolicyModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
@@ -892,6 +1018,245 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        (function initAppSystemModals() {
+            function layoutAppSystemPopupModal(modalEl, dialogEl, active) {
+                if (!modalEl || !dialogEl) return;
+                if (active) {
+                    modalEl.classList.add("app-system-error-modal-active");
+                    dialogEl.classList.remove("modal-sm", "modal-md", "modal-dialog-centered");
+                    dialogEl.classList.add("modal-lg", "modal-dialog-scrollable", "app-system-error-dialog");
+                } else {
+                    modalEl.classList.remove("app-system-error-modal-active");
+                    dialogEl.classList.remove("modal-lg", "modal-dialog-scrollable", "app-system-error-dialog");
+                    dialogEl.classList.add("modal-dialog-centered");
+                }
+            }
+
+            window.showAppSystemErrorModal = function (title, message, options) {
+                options = options || {};
+                var modalEl = document.getElementById("app-system-error-modal");
+                if (!modalEl || typeof bootstrap === "undefined" || !bootstrap.Modal) {
+                    window.alert((message != null && String(message)) ? String(message) : (title || "An error occurred."));
+                    return;
+                }
+                var dialogEl = modalEl.querySelector(".modal-dialog");
+                var titleEl = document.getElementById("app-system-error-modal-label");
+                var msgEl = document.getElementById("app-system-error-modal-message");
+                if (titleEl) titleEl.textContent = title || "Error";
+                if (msgEl) {
+                    msgEl.classList.remove("d-none");
+                    if (options.html) {
+                        msgEl.innerHTML = message != null ? String(message) : "";
+                    } else {
+                        msgEl.textContent = message != null ? String(message) : "";
+                    }
+                }
+                layoutAppSystemPopupModal(modalEl, dialogEl, true);
+                try {
+                    var inst = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+                    if (typeof options.onHidden === "function") {
+                        var onHiddenOnce = function () {
+                            modalEl.removeEventListener("hidden.bs.modal", onHiddenOnce);
+                            try {
+                                options.onHidden();
+                            } catch (err) {}
+                        };
+                        modalEl.addEventListener("hidden.bs.modal", onHiddenOnce);
+                    }
+                    inst.show();
+                } catch (e) {
+                    window.alert(message != null ? String(message) : title);
+                }
+            };
+
+            window.closeAppSystemErrorModal = function () {
+                var modalEl = document.getElementById("app-system-error-modal");
+                if (!modalEl || typeof bootstrap === "undefined" || !bootstrap.Modal) return;
+                var inst = bootstrap.Modal.getInstance(modalEl);
+                if (inst) inst.hide();
+            };
+
+            var _confirmOnPrimary = null;
+            var _confirmOnSecondary = null;
+            var _confirmPrimaryLabel = "OK";
+            var _confirmSecondaryLabel = "Cancel";
+
+            function closeAppSystemConfirmModal() {
+                var modalEl = document.getElementById("app-system-confirm-modal");
+                if (!modalEl || typeof bootstrap === "undefined" || !bootstrap.Modal) return;
+                var inst = bootstrap.Modal.getInstance(modalEl);
+                if (inst) inst.hide();
+            }
+
+            window.closeAppSystemConfirmModal = closeAppSystemConfirmModal;
+
+            window.setAppSystemConfirmBusy = function (busy, primaryBusyLabel) {
+                var primaryBtn = document.getElementById("app-system-confirm-primary");
+                var secondaryBtn = document.getElementById("app-system-confirm-secondary");
+                if (primaryBtn) {
+                    primaryBtn.disabled = !!busy;
+                    primaryBtn.textContent = busy && primaryBusyLabel ? primaryBusyLabel : _confirmPrimaryLabel;
+                }
+                if (secondaryBtn) secondaryBtn.disabled = !!busy;
+            };
+
+            window.showAppSystemConfirmModal = function (opts) {
+                opts = opts || {};
+                var modalEl = document.getElementById("app-system-confirm-modal");
+                if (!modalEl || typeof bootstrap === "undefined" || !bootstrap.Modal) {
+                    if (typeof opts.onSecondary === "function") {
+                        opts.onSecondary(function () {});
+                    }
+                    return;
+                }
+                var dialogEl = modalEl.querySelector(".modal-dialog");
+                var titleEl = document.getElementById("app-system-confirm-modal-label");
+                var msgEl = document.getElementById("app-system-confirm-modal-message");
+                var primaryBtn = document.getElementById("app-system-confirm-primary");
+                var secondaryBtn = document.getElementById("app-system-confirm-secondary");
+                _confirmOnPrimary = typeof opts.onPrimary === "function" ? opts.onPrimary : null;
+                _confirmOnSecondary = typeof opts.onSecondary === "function" ? opts.onSecondary : null;
+                _confirmPrimaryLabel = opts.primaryText || "OK";
+                _confirmSecondaryLabel = opts.secondaryText || "Cancel";
+                if (titleEl) titleEl.textContent = opts.title || "Confirm";
+                if (msgEl) {
+                    msgEl.classList.remove("d-none");
+                    if (opts.html) {
+                        msgEl.innerHTML = opts.message != null ? String(opts.message) : "";
+                    } else {
+                        msgEl.textContent = opts.message != null ? String(opts.message) : "";
+                    }
+                }
+                if (primaryBtn) {
+                    primaryBtn.textContent = _confirmPrimaryLabel;
+                    primaryBtn.disabled = false;
+                }
+                if (secondaryBtn) {
+                    secondaryBtn.textContent = _confirmSecondaryLabel;
+                    secondaryBtn.disabled = false;
+                }
+                layoutAppSystemPopupModal(modalEl, dialogEl, true);
+                try {
+                    var inst = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+                    inst.show();
+                } catch (e) {}
+            };
+
+            window.showAppSignOutConfirmModal = function (href) {
+                var dest = href != null ? String(href) : "";
+                if (!dest) return;
+                if (typeof window.showAppSystemConfirmModal !== "function") {
+                    window.location.href = dest;
+                    return;
+                }
+                window.showAppSystemConfirmModal({
+                    title: "Sign Out",
+                    message: "Are you sure you want to sign out?",
+                    primaryText: "Sign Out",
+                    secondaryText: "Cancel",
+                    onPrimary: function (close) {
+                        close();
+                        window.location.href = dest;
+                    },
+                    onSecondary: function (close) {
+                        close();
+                    }
+                });
+            };
+
+            document.addEventListener("DOMContentLoaded", function () {
+                var errModalEl = document.getElementById("app-system-error-modal");
+                if (errModalEl) {
+                    var errDialogEl = errModalEl.querySelector(".modal-dialog");
+                    errModalEl.addEventListener("hidden.bs.modal", function () {
+                        layoutAppSystemPopupModal(errModalEl, errDialogEl, false);
+                        var msgEl = document.getElementById("app-system-error-modal-message");
+                        if (msgEl) {
+                            msgEl.innerHTML = "";
+                            msgEl.textContent = "";
+                        }
+                    });
+                }
+
+                var confirmModalEl = document.getElementById("app-system-confirm-modal");
+                if (confirmModalEl) {
+                    var confirmDialogEl = confirmModalEl.querySelector(".modal-dialog");
+                    var primaryBtn = document.getElementById("app-system-confirm-primary");
+                    var secondaryBtn = document.getElementById("app-system-confirm-secondary");
+
+                    function finishConfirm() {
+                        _confirmOnPrimary = null;
+                        _confirmOnSecondary = null;
+                    }
+
+                    function makeDone() {
+                        return function done() {
+                            finishConfirm();
+                            layoutAppSystemPopupModal(confirmModalEl, confirmDialogEl, false);
+                            var inst = bootstrap.Modal.getInstance(confirmModalEl);
+                            if (inst) inst.hide();
+                        };
+                    }
+
+                    if (primaryBtn) {
+                        primaryBtn.addEventListener("click", function (e) {
+                            e.preventDefault();
+                            var fn = _confirmOnPrimary;
+                            if (!fn) return;
+                            fn(makeDone());
+                        });
+                    }
+                    if (secondaryBtn) {
+                        secondaryBtn.addEventListener("click", function (e) {
+                            e.preventDefault();
+                            var fn = _confirmOnSecondary;
+                            if (!fn) return;
+                            fn(makeDone());
+                        });
+                    }
+
+                    confirmModalEl.addEventListener("hidden.bs.modal", function () {
+                        layoutAppSystemPopupModal(confirmModalEl, confirmDialogEl, false);
+                        finishConfirm();
+                        if (primaryBtn) {
+                            primaryBtn.disabled = false;
+                            primaryBtn.textContent = _confirmPrimaryLabel;
+                        }
+                        if (secondaryBtn) {
+                            secondaryBtn.disabled = false;
+                            secondaryBtn.textContent = _confirmSecondaryLabel;
+                        }
+                        var msgEl = document.getElementById("app-system-confirm-modal-message");
+                        if (msgEl) {
+                            msgEl.innerHTML = "";
+                            msgEl.textContent = "";
+                        }
+                    });
+                }
+
+                document.addEventListener(
+                    "click",
+                    function (e) {
+                        var a = e.target.closest("a.pos-app-sign-out-link");
+                        if (!a || !a.getAttribute("href")) return;
+                        if (e.defaultPrevented) return;
+                        if (e.button !== 0) return;
+                        if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+                        e.preventDefault();
+                        e.stopPropagation();
+                        var href = a.href;
+                        if (typeof window.showAppSignOutConfirmModal === "function") {
+                            window.showAppSignOutConfirmModal(href);
+                        } else {
+                            window.location.href = href;
+                        }
+                    },
+                    true
+                );
+            });
+        })();
+    </script>
     <script>
         document.addEventListener("DOMContentLoaded", function () {
             function stabilizeModalLayoutShift() {

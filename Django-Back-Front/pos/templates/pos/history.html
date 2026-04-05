@@ -26,9 +26,6 @@
     @media (max-width: 575.98px) {
         .history-page .d-flex.justify-content-between.align-items-center { flex-direction: column; align-items: flex-start; text-align: left; }
     }
-    #historyConfirmModal .modal-footer .btn {
-        min-width: 5rem;
-    }
 </style>
 {% endblock %}
 
@@ -38,7 +35,7 @@
     <div>
         <h1 class="h5 mb-1">Program of Study History</h1>
         <p class="text-muted mb-0">
-            Saved when you download a POS from Preview (No Petition / With Petition). Load a row to continue editing on Generate POS.
+            List of saved Program of Study where user can load stored POS, download pdf, or delete records.
         </p>
     </div>
 </div>
@@ -72,7 +69,7 @@
                             <a href="{% url 'download_pos_pdf_record' record_id=record.pk %}" class="btn btn-outline-secondary btn-sm history-action-btn" title="Download this generated POS" aria-label="Download" download>
                                 <i class="bi bi-download"></i>
                             </a>
-                            <form method="post" action="{% url 'delete_pos_record' record_id=record.pk %}" class="d-inline m-0 history-delete-form">
+                            <form method="post" action="{% url 'delete_pos_record' record_id=record.pk %}" class="d-inline m-0 history-delete-form" data-record-date="{{ record.generated_at|date:'F d, Y' }}">
                                 {% csrf_token %}
                                 <button type="submit" class="btn btn-outline-danger btn-sm history-action-btn" title="Remove from history" aria-label="Delete">
                                     <i class="bi bi-trash"></i>
@@ -102,65 +99,49 @@
     {% endif %}
 </div>
 </div>
-
-<div class="modal" id="historyConfirmModal" tabindex="-1" aria-labelledby="historyConfirmModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-            <div class="modal-header border-0 pb-0">
-                <h5 class="modal-title" id="historyConfirmModalLabel">Confirm</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body pt-2">
-                <p class="mb-0" id="historyConfirmModalMessage"></p>
-            </div>
-            <div class="modal-footer border-0 pt-0">
-                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-danger" id="historyConfirmModalOk">OK</button>
-            </div>
-        </div>
-    </div>
-</div>
 {% endblock %}
 
 {% block extra_scripts %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    var modalEl = document.getElementById('historyConfirmModal');
-    var msgEl = document.getElementById('historyConfirmModalMessage');
-    var okBtn = document.getElementById('historyConfirmModalOk');
-    if (!modalEl || !msgEl || !okBtn || typeof bootstrap === 'undefined' || !bootstrap.Modal) return;
-
-    var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
-
     function wireConfirm(form, message, flagName) {
         form.addEventListener('submit', function(e) {
             if (form[flagName]) return;
             e.preventDefault();
-            msgEl.textContent = message;
-
-            function cleanup() {
-                okBtn.removeEventListener('click', onOk);
-                modalEl.removeEventListener('hidden.bs.modal', onHidden);
+            if (typeof window.showAppSystemConfirmModal !== 'function') {
+                if (window.confirm(message)) {
+                    form[flagName] = true;
+                    var btn = form.querySelector('button[type="submit"]');
+                    if (btn) btn.disabled = true;
+                    form.submit();
+                }
+                return;
             }
-            function onHidden() {
-                cleanup();
-            }
-            function onOk() {
-                cleanup();
-                form[flagName] = true;
-                var btn = form.querySelector('button[type="submit"]');
-                if (btn) btn.disabled = true;
-                form.submit();
-            }
-
-            okBtn.addEventListener('click', onOk);
-            modalEl.addEventListener('hidden.bs.modal', onHidden);
-            modal.show();
+            window.showAppSystemConfirmModal({
+                title: 'Confirm',
+                message: message,
+                primaryText: 'Delete',
+                secondaryText: 'Cancel',
+                onPrimary: function(close) {
+                    close();
+                    form[flagName] = true;
+                    var btn = form.querySelector('button[type="submit"]');
+                    if (btn) btn.disabled = true;
+                    form.submit();
+                },
+                onSecondary: function(close) {
+                    close();
+                }
+            });
         });
     }
 
     document.querySelectorAll('.history-delete-form').forEach(function(form) {
-        wireConfirm(form, 'Remove this record from history?', '_deleteConfirmed');
+        var dateStr = (form.getAttribute('data-record-date') || '').trim();
+        var msg = dateStr
+            ? 'Remove ' + dateStr + ' POS record from history?'
+            : 'Remove this record from history?';
+        wireConfirm(form, msg, '_deleteConfirmed');
     });
 
     document.querySelectorAll('.history-delete-all-form').forEach(function(form) {

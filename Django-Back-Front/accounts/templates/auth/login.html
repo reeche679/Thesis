@@ -162,32 +162,27 @@
         }
     }
 
-    #loginHelpModal .modal-dialog,
-    #loginContactModal .modal-dialog {
+    #loginHelpModal .modal-dialog {
         max-width: 560px;
     }
-    #loginHelpModal .modal-content,
-    #loginContactModal .modal-content {
+    #loginHelpModal .modal-content {
         border-radius: 12px;
         border: 2px solid #dee2e6;
         box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
     }
-    #loginHelpModal .modal-header,
-    #loginContactModal .modal-header {
+    #loginHelpModal .modal-header {
         background-color: #7b0f15;
         color: #fff;
         border-bottom: 1px solid #dee2e6;
         padding: 0.6rem 1rem;
         border-radius: 12px 12px 0 0;
     }
-    #loginHelpModal .modal-header .modal-title,
-    #loginContactModal .modal-header .modal-title {
+    #loginHelpModal .modal-header .modal-title {
         font-size: 1rem;
         font-weight: 600;
         margin: 0;
     }
-    #loginHelpModal .modal-body,
-    #loginContactModal .modal-body {
+    #loginHelpModal .modal-body {
         padding: 1.25rem 1.5rem;
         font-size: 0.9rem;
         line-height: 1.55;
@@ -431,8 +426,6 @@
                         <a href="{% url 'register' %}" class="text-decoration-none small">Create an account</a>
                         <div class="help-links mb-0">
                             <a href="#" data-bs-toggle="modal" data-bs-target="#loginHelpModal">Need Help?</a>
-                            &nbsp;|&nbsp;
-                            <a href="#" data-bs-toggle="modal" data-bs-target="#loginContactModal">Contact Us</a>
                         </div>
                     </div>
                 </div>
@@ -450,36 +443,21 @@
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-                <p class="mb-3">The Program of Study Generation System helps you create and manage your Program of Study (POS) for your degree. It automatically organizes subjects based on your curriculum, year level, and academic rules. This system reduces manual errors, saves time, and ensures that your study plan follows university policies.</p>
-                <ul class="mb-0 ps-3" style="text-align: justify;">
-                    <li>Use <strong>Create Account</strong> to register with your SR-Code and BSU email.</li>
-                    <li>Use <strong>Login</strong> to sign in with your SR-Code and password.</li>
+                <p class="mb-3">The Program of Study (POS) Generation System helps you build and manage your study plan using your curriculum, grades, and scheduling rules so your POS aligns with BSU policies.</p>
+                <p class="mb-2 fw-semibold small">System Features</p>
+                <ul class="mb-3 ps-3 small" style="text-align: left;">
+                    <li><strong>Home</strong> — Upload your profile photo and set your Academic Year.</li>
+                    <li><strong>Generate POS</strong> — Choose <strong>Last Semester Enrolled</strong>, enter grades, then generate your Program of Study.</li>
+                    <li><strong>Preview POS</strong> — Review your tables, switch <strong>No Petition / With Petition</strong>, edit movable courses when needed, set signatories, <strong>Save</strong> a copy to <strong>History</strong>, and download a PDF.</li>
+                    <li><strong>History</strong> — View saved POS records, load one back into Generate, download a stored PDF, or remove records.</li>
                 </ul>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<div class="modal" id="loginContactModal" tabindex="-1" aria-labelledby="loginContactModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="loginContactModalLabel">Contact Us</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <p class="text-muted small mb-2">Get in touch for support, inquiries, or feedback about the Program of Study Generation System.</p>
-                <h6>System support</h6>
-                <ul class="mb-3 ps-3">
-                    <li><strong>Email:</strong> pos-support@g.batstate-u.edu.ph</li>
-                    <li><strong>Office hours:</strong> Monday to Friday, 8:00 AM – 5:00 PM</li>
+                <p class="mb-2 fw-semibold small">Account</p>
+                <ul class="mb-0 ps-3 small" style="text-align: left;">
+                    <li><strong>Create an account</strong> — Register with your SR-Code and BSU email</li>
+                    (<code class="small">##-#####@g.batstate-u.edu.ph</code>).
+                    <li><strong>Login</strong> — Use your SR-Code and password.</li>
                 </ul>
-                <h6>University</h6>
-                <p class="mb-0 small">Batangas State University – The National Engineering University<br>Alangilan Campus, Batangas City, Philippines</p>
-                <p class="mt-2 mb-0 small text-muted">For academic or curriculum questions, please contact your academic adviser or the Registrar's Office.</p>
+                <p class="mt-3 mb-0 small text-muted">More detail: after signing in, open <strong>Help</strong> in the navigation.</p>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
@@ -488,4 +466,3 @@
     </div>
 </div>
 {% endblock %}
-

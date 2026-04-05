@@ -476,54 +476,6 @@
     #preview-signatory-add-edit-modal .modal-dialog {
         transition: none !important;
     }
-    /* Custom required-field popup (non-Bootstrap): instant and always above gray backdrop */
-    #preview-signatory-error-modal {
-        position: fixed;
-        inset: 0;
-        z-index: 1080;
-        display: none;
-        align-items: center;
-        justify-content: center;
-    }
-    #preview-signatory-error-modal.is-open {
-        display: flex;
-    }
-    #preview-signatory-error-backdrop {
-        position: absolute;
-        inset: 0;
-        background: rgba(45, 45, 52, 0.55);
-    }
-    #preview-signatory-error-card {
-        position: relative;
-        z-index: 1;
-        width: min(360px, calc(100vw - 1.25rem));
-        background: #fff;
-        border: 1px solid rgba(0, 0, 0, 0.14);
-        border-radius: 0.5rem;
-        overflow: hidden;
-        box-shadow: 0 1rem 2.25rem rgba(0, 0, 0, 0.25);
-    }
-    #preview-signatory-error-card .modal-header {
-        background-color: #b00020;
-        color: #fff;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.2);
-        padding: 0.45rem 0.85rem;
-        min-height: 0;
-    }
-    #preview-signatory-error-card .modal-title {
-        color: #fff;
-        font-size: 0.9rem;
-        line-height: 1.25;
-        font-weight: 600;
-    }
-    #preview-signatory-error-card .modal-body {
-        padding: 0.9rem 0.95rem;
-    }
-    #preview-signatory-error-card .modal-footer {
-        padding: 0.65rem 0.85rem 0.8rem;
-        border-top: 1px solid #dee2e6;
-        justify-content: flex-start;
-    }
     /* Preview edit feedback at top of screen */
     #preview-edit-success-toast {
         position: fixed;
@@ -541,54 +493,6 @@
     }
     #preview-edit-success-toast.is-open {
         display: block;
-    }
-    #preview-edit-error-modal {
-        position: fixed;
-        inset: 0;
-        z-index: 2210;
-        display: none;
-        align-items: flex-start;
-        justify-content: center;
-        padding-top: 0.8rem;
-    }
-    #preview-edit-error-modal.is-open {
-        display: flex;
-    }
-    #preview-edit-error-backdrop {
-        position: absolute;
-        inset: 0;
-        background: rgba(45, 45, 52, 0.55);
-    }
-    #preview-edit-error-card {
-        position: relative;
-        z-index: 1;
-        width: min(420px, calc(100vw - 1.25rem));
-        background: #fff;
-        border: 1px solid rgba(0, 0, 0, 0.14);
-        border-radius: 0.5rem;
-        overflow: hidden;
-        box-shadow: 0 1rem 2.25rem rgba(0, 0, 0, 0.25);
-    }
-    #preview-edit-error-card .modal-header {
-        background-color: #b00020;
-        color: #fff;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.2);
-        padding: 0.45rem 0.85rem;
-        min-height: 0;
-    }
-    #preview-edit-error-card .modal-title {
-        color: #fff;
-        font-size: 0.9rem;
-        line-height: 1.25;
-        font-weight: 600;
-    }
-    #preview-edit-error-card .modal-body {
-        padding: 0.85rem 0.95rem;
-    }
-    #preview-edit-error-card .modal-footer {
-        padding: 0.6rem 0.85rem 0.75rem;
-        border-top: 1px solid #dee2e6;
-        justify-content: flex-start;
     }
     body > .modal-backdrop {
         z-index: 1060 !important;
@@ -692,20 +596,6 @@
 
     <div id="pos-validation-alert" class="alert alert-danger mb-3" style="display:none;"></div>
     <div id="preview-edit-success-toast" role="status" aria-live="polite">Changes applied successfully.</div>
-    <div id="preview-edit-error-modal" aria-hidden="true">
-        <div id="preview-edit-error-backdrop"></div>
-        <div id="preview-edit-error-card" role="dialog" aria-modal="true" aria-labelledby="preview-edit-error-title">
-            <div class="modal-header">
-                <h6 class="modal-title mb-0" id="preview-edit-error-title">Invalid Course Move</h6>
-            </div>
-            <div class="modal-body" id="preview-edit-error-message">
-                One or more moved courses violate prerequisite/sequence rules.
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-primary btn-sm" id="preview-edit-error-ok-btn">OK</button>
-            </div>
-        </div>
-    </div>
 
     <div id="pos-preview-server">
     {% for section in preview_sections %}
@@ -769,7 +659,7 @@
     </div>
     <div id="pos-preview-dynamic" style="display:none;"></div>
 
-        <div class="mt-4 preview-signatory-row">
+        <div id="preview-signatory-section" class="mt-4 preview-signatory-row">
             <div class="row g-2">
                 <div class="col-12 col-md-4">
                     <label for="preview-adviser-select" class="form-label small text-uppercase text-muted mb-1 d-flex align-items-center gap-2">
@@ -817,21 +707,6 @@
                         </select>
                     </div>
                 </div>
-            </div>
-        </div>
-
-        <div id="preview-signatory-error-modal" aria-hidden="true">
-            <div id="preview-signatory-error-backdrop"></div>
-            <div id="preview-signatory-error-card" role="dialog" aria-modal="true" aria-labelledby="preview-signatory-error-title">
-                    <div class="modal-header">
-                        <h6 class="modal-title mb-0" id="preview-signatory-error-title">Required Field</h6>
-                    </div>
-                    <div class="modal-body" id="preview-signatory-error-message">
-                        Please choose an Adviser.
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-primary btn-sm" id="preview-signatory-error-ok-btn">OK</button>
-                    </div>
             </div>
         </div>
 
@@ -989,6 +864,19 @@
 {{ signatory_options|json_script:"signatory-options" }}
 <script>
     (function() {
+        function showPreviewPageError(title, message, onHidden) {
+            var t = title || 'Error';
+            var m = message != null ? String(message) : '';
+            if (typeof window.showAppSystemErrorModal === 'function') {
+                var opts = {};
+                if (typeof onHidden === 'function') opts.onHidden = onHidden;
+                window.showAppSystemErrorModal(t, m, opts);
+            } else {
+                window.alert(m || t);
+                if (typeof onHidden === 'function') onHidden();
+            }
+        }
+
         var previewSignatoryMenuPopup = null;
         var previewSignatoryBackdrop = null;
         var previewCurrentSignatorySelect = null;
@@ -1402,33 +1290,54 @@
             if (signatoryAddEditModal) signatoryAddEditModal.show();
         }
 
-        function validatePreviewSignatories() {
-            ensureSignatoryManageModals();
-
+        function getPreviewSignatoryMissingPhrases() {
             var signatories = getPreviewSignatoryParams();
             var missing = [];
             if (!signatories.adviser) missing.push('an Adviser');
             if (!signatories.program_chair) missing.push('a Program Chair');
             if (!signatories.department_chair) missing.push('a Department Chair');
+            return missing;
+        }
 
-            if (!missing.length) {
-                return true;
+        function formatPreviewSignatoryRequiredMessage(missing) {
+            if (!missing || !missing.length) return '';
+            if (missing.length === 1) {
+                return 'Please choose ' + missing[0] + ' before saving.';
             }
+            if (missing.length === 2) {
+                return 'Please choose ' + missing[0] + ' and ' + missing[1] + ' before saving.';
+            }
+            return 'Please choose ' + missing[0] + ', ' + missing[1] + ', and ' + missing[2] + ' before saving.';
+        }
 
-            var msgEl = document.getElementById('preview-signatory-error-message');
-            if (msgEl) {
-                var message = '';
-                if (missing.length === 1) {
-                    message = 'Please choose ' + missing[0] + '.';
-                } else if (missing.length === 2) {
-                    message = 'Please choose ' + missing[0] + ' and ' + missing[1] + '.';
-                } else {
-                    message = 'Please choose ' + missing[0] + ', ' + missing[1] + ', and ' + missing[2] + '.';
-                }
-                msgEl.textContent = message;
+        function scrollPreviewSignatoriesIntoViewAndFocus() {
+            var section = document.getElementById('preview-signatory-section');
+            var params = getPreviewSignatoryParams();
+            var firstSelect = null;
+            if (!params.adviser) firstSelect = document.getElementById('preview-adviser-select');
+            else if (!params.program_chair) firstSelect = document.getElementById('preview-program-chair-select');
+            else if (!params.department_chair) firstSelect = document.getElementById('preview-department-chair-select');
+
+            var scrollTarget = section || (firstSelect ? firstSelect.closest('.preview-signatory-row') : null);
+            if (scrollTarget) {
+                scrollTarget.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }
-            var errModalEl = document.getElementById('preview-signatory-error-modal');
-            if (errModalEl) errModalEl.classList.add('is-open');
+            window.setTimeout(function() {
+                if (!firstSelect) return;
+                var wrap = firstSelect.closest('.preview-signatory-select-wrap');
+                var btn = wrap ? wrap.querySelector('.preview-signatory-display-btn') : null;
+                try {
+                    if (btn) btn.focus();
+                    else firstSelect.focus();
+                } catch (e) {}
+            }, 400);
+        }
+
+        function validatePreviewSignatories() {
+            ensureSignatoryManageModals();
+            var missing = getPreviewSignatoryMissingPhrases();
+            if (!missing.length) return true;
+            showPreviewPageError('Required Field', formatPreviewSignatoryRequiredMessage(missing));
             return false;
         }
 
@@ -1442,7 +1351,6 @@
                 initPreviewSignatorySelectVisual(selectEl);
                 selectEl.addEventListener('change', function() {
                     savePreviewSignatorySelections();
-                    validatePreviewSignatories();
                 });
             });
             savePreviewSignatorySelections();
@@ -1460,18 +1368,6 @@
                 });
             }
 
-            var errModalEl = document.getElementById('preview-signatory-error-modal');
-            var errBackdropEl = document.getElementById('preview-signatory-error-backdrop');
-            var errOkBtn = document.getElementById('preview-signatory-error-ok-btn');
-            function closePreviewSignatoryErrorModal() {
-                if (errModalEl) errModalEl.classList.remove('is-open');
-            }
-            if (errBackdropEl) {
-                errBackdropEl.addEventListener('click', closePreviewSignatoryErrorModal);
-            }
-            if (errOkBtn) {
-                errOkBtn.addEventListener('click', closePreviewSignatoryErrorModal);
-            }
             document.querySelectorAll('.preview-signatory-edit-btn[data-signatory-role]').forEach(function(btn) {
                 btn.addEventListener('click', function() {
                     var role = btn.getAttribute('data-signatory-role');
@@ -1536,17 +1432,16 @@
                         }).then(function(r) { return r.json(); })
                           .then(function(data) {
                               if (!data || !data.ok) {
-                                  alert((data && data.error) ? data.error : 'Unable to update name.');
+                                  showPreviewPageError('Signatory list', (data && data.error) ? data.error : 'Unable to update name.');
                                   return;
                               }
                               signatoryOptionsMap = data.options || signatoryOptionsMap;
                               if (activeManageRole === 'adviser') currentValues.adviser = name;
                               repopulateAllSignatorySelects(currentValues);
                               renderSignatoryManageList();
-                              validatePreviewSignatories();
                               if (signatoryAddEditModal) signatoryAddEditModal.hide();
                           }).catch(function() {
-                              alert('Unable to update name right now.');
+                              showPreviewPageError('Signatory list', 'Unable to update name right now.');
                           });
                         return;
                     }
@@ -1557,17 +1452,16 @@
                     }).then(function(r) { return r.json(); })
                       .then(function(data) {
                           if (!data || !data.ok) {
-                              alert((data && data.error) ? data.error : 'Unable to add name.');
+                              showPreviewPageError('Signatory list', (data && data.error) ? data.error : 'Unable to add name.');
                               return;
                           }
                           signatoryOptionsMap = data.options || signatoryOptionsMap;
                           if (activeManageRole === 'adviser') currentValues.adviser = name;
                           repopulateAllSignatorySelects(currentValues);
                           renderSignatoryManageList();
-                          validatePreviewSignatories();
                           if (signatoryAddEditModal) signatoryAddEditModal.hide();
                       }).catch(function() {
-                          alert('Unable to add name right now.');
+                          showPreviewPageError('Signatory list', 'Unable to add name right now.');
                       });
                 });
                 addEditInputEl.addEventListener('keydown', function(evt) {
@@ -1598,7 +1492,7 @@
                     }).then(function(r) { return r.json(); })
                       .then(function(data) {
                           if (!data || !data.ok) {
-                              alert((data && data.error) ? data.error : 'Unable to delete name.');
+                              showPreviewPageError('Signatory list', (data && data.error) ? data.error : 'Unable to delete name.');
                               return;
                           }
                           signatoryOptionsMap = data.options || signatoryOptionsMap;
@@ -1608,7 +1502,7 @@
                           pendingDeleteOptionId = null;
                           if (signatoryDeleteConfirmModal) signatoryDeleteConfirmModal.hide();
                       }).catch(function() {
-                          alert('Unable to delete name right now.');
+                          showPreviewPageError('Signatory list', 'Unable to delete name right now.');
                       });
                 });
             }
@@ -1623,21 +1517,30 @@
         if (previewDlBtn) {
             previewDlBtn.addEventListener('click', function() {
                 if (!validatePreviewSignatories()) return;
-                var mode = getSelectedPetitionMode();
-                var signatories = getPreviewSignatoryParams();
-                var currentSemRaw = localStorage.getItem('posCurrentSemIndex');
-                var currentUiIndex = currentSemRaw !== null && currentSemRaw !== '' ? parseInt(currentSemRaw, 10) : null;
-                var boundaryParam = currentUiIndex !== null && !isNaN(currentUiIndex) ? '&boundary_ui_index=' + encodeURIComponent(currentUiIndex) : '';
-                var signatoryParams =
-                    '&adviser=' + encodeURIComponent(signatories.adviser) +
-                    '&department_chair=' + encodeURIComponent(signatories.department_chair) +
-                    '&program_chair=' + encodeURIComponent(signatories.program_chair);
-                window.location.href = "{% url 'download_pos_pdf' %}?petition_mode=" + encodeURIComponent(mode) + boundaryParam + signatoryParams;
+                function executePreviewPdfDownload() {
+                    var mode = getSelectedPetitionMode();
+                    var signatories = getPreviewSignatoryParams();
+                    var currentSemRaw = localStorage.getItem('posCurrentSemIndex');
+                    var currentUiIndex = currentSemRaw !== null && currentSemRaw !== '' ? parseInt(currentSemRaw, 10) : null;
+                    var boundaryParam = currentUiIndex !== null && !isNaN(currentUiIndex) ? '&boundary_ui_index=' + encodeURIComponent(currentUiIndex) : '';
+                    var signatoryParams =
+                        '&adviser=' + encodeURIComponent(signatories.adviser) +
+                        '&department_chair=' + encodeURIComponent(signatories.department_chair) +
+                        '&program_chair=' + encodeURIComponent(signatories.program_chair);
+                    window.location.href = "{% url 'download_pos_pdf' %}?petition_mode=" + encodeURIComponent(mode) + boundaryParam + signatoryParams;
+                }
+                executePreviewPdfDownload();
             });
         }
 
         // Save tuned/edited Preview POS into POS History.
         var previewSaveBtn = document.getElementById('preview-save-history-btn');
+        /** Needs history save / edit guard until saved again */
+        var previewHistoryUnsaved = true;
+        var previewExitProceed = null;
+        /** Assigned in wirePreviewLeaveGuard (global confirm modal). */
+        var openPreviewLeaveConfirm = function() {};
+
         function setPreviewSaveState(state) {
             if (!previewSaveBtn) return;
             if (state === 'saved') {
@@ -1654,50 +1557,40 @@
         }
 
         function enablePreviewSave() {
-            setPreviewSaveState('ready');
+            markPreviewHistoryNeedsSave();
         }
 
         if (previewSaveBtn) {
-            // Default: user can save immediately.
-            setPreviewSaveState('ready');
+            try {
+                if (sessionStorage.getItem('posPreviewHistorySaved') === '1') {
+                    previewHistoryUnsaved = false;
+                    setPreviewSaveState('saved');
+                } else {
+                    setPreviewSaveState('ready');
+                }
+            } catch (e) {
+                setPreviewSaveState('ready');
+            }
 
             previewSaveBtn.addEventListener('click', function() {
                 if (previewSaveBtn.disabled) return;
                 if (!validatePreviewSignatories()) return;
-                var mode = getSelectedPetitionMode();
-                var signatories = getPreviewSignatoryParams();
-                var boundaryUiIndex = localStorage.getItem('posCurrentSemIndex');
-                if (boundaryUiIndex === null || boundaryUiIndex === '') boundaryUiIndex = '';
 
                 previewSaveBtn.disabled = true;
                 previewSaveBtn.textContent = 'Saving...';
 
-                var saveUrl = "{% url 'save_preview_pos_to_history' %}?petition_mode=" + encodeURIComponent(mode) +
-                    "&boundary_ui_index=" + encodeURIComponent(boundaryUiIndex) +
-                    "&adviser=" + encodeURIComponent(signatories.adviser) +
-                    "&department_chair=" + encodeURIComponent(signatories.department_chair) +
-                    "&program_chair=" + encodeURIComponent(signatories.program_chair);
-                var previewUiSections = collectPreviewUiSections();
-
-                fetch(saveUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        preview_ui_sections: previewUiSections,
-                        signatories: signatories
-                    })
-                }).then(function(r) { return r.json(); })
-                  .then(function(data) {
-                      if (data && data.ok) {
-                          setPreviewSaveState('saved');
-                      } else {
-                          enablePreviewSave();
-                          alert('Save failed. Please try again.');
-                      }
-                  }).catch(function() {
-                      enablePreviewSave();
-                      alert('Save request failed. Please try again.');
-                  });
+                requestPreviewHistorySave().then(function(data) {
+                    if (data && data.ok) {
+                        markPreviewHistorySavedInSession();
+                        showPreviewEditSuccessToast('POS Saved Successfuly!');
+                    } else {
+                        enablePreviewSave();
+                        showPreviewPageError('Save failed', 'Save failed. Please try again.');
+                    }
+                }).catch(function() {
+                    enablePreviewSave();
+                    showPreviewPageError('Save failed', 'Save request failed. Please try again.');
+                });
             });
         }
 
@@ -2008,6 +1901,185 @@
             return sessionStorage.getItem('posSelectedOptionMode') || 'no_petition';
         }
 
+        function markPreviewHistoryNeedsSave() {
+            try { sessionStorage.removeItem('posPreviewHistorySaved'); } catch (e) {}
+            previewHistoryUnsaved = true;
+            setPreviewSaveState('ready');
+        }
+
+        function markPreviewHistorySavedInSession() {
+            try { sessionStorage.setItem('posPreviewHistorySaved', '1'); } catch (e) {}
+            previewHistoryUnsaved = false;
+            setPreviewSaveState('saved');
+        }
+
+        function requestPreviewHistorySave() {
+            var mode = getSelectedPetitionMode();
+            var signatories = getPreviewSignatoryParams();
+            var boundaryUiIndex = localStorage.getItem('posCurrentSemIndex');
+            if (boundaryUiIndex === null || boundaryUiIndex === '') boundaryUiIndex = '';
+            var saveUrl = "{% url 'save_preview_pos_to_history' %}?petition_mode=" + encodeURIComponent(mode) +
+                "&boundary_ui_index=" + encodeURIComponent(boundaryUiIndex) +
+                "&adviser=" + encodeURIComponent(signatories.adviser) +
+                "&department_chair=" + encodeURIComponent(signatories.department_chair) +
+                "&program_chair=" + encodeURIComponent(signatories.program_chair);
+            var previewUiSections = collectPreviewUiSections();
+            return fetch(saveUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    preview_ui_sections: previewUiSections,
+                    signatories: signatories
+                })
+            }).then(function(r) { return r.json(); });
+        }
+
+        function previewShouldBlockLeave() {
+            if (previewHistoryUnsaved) return true;
+            if (posEditState && posEditState.editing) return true;
+            return false;
+        }
+
+        function wirePreviewLeaveGuard() {
+            if (!window.bootstrap || !bootstrap.Modal) return;
+
+            function executeExitProceed(proc) {
+                if (proc && proc.type === 'url') {
+                    if (proc.needsSignOutConfirm) {
+                        if (typeof window.showAppSignOutConfirmModal === 'function') {
+                            window.showAppSignOutConfirmModal(proc.href);
+                        } else {
+                            window.location.href = proc.href;
+                        }
+                        return;
+                    }
+                    window.location.href = proc.href;
+                } else if (proc && proc.type === 'fn') {
+                    setTimeout(function() {
+                        try { proc.fn(); } catch (err) {}
+                    }, 0);
+                }
+            }
+
+            /** Leave guard and sign-out both use #app-system-confirm-modal; wait until hide finishes before opening the next dialog or navigating. */
+            function afterAppSystemConfirmModalFullyHidden(closeFn, thenFn) {
+                var el = document.getElementById('app-system-confirm-modal');
+                var ran = false;
+                function proceed() {
+                    if (ran) return;
+                    ran = true;
+                    thenFn();
+                }
+                if (el) {
+                    el.addEventListener('hidden.bs.modal', proceed, { once: true });
+                }
+                closeFn();
+                setTimeout(function() {
+                    if (!ran) proceed();
+                }, el ? 500 : 0);
+            }
+
+            function afterLeaveConfirmCloses(closeFn, proc) {
+                afterAppSystemConfirmModalFullyHidden(closeFn, function() {
+                    executeExitProceed(proc);
+                });
+            }
+
+            openPreviewLeaveConfirm = function() {
+                if (typeof window.showAppSystemConfirmModal !== 'function') return;
+                window.showAppSystemConfirmModal({
+                    title: 'Leave Preview',
+                    message: 'Are you sure you want to exit without saving your Program of Study?',
+                    primaryText: 'Save & Continue',
+                    secondaryText: 'Continue without Saving',
+                    onPrimary: function(close) {
+                        var missing = getPreviewSignatoryMissingPhrases();
+                        if (missing.length) {
+                            /* Drop pending sign-out / external URL until user tries again — do not chain to sign-out confirm after OK on this error. */
+                            previewExitProceed = null;
+                            var msg = formatPreviewSignatoryRequiredMessage(missing);
+                            afterAppSystemConfirmModalFullyHidden(close, function() {
+                                showPreviewPageError('Required Field', msg, function() {
+                                    scrollPreviewSignatoriesIntoViewAndFocus();
+                                });
+                            });
+                            return;
+                        }
+                        var proc = previewExitProceed;
+                        window.setAppSystemConfirmBusy(true, 'Saving...');
+                        requestPreviewHistorySave().then(function(data) {
+                            window.setAppSystemConfirmBusy(false);
+                            if (data && data.ok) {
+                                previewExitProceed = null;
+                                markPreviewHistorySavedInSession();
+                                showPreviewEditSuccessToast('POS Saved Successfuly!');
+                                afterLeaveConfirmCloses(close, proc);
+                            } else {
+                                enablePreviewSave();
+                                showPreviewPageError('Save failed', 'Save failed. Please try again.');
+                            }
+                        }).catch(function() {
+                            window.setAppSystemConfirmBusy(false);
+                            enablePreviewSave();
+                            showPreviewPageError('Save failed', 'Save request failed. Please try again.');
+                        });
+                    },
+                    onSecondary: function(close) {
+                        var proc = previewExitProceed;
+                        previewExitProceed = null;
+                        previewHistoryUnsaved = false;
+                        if (posEditState) posEditState.editing = false;
+                        afterLeaveConfirmCloses(close, proc);
+                    }
+                });
+            };
+
+            /** Only block off-site navigation and Sign out — not other in-app pages (Home, Generate, History, etc.). */
+            function previewLeaveGuardAppliesToLink(anchor) {
+                if (!anchor || anchor.tagName !== 'A') return false;
+                var href = anchor.getAttribute('href');
+                if (href == null || href === '' || href === '#' || href.trim() === '') return false;
+                if (/^javascript:/i.test(href)) return false;
+                if (anchor.hasAttribute('download')) return false;
+                if (anchor.getAttribute('target') === '_blank') return false;
+                if (anchor.classList.contains('pos-app-sign-out-link')) return true;
+                try {
+                    var next = new URL(anchor.href, window.location.href);
+                    var cur = new URL(window.location.href);
+                    return next.origin !== cur.origin;
+                } catch (e) {
+                    return true;
+                }
+            }
+
+            document.addEventListener('click', function(e) {
+                if (!previewShouldBlockLeave()) return;
+                var anchor = e.target.closest('a');
+                if (!anchor || !previewLeaveGuardAppliesToLink(anchor)) return;
+                if (anchor.closest('#app-system-confirm-modal')) return;
+                e.preventDefault();
+                e.stopPropagation();
+                previewExitProceed = {
+                    type: 'url',
+                    href: anchor.href,
+                    needsSignOutConfirm: anchor.classList.contains('pos-app-sign-out-link')
+                };
+                openPreviewLeaveConfirm();
+            }, true);
+
+            var confirmModalEl = document.getElementById('app-system-confirm-modal');
+            if (confirmModalEl) {
+                confirmModalEl.addEventListener('hidden.bs.modal', function() {
+                    previewExitProceed = null;
+                    if (typeof window.setAppSystemConfirmBusy === 'function') {
+                        window.setAppSystemConfirmBusy(false);
+                    }
+                });
+            }
+        }
+
+        wirePreviewLeaveGuard();
+
         function destroyPosSortables() {
             Object.keys(posEditState.sortablesBySem).forEach(function(key) {
                 var sortable = posEditState.sortablesBySem[key];
@@ -2065,10 +2137,10 @@
                 mobilePreviewDnd = window.matchMedia('(max-width: 767.98px)').matches;
             } catch (e) {}
 
-            // Mobile edge auto-scroll is very sensitive to tuning on iOS/Android.
-            // Bump responsiveness only on mobile; keep desktop unchanged.
-            var dndScrollSensitivity = mobilePreviewDnd ? 240 : 120;
-            var dndScrollSpeed = mobilePreviewDnd ? 120 : 32;
+            // Mobile: use Sortable’s built-in autoscroll only (no custom scrollFn). A custom scrollFn + Sortable’s
+            // _onTouchMove replay each tick caused tiny up/down jitter. Tighter edge band + higher speed = faster, stable scroll.
+            var dndScrollSensitivity = mobilePreviewDnd ? 64 : 120;
+            var dndScrollSpeed = mobilePreviewDnd ? 52 : 32;
 
             var semEls = dyn.querySelectorAll('.pos-dnd-semester[data-semester-index]');
             semEls.forEach(function(semEl) {
@@ -2099,22 +2171,18 @@
                 tbody.querySelectorAll('tr.pos-course-row').forEach(function(tr) {
                     tr.classList.add('pos-dnd-draggable');
                 });
-                var sortable = new Sortable(tbody, {
+                var sortableOpts = {
                     group: { name: 'pos-semester-group', pull: true, put: true },
                     animation: 150,
-                    // Use fallback dragging so users can still use page scrollbar while dragging.
                     forceFallback: true,
                     fallbackOnBody: true,
-                    fallbackTolerance: 2,
-                    // Window edge auto-scroll when the ghost nears top/bottom (keep on mobile + desktop).
+                    fallbackTolerance: mobilePreviewDnd ? 5 : 2,
                     scroll: true,
                     scrollSensitivity: dndScrollSensitivity,
                     scrollSpeed: dndScrollSpeed,
-                    // bubbleScroll: scroll nested overflow parents while dragging — good on desktop, breaks touch drag on mobile.
                     bubbleScroll: !mobilePreviewDnd,
                     ghostClass: 'pos-dnd-ghost',
                     chosenClass: 'pos-dnd-chosen',
-                    // onEnd fires after drop completes (including cross-list moves)
                     onStart: function(evt) {
                         if (!posEditState.editing) return;
                         if (!isFeasibleMoveToggleEnabled()) return;
@@ -2125,10 +2193,9 @@
                     },
                     onEnd: function(evt) {
                         if (!evt || !evt.from || !evt.to) return;
-                        // Clear destination highlights immediately after drop.
                         clearFeasibleTargetSemesterHighlights();
                         posEditState.dragCourseCode = null;
-                        posEditState.dragFeasibleTargetsRequestId += 1; // invalidate any in-flight "drag targets" requests
+                        posEditState.dragFeasibleTargetsRequestId += 1;
                         var fromSem = evt.from.closest('.pos-dnd-semester');
                         var toSem = evt.to.closest('.pos-dnd-semester');
                         var latestMovedCode = null;
@@ -2150,7 +2217,11 @@
                             }
                         });
                     }
-                });
+                };
+                if (mobilePreviewDnd) {
+                    sortableOpts.touchStartThreshold = 10;
+                }
+                var sortable = new Sortable(tbody, sortableOpts);
 
                 posEditState.sortablesBySem[semIndex] = sortable;
             });
@@ -2655,24 +2726,14 @@
             }, 1500);
         }
 
-        function closePreviewEditErrorPopup() {
-            var modal = document.getElementById('preview-edit-error-modal');
-            if (!modal) return;
-            modal.classList.remove('is-open');
-            modal.setAttribute('aria-hidden', 'true');
-        }
-
         function showPreviewEditErrorPopup(message, allowHtml) {
-            var modal = document.getElementById('preview-edit-error-modal');
-            var msg = document.getElementById('preview-edit-error-message');
-            if (!modal || !msg) return;
-            if (allowHtml) {
-                msg.innerHTML = message || 'One or more moved courses are invalid.';
+            var body = message || 'One or more moved courses are invalid.';
+            var opts = allowHtml ? { html: true } : {};
+            if (typeof window.showAppSystemErrorModal === 'function') {
+                window.showAppSystemErrorModal('Invalid Course Move', body, opts);
             } else {
-                msg.textContent = message || 'One or more moved courses are invalid.';
+                window.alert(typeof body === 'string' ? body.replace(/<[^>]+>/g, '') : 'One or more moved courses are invalid.');
             }
-            modal.classList.add('is-open');
-            modal.setAttribute('aria-hidden', 'false');
         }
 
         function buildMovedCourseSuccessMessage(latestMovedCodes) {
@@ -2695,19 +2756,6 @@
             }
             return 'Successfully moved ' + movedCode + ' to ' + semLabel + '.';
         }
-
-        (function wirePreviewEditErrorPopup() {
-            var modal = document.getElementById('preview-edit-error-modal');
-            var backdrop = document.getElementById('preview-edit-error-backdrop');
-            var okBtn = document.getElementById('preview-edit-error-ok-btn');
-            if (okBtn) okBtn.addEventListener('click', closePreviewEditErrorPopup);
-            if (backdrop) backdrop.addEventListener('click', closePreviewEditErrorPopup);
-            if (modal) {
-                modal.addEventListener('click', function(e) {
-                    if (e.target === modal) closePreviewEditErrorPopup();
-                });
-            }
-        })();
 
         function setPosEditMode(enabled) {
             var wasEditing = posEditState.editing;
@@ -3126,6 +3174,7 @@
         }).then(function(r) { return r.json(); })
           .then(function(res) {
               try { sessionStorage.setItem('posGeneratedResponse', JSON.stringify(res)); } catch (e) {}
+              try { sessionStorage.removeItem('posPreviewHistorySaved'); } catch (e) {}
               renderDynamicPOS(res);
           })
           .catch(function() {});

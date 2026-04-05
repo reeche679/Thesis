@@ -178,36 +178,6 @@
         color: inherit !important;
     }
 
-    /* Compact error modal styling (generated-pos-modal) */
-    #generated-pos-modal .pos-error-ok-btn {
-        padding: 0.25rem 0.7rem;
-        font-size: 0.85rem;
-        line-height: 1.1;
-    }
-    #generated-pos-modal .modal-body {
-        padding-top: 0.75rem;
-        padding-bottom: 0.75rem;
-    }
-    #generated-pos-modal.pos-error-modal .modal-content {
-        background: #f1f3f5;
-        border-radius: 0.6rem;
-    }
-    #generated-pos-modal.pos-error-modal .modal-header {
-        padding: 0.6rem 0.75rem;
-    }
-    #generated-pos-modal.pos-error-modal .modal-title {
-        font-size: 0.95rem;
-        margin: 0;
-    }
-    #generated-pos-modal.pos-error-modal .modal-footer {
-        padding: 0.55rem 0.75rem;
-    }
-    #generated-pos-modal .alert#generated-pos-error {
-        font-size: 0.9rem;
-        line-height: 1.25;
-        margin-bottom: 0;
-        padding: 0.6rem 0.75rem;
-    }
     /* Generate POS loading popup */
     #generate-loading-overlay {
         position: fixed;
@@ -222,23 +192,26 @@
     #generate-loading-overlay.is-open {
         display: flex;
     }
+    /* Loading card: compact on mobile, larger from tablet/desktop up */
     .generate-loading-card {
-        width: min(280px, 94vw);
+        width: min(220px, 86vw);
         background: #fdfdfd;
-        border-radius: 14px;
+        border-radius: 11px;
         border: 1px solid rgba(0, 0, 0, 0.08);
-        box-shadow: 0 18px 40px rgba(0, 0, 0, 0.22);
-        padding: 0.65rem;
+        box-shadow: 0 12px 28px rgba(0, 0, 0, 0.18);
+        padding: 0.45rem 0.5rem;
     }
     .generate-loading-title {
-        font-size: 0.78rem;
+        font-size: 0.65rem;
         font-weight: 700;
         color: #2f3438;
-        margin-top: 0.18rem;
+        margin-top: 0.1rem;
+        margin-bottom: 0.35rem;
         text-align: center;
+        line-height: 1.25;
     }
     .generate-loading-gif-wrap {
-        height: 120px;
+        height: 82px;
         background: #fdfdfd;
         display: flex;
         align-items: center;
@@ -247,13 +220,34 @@
     }
     .generate-loading-gif {
         width: auto;
-        max-width: 90px;
-        max-height: 90px;
+        max-width: 58px;
+        max-height: 58px;
         height: auto;
         object-fit: contain;
         display: block;
         opacity: 0.95;
-        border-radius: 12px;
+        border-radius: 9px;
+    }
+    @media (min-width: 576px) {
+        .generate-loading-card {
+            width: min(308px, 92vw);
+            border-radius: 16px;
+            box-shadow: 0 22px 48px rgba(0, 0, 0, 0.24);
+            padding: 0.85rem 0.95rem;
+        }
+        .generate-loading-title {
+            font-size: 0.92rem;
+            margin-top: 0.25rem;
+            margin-bottom: 0.5rem;
+        }
+        .generate-loading-gif-wrap {
+            height: 138px;
+        }
+        .generate-loading-gif {
+            max-width: 104px;
+            max-height: 104px;
+            border-radius: 14px;
+        }
     }
     .generate-loading-sub {
         margin-top: 0.55rem;
@@ -295,8 +289,6 @@
     @media (max-width: 575.98px) {
         .grade-display-btn { min-height: 1.58rem; }
         .pos-select-display-btn { min-height: 1.9rem; }
-        .generate-loading-gif-wrap { height: 95px; }
-        .generate-loading-gif { max-width: 78px; max-height: 78px; }
         /* Regular & irregular path: dropdowns take full row on mobile */
         .regular-semester-row .pos-select-cell,
         .irregular-path-config .pos-select-cell {
@@ -862,24 +854,30 @@
     /* Bottom buttons: compact + short labels on mobile so all fit one row */
     #pos-action-buttons .pos-action-btn-text-short { display: none; }
     @media (max-width: 575.98px) {
-        #pos-action-buttons { flex-wrap: nowrap; gap: 0.35rem; }
-        #pos-action-buttons .pos-actions-right { gap: 0.35rem; }
-        .pos-gear-btn {
-            width: 1.55rem;
-            height: 1.55rem;
+        #pos-action-buttons { flex-wrap: nowrap; gap: 0.45rem; }
+        #pos-action-buttons .pos-actions-right { gap: 0.45rem; }
+        /* Mobile: slightly enlarged gear + Generate POS vs desktop (not as large as prior pass). */
+        #pos-action-buttons .pos-gear-btn {
+            width: 2.35rem;
+            height: 2.35rem;
+            min-width: 2.35rem;
+            min-height: 2.35rem;
+            padding: 0;
         }
-        .pos-gear-btn .bi {
-            font-size: 0.75rem;
+        #pos-action-buttons .pos-gear-btn .bi {
+            font-size: 1.05rem;
+            line-height: 1;
         }
-        #pos-action-buttons .btn {
-            padding: 0.35rem 0.5rem;
-            font-size: 0.72rem;
-            line-height: 1.1;
+        #pos-action-buttons #generatePosBtn {
+            font-size: 0.9rem;
+            font-weight: 600;
+            padding: 0.45rem 0.85rem;
+            min-width: 7.75rem;
+            line-height: 1.25;
             white-space: nowrap;
         }
         #pos-action-buttons .pos-action-btn-text-full { display: inline; }
         #pos-action-buttons .pos-action-btn-text-short { display: none; }
-        #generatePosBtn { min-width: 6.35rem; }
     }
     /* Mobile: make header + Academic Term smaller on Generate POS */
     @media (max-width: 575.98px) {
@@ -895,7 +893,18 @@
         }
     }
     @media (max-width: 380px) {
-        #pos-action-buttons .btn { padding: 0.3rem 0.4rem; font-size: 0.68rem; }
+        #pos-action-buttons .pos-gear-btn {
+            width: 2.2rem;
+            height: 2.2rem;
+            min-width: 2.2rem;
+            min-height: 2.2rem;
+        }
+        #pos-action-buttons .pos-gear-btn .bi { font-size: 0.98rem; }
+        #pos-action-buttons #generatePosBtn {
+            font-size: 0.85rem;
+            padding: 0.42rem 0.72rem;
+            min-width: 7.1rem;
+        }
     }
 </style>
 {% endblock %}
@@ -1332,26 +1341,6 @@
         </div>
     </div>
 
-    <!-- Generated POS preview (from solver) -->
-    <div class="modal" id="generated-pos-modal" tabindex="-1" aria-labelledby="generated-pos-modal-label" aria-hidden="true">
-        <div class="modal-dialog modal-sm" id="generated-pos-modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="generated-pos-modal-label">Generated Program of Study</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <div id="generated-pos-error" class="alert alert-danger d-none" role="alert"></div>
-                    <div id="generated-pos-container"></div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-primary btn-sm pos-error-ok-btn" data-bs-dismiss="modal">OK</button>
-                    <button type="button" class="btn btn-primary" id="goToPreviewBtn">Go to Preview</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <div id="generate-loading-overlay" aria-hidden="true">
         <div class="generate-loading-card" role="status" aria-live="polite" aria-label="Generating POS">
             <div class="generate-loading-gif-wrap" aria-hidden="true">
@@ -1594,65 +1583,44 @@
     var HAS_GENERATED_POS = !!posConfig.has_generated_pos;
     var IRREG_CONFIGURED = IS_REGULAR || posConfig.irreg_configured === true;
 
+    /** Max characters shown in POS error modal (solver / server text); higher = more detail on desktop. */
+    var POS_ERROR_MSG_MAX_LEN = 4500;
+
+    function formatGeneratedPosErrorText(rawMsg, status) {
+        var raw = (rawMsg != null && rawMsg.toString) ? String(rawMsg) : '';
+        raw = raw.trim();
+        if (!raw) raw = 'Unable to generate your Program of Study right now. Please try again in a moment. If this keeps happening, refresh the page or contact support.';
+        var compactMsg = raw;
+        if (/75%/i.test(raw)) {
+            compactMsg = 'POS cannot be generated automatically because 75% or more of your enrolled units are marked as failed in one or more semesters. Under program rules, automatic generation is not allowed in this situation. Please consult your program adviser for a manual evaluation of your remaining coursework and any required approvals.';
+        } else if (/50%/i.test(raw) || /manual evaluation/i.test(raw) || status === 'probation') {
+            compactMsg = 'Manual evaluation is required before your Program of Study can be finalized, because 50% or more of your enrolled units are marked as failed in one or more semesters. Please consult your program adviser; they will help determine your remaining path, petitions, and any special approvals.';
+        } else if (/missing grade/i.test(raw)) {
+            compactMsg = raw;
+            if (compactMsg.length > POS_ERROR_MSG_MAX_LEN) {
+                compactMsg = compactMsg.slice(0, POS_ERROR_MSG_MAX_LEN).trim() + '...';
+            }
+        } else {
+            compactMsg = raw.trim();
+            if (compactMsg.length > POS_ERROR_MSG_MAX_LEN) {
+                compactMsg = compactMsg.slice(0, POS_ERROR_MSG_MAX_LEN).trim() + '...';
+            }
+        }
+        return compactMsg;
+    }
+
     function getCookie(name) {
         var match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
         return match ? match[2] : null;
     }
 
-    // Global short error popup (replaces browser alert()).
-    // Uses the same generated-pos modal with a compact message + OK button.
     function showGeneratedPosErrorPopup(message, status) {
-        var modalEl = document.getElementById('generated-pos-modal');
-        var modalDialogEl = document.getElementById('generated-pos-modal-dialog');
-        var errorEl = document.getElementById('generated-pos-error');
-        var goToPreviewBtn = document.getElementById('goToPreviewBtn');
-        var titleEl = document.getElementById('generated-pos-modal-label');
-
-        if (!modalEl || !errorEl) return;
-
-        if (titleEl) {
-            if (status === 'probation') titleEl.textContent = 'POS Generation Requires Manual Evaluation';
-            else titleEl.textContent = 'POS Generation Failed';
-        }
-
-        var rawMsg = (message && message.toString) ? String(message) : 'Unable to generate POS right now.';
-        var compactMsg = rawMsg.trim();
-
-        if (/75%/i.test(rawMsg)) {
-            compactMsg = 'POS cannot be generated because 75% or more units are failed in a semester.';
-        } else if (/50%/i.test(rawMsg) || /manual evaluation/i.test(rawMsg) || status === 'probation') {
-            compactMsg = 'Manual evaluation is required because 50% or more units are failed in a semester.';
-        } else if (/missing grade/i.test(rawMsg)) {
-            compactMsg = rawMsg;
+        var title = (status === 'probation') ? 'POS Generation Requires Manual Evaluation' : 'POS Generation Failed';
+        var text = formatGeneratedPosErrorText(message, status);
+        if (typeof window.showAppSystemErrorModal === 'function') {
+            window.showAppSystemErrorModal(title, text);
         } else {
-            compactMsg = rawMsg.trim();
-            // Avoid hiding the real solver error details; keep length bounded for UI.
-            if (compactMsg.length > 600) {
-                compactMsg = compactMsg.slice(0, 600).trim() + '...';
-            }
-        }
-
-        errorEl.classList.remove('d-none');
-        errorEl.style.whiteSpace = 'normal';
-        errorEl.textContent = compactMsg;
-
-        // Hide Go to Preview; this is an error state.
-        if (goToPreviewBtn) goToPreviewBtn.style.display = 'none';
-        if (modalDialogEl) {
-            modalDialogEl.classList.remove('modal-md');
-            modalDialogEl.classList.add('modal-sm');
-        }
-        if (modalEl) modalEl.classList.add('pos-error-modal');
-
-        // Clear container to keep the modal compact.
-        var containerEl = document.getElementById('generated-pos-container');
-        if (containerEl) containerEl.innerHTML = '';
-
-        if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
-            try {
-                var m = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
-                m.show();
-            } catch (e) {}
+            window.alert(text);
         }
     }
 
@@ -1918,7 +1886,7 @@
             }).then(function(r) { return r.json(); }).then(function(data) {
                 confirmDeleteBtn.disabled = false;
                 if (!data || !data.ok) {
-                    showGeneratedPosErrorPopup('Failed to delete POS data. Please try again.', 'infeasible');
+                    showGeneratedPosErrorPopup('We could not delete your POS data on the server. Check your internet connection, wait a moment, and try again. If the problem continues, refresh the page or sign in again before retrying.', 'infeasible');
                     return;
                 }
                 try { localStorage.removeItem('posGrades'); } catch (e) {}
@@ -1929,16 +1897,8 @@
                 window.location.href = window.location.pathname;
             }).catch(function() {
                 confirmDeleteBtn.disabled = false;
-                showGeneratedPosErrorPopup('Failed to delete POS data. Please try again.', 'infeasible');
+                showGeneratedPosErrorPopup('We could not delete your POS data on the server. Check your internet connection, wait a moment, and try again. If the problem continues, refresh the page or sign in again before retrying.', 'infeasible');
             });
-        });
-    }
-
-    var goToPreviewBtn = document.getElementById('goToPreviewBtn');
-    if (goToPreviewBtn) {
-        goToPreviewBtn.addEventListener('click', function() {
-            var previewUrl = "{% url 'pos_preview' %}?t=" + Date.now();
-            window.location.href = previewUrl;
         });
     }
 
@@ -1959,7 +1919,8 @@
                 var grade = getGradeFromRow(row);
                 if (!grade) {
                     var label = mainSection.querySelector('h6');
-                    return { ok: false, message: 'Missing grade in: ' + (label ? label.textContent : 'section') };
+                    var sec = label ? label.textContent.trim() : 'this section';
+                    return { ok: false, message: 'Missing grade in ' + sec + '. Every listed course must have a grade selected before POS can be generated. Open the grade control for each row and choose the correct grade, then try Generate POS again.' };
                 }
                 totalUnits += units;
                 if (grade === '5' || grade === '5.00') failedUnits += units;
@@ -1988,7 +1949,8 @@
             // for that semester. Block generation with a friendly message.
             if (!curriculumLocked && rows.length === 0) {
                 var label = mainSection.querySelector('h6');
-                return { ok: false, message: 'Please fill up courses on missing tables.' + (label && label.textContent ? ' (' + label.textContent.trim() + ')' : '') };
+                var sec = label && label.textContent ? label.textContent.trim() : 'the open semester';
+                return { ok: false, message: 'Add at least one course to ' + sec + ' before generating your POS. For irregular paths, each visible semester block must list the courses you took or plan to take; empty tables cannot be scheduled. Use Add courses if needed, fill the table, then try Generate POS again.' };
             }
             var totalUnits = 0, failedUnits = 0;
             for (var i = 0; i < rows.length; i++) {
@@ -1997,7 +1959,8 @@
                 var grade = getGradeFromRow(row);
                 if (!grade) {
                     var label = mainSection.querySelector('h6');
-                    return { ok: false, message: 'Missing grade in: ' + (label ? label.textContent : 'section') };
+                    var sec = label ? label.textContent.trim() : 'this section';
+                    return { ok: false, message: 'Missing grade in ' + sec + '. Every listed course must have a grade selected before POS can be generated. Open the grade control for each row and choose the correct grade, then try Generate POS again.' };
                 }
                 totalUnits += units;
                 if (grade === '5' || grade === '5.00') failedUnits += units;
@@ -2011,25 +1974,21 @@
         return { ok: true };
     }
 
-    function displayPosCourseCodeGlobal(code) {
-        return code || '';
-    }
-
     document.getElementById('generatePosBtn').addEventListener('click', function() {
         if (!IS_REGULAR && !IRREG_CONFIGURED) {
-            showGeneratedPosErrorPopup('Please select your Last Semester Enrolled to proceed.', 'infeasible');
+            showGeneratedPosErrorPopup('Please select your Last Semester Enrolled before generating your Program of Study. The system uses this to anchor your curriculum progress and build the correct sequence of remaining courses. Choose the term from the dropdown, confirm your grades, then click Generate POS again.', 'infeasible');
             return;
         }
         if (IS_REGULAR) {
             var regSel = document.getElementById('regular-current-semester');
             if (!regSel || !regSel.value) {
-                showGeneratedPosErrorPopup('Please select your Last Semester Enrolled to proceed.', 'infeasible');
+                showGeneratedPosErrorPopup('Please select your Last Semester Enrolled before generating your Program of Study. The system uses this to anchor your curriculum progress and build the correct sequence of remaining courses. Choose the term from the dropdown, confirm your grades, then click Generate POS again.', 'infeasible');
                 return;
             }
         }
         var sections = document.querySelectorAll('[id^="main-sem-"]');
         if (!IS_REGULAR && sections.length === 0) {
-            showGeneratedPosErrorPopup('Please select your Last Semester Enrolled to proceed.', 'infeasible');
+            showGeneratedPosErrorPopup('Please select your Last Semester Enrolled before generating your Program of Study. After you choose it, your course tables will load so you can enter grades. Then click Generate POS again.', 'infeasible');
             return;
         }
         var validation = validateAllSectionsForGenerate();
@@ -2116,116 +2075,21 @@
             };
         }
 
-        function renderGeneratedPos(pos) {
-            var container = document.getElementById('generated-pos-container');
-            if (!container) return;
-            container.innerHTML = '';
-
-            (pos || []).forEach(function(sem) {
-                var card = document.createElement('div');
-                card.className = 'pos-card p-3 mb-3';
-                var title = document.createElement('div');
-                title.className = 'fw-bold mb-2 text-center';
-                var semUnitsRaw = (sem.total_units !== undefined && sem.total_units !== null) ? sem.total_units : 0;
-                var semUnitsNum = Number(semUnitsRaw);
-                var semUnitsWhole = isNaN(semUnitsNum) ? semUnitsRaw : Math.round(semUnitsNum);
-                title.textContent = (sem.label || ('Semester ' + sem.semester_index)) + ' — ' + semUnitsWhole + ' units';
-                card.appendChild(title);
-
-                var tableWrap = document.createElement('div');
-                tableWrap.className = 'table-responsive';
-                var table = document.createElement('table');
-                table.className = 'table table-sm table-bordered mb-0';
-                table.innerHTML =
-                    '<thead class="table-light"><tr>' +
-                    '<th style="width:18%">Course Code</th>' +
-                    '<th>Course Title</th>' +
-                    '<th style="width:10%">Units</th>' +
-                    '</tr></thead><tbody></tbody>';
-                var tbody = table.querySelector('tbody');
-                (sem.courses || []).forEach(function(c) {
-                    var tr = document.createElement('tr');
-                    var codeShown = displayPosCourseCodeGlobal(c.code || '');
-                    tr.innerHTML =
-                        '<td class="text-center">' + codeShown + '</td>' +
-                        '<td class="course-title-cell">' + (c.title || '') + '</td>' +
-                        '<td class="text-center">' + asWholeUnits(c.units) + '</td>';
-                    tbody.appendChild(tr);
-                });
-                tableWrap.appendChild(table);
-                card.appendChild(tableWrap);
-                container.appendChild(card);
-            });
-        }
-
         function showGeneratedPosModal(result) {
-            // For OK: keep existing behavior (redirect to Preview).
-            // For probation/infeasible: show a clean error popup on Generate POS.
             if (result && result.status === 'ok') {
+                try { sessionStorage.removeItem('posPreviewHistorySaved'); } catch (e) {}
                 var previewUrl = "{% url 'pos_preview' %}?t=" + Date.now();
                 window.location.href = previewUrl;
                 return;
             }
 
-            var modalEl = document.getElementById('generated-pos-modal');
-            var modalDialogEl = document.getElementById('generated-pos-modal-dialog');
-            var errorEl = document.getElementById('generated-pos-error');
-            var containerEl = document.getElementById('generated-pos-container');
-            var goToPreviewBtn = document.getElementById('goToPreviewBtn');
-            var titleEl = document.getElementById('generated-pos-modal-label');
-
-            if (titleEl) {
-                if (result && result.status === 'probation') {
-                    titleEl.textContent = 'POS Generation Requires Manual Evaluation';
-                } else {
-                    titleEl.textContent = 'POS Generation Failed';
-                }
-            }
-
-            if (errorEl) {
-                errorEl.classList.remove('d-none');
-                var rawMsg = (result && result.message) ? String(result.message) : 'Unable to generate POS right now.';
-                // Keep popup compact: render a short single-line message.
-                var compactMsg = rawMsg;
-                if (/75%/i.test(rawMsg)) {
-                    compactMsg = 'POS cannot be generated because 75% or more units are failed in a semester.';
-                } else if (/50%/i.test(rawMsg) || /manual evaluation/i.test(rawMsg) || (result && result.status === 'probation')) {
-                    compactMsg = 'Manual evaluation is required because 50% or more units are failed in a semester.';
-                } else if (/missing grade/i.test(rawMsg)) {
-                    compactMsg = rawMsg;
-                } else {
-                    compactMsg = rawMsg.trim();
-                    // Avoid hiding solver details; keep length bounded for the modal.
-                    if (compactMsg.length > 600) {
-                        compactMsg = compactMsg.slice(0, 600).trim() + '...';
-                    }
-                }
-                errorEl.style.whiteSpace = 'normal';
-                errorEl.textContent = compactMsg;
-            }
-
-            if (containerEl) {
-                containerEl.innerHTML = '';
-            }
-
-            if (goToPreviewBtn) {
-                // Close button remains on the bottom-left (Go to Preview hidden).
-                goToPreviewBtn.style.display = 'none';
-            }
-            if (modalDialogEl) {
-                // Compact error popup card (avoid overly long/wide modal).
-                modalDialogEl.classList.remove('modal-md');
-                modalDialogEl.classList.add('modal-sm');
-            }
-            if (modalEl) modalEl.classList.add('pos-error-modal');
-
-            if (modalEl && typeof bootstrap !== 'undefined' && bootstrap.Modal) {
-                try {
-                    var m = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
-                    m.show();
-                } catch (e) {
-                    // Fallback: do nothing.
-                }
+            var title = (result && result.status === 'probation') ? 'POS Generation Requires Manual Evaluation' : 'POS Generation Failed';
+            var st = (result && result.status) ? result.status : 'infeasible';
+            var compactMsg = formatGeneratedPosErrorText((result && result.message) ? result.message : '', st);
+            if (typeof window.showAppSystemErrorModal === 'function') {
+                window.showAppSystemErrorModal(title, compactMsg);
+            } else {
+                window.alert(compactMsg);
             }
         }
 
@@ -2256,22 +2120,22 @@
                             })
                             .catch(function() {
                                 setGenerateLoading(false);
-                                showGeneratedPosModal({ status: "infeasible", message: "Request to generate POS failed. Please try again.", pos: [] });
+                                showGeneratedPosModal({ status: "infeasible", message: "The request to generate your Program of Study did not complete. Check your connection, wait a few seconds, and click Generate POS again. If this keeps happening, refresh the page or try another network.", pos: [] });
                             });
                       } else {
                           setGenerateLoading(false);
                           var st = (validationRes && validationRes.status) ? validationRes.status : "infeasible";
-                          var msg = (validationRes && validationRes.message) ? validationRes.message : "POS cannot be generated.";
+                          var msg = (validationRes && validationRes.message) ? validationRes.message : "POS cannot be generated with the current grades and curriculum data. Review the validation details above if shown, fix any missing grades or prerequisite issues, then try Generate POS again.";
                           showGeneratedPosModal({ status: st, message: msg, pos: [] });
                       }
                   })
                   .catch(function() {
                       setGenerateLoading(false);
-                      showGeneratedPosModal({ status: "infeasible", message: "Validation request failed.", pos: [] });
+                      showGeneratedPosModal({ status: "infeasible", message: "The server could not validate your POS input (network or server error). Check your connection, refresh the page, and click Generate POS again. If the error persists, try again later.", pos: [] });
                   });
             } else {
                 setGenerateLoading(false);
-                showGeneratedPosErrorPopup('Failed to save grades. Please try again.', 'infeasible');
+                showGeneratedPosErrorPopup('Your grades could not be saved before generation. Check your internet connection and try Generate POS again. If you continue to see this message, refresh the page so your session stays valid, then re-enter any unsaved grades.', 'infeasible');
             }
         });
     });
@@ -2694,12 +2558,12 @@
                 var currentSem = document.getElementById('irreg-current-sem').value;
                 var startSem = document.getElementById('irreg-start-sem').value;
                 if (currentSem === '') {
-                    showGeneratedPosErrorPopup('Please select your Last Semester Enrolled to proceed.', 'infeasible');
+                    showGeneratedPosErrorPopup('Please choose your Last Semester Enrolled in this dialog. That value tells the system how far you have progressed so irregular course tables and validation stay correct. Select a term from the list, then press OK again.', 'infeasible');
                     return;
                 }
                 var currentIdx = parseInt(currentSem, 10);
                 if (!Number.isFinite(currentIdx)) {
-                    showGeneratedPosErrorPopup('Please select valid semesters to proceed.', 'infeasible');
+                    showGeneratedPosErrorPopup('The Last Semester Enrolled value is not valid. Pick a real semester from the dropdown (do not leave a placeholder selected), then try again. If the list looks wrong, refresh the page and reopen this dialog.', 'infeasible');
                     return;
                 }
 
@@ -2708,12 +2572,12 @@
                 if (startSem !== '') {
                     var startIdx = parseInt(startSem, 10);
                     if (!Number.isFinite(startIdx)) {
-                        showGeneratedPosErrorPopup('Please select valid semesters to proceed.', 'infeasible');
+                        showGeneratedPosErrorPopup('The “when you became irregular” semester is not valid. Choose a semester from that dropdown or clear it to use the default, then try again.', 'infeasible');
                         return;
                     }
                     // Current semester must be the same or ahead of when they became irregular
                     if (currentIdx < startIdx) {
-                        showGeneratedPosErrorPopup('Invalid semester selection. Please check your current semester and irregular start.', 'infeasible');
+                        showGeneratedPosErrorPopup('Your Last Semester Enrolled cannot be earlier than the term when you became irregular. Adjust one or both dropdowns so the last enrolled term is the same as or after the irregular start, then try again.', 'infeasible');
                         return;
                     }
                 }
