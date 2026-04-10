@@ -4,6 +4,8 @@ import runpy
 from django.conf import settings
 
 _SOLVER_NAMESPACE = None
+# When CP-SAT.py changes on disk, reload so probation/unit-threshold fixes apply without a full server restart.
+_SOLVER_SCRIPT_MTIME_AT_LOAD = None
 
 
 def _get_solver_namespace():
@@ -12,10 +14,11 @@ def _get_solver_namespace():
 
     The solver lives in the sibling 'Solver-Side/Main-Solver/CP-SAT.py' folder
     relative to the Django project root.
+
+    The namespace is reloaded when CP-SAT.py's modification time changes, so edits
+    to solver logic (e.g. check_probation) are not stuck behind a one-time import cache.
     """
-    global _SOLVER_NAMESPACE
-    if _SOLVER_NAMESPACE is not None:
-        return _SOLVER_NAMESPACE
+    global _SOLVER_NAMESPACE, _SOLVER_SCRIPT_MTIME_AT_LOAD
 
     # settings.BASE_DIR points to 'Django-Front-Back'.
     project_root = Path(settings.BASE_DIR).parent
@@ -23,8 +26,20 @@ def _get_solver_namespace():
     if not solver_script.is_file():
         raise RuntimeError(f"Solver script not found at {solver_script}")
 
+    try:
+        current_mtime = solver_script.stat().st_mtime
+    except OSError:
+        current_mtime = None
+
+    if _SOLVER_NAMESPACE is not None:
+        if current_mtime is None:
+            return _SOLVER_NAMESPACE
+        if current_mtime == _SOLVER_SCRIPT_MTIME_AT_LOAD:
+            return _SOLVER_NAMESPACE
+
     # run_path executes CP-SAT.py once and returns its globals as a dict.
     _SOLVER_NAMESPACE = runpy.run_path(str(solver_script))
+    _SOLVER_SCRIPT_MTIME_AT_LOAD = current_mtime
     return _SOLVER_NAMESPACE
 
 

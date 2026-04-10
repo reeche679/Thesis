@@ -456,7 +456,7 @@ def _page_header_canvas(canvas, logo_path):
     y -= 14
     canvas.setFont("Times-Bold", 12)
     canvas.setFillColor(colors.black)
-    canvas.drawString(left, y, "College of Engineering")
+    canvas.drawString(left, y, "College of Engineering — Department of Electrical Engineering")
     canvas.restoreState()
 
 
@@ -787,15 +787,50 @@ def build_pos_pdf(
         story.append(Paragraph("Evaluated by: ______________________________", evaluated_style))
 
     story.append(Spacer(1, 0.4 * inch))
-    story.append(Paragraph("Checked and Reviewed:", sign_style))
-    story.append(Paragraph("<b>Engr. MARK JOHN FEL T. RAYOS</b>", sign_name_style))
-    story.append(Paragraph("Program Chair, CpE Program", sign_style))
-    story.append(Paragraph("Date:", sign_style))
-    story.append(Spacer(1, 0.12 * inch))
-    story.append(Paragraph("Approved by:", sign_style))
-    story.append(Paragraph("<b>Engr. RICMART V. GARBIN</b>", sign_name_style))
-    story.append(Paragraph("Department Chair, EE Department", sign_style))
-    story.append(Paragraph("Date:", sign_style))
+    _legacy_sign_names = (
+        "Engr. MARK JOHN FEL T. RAYOS",
+        "Engr. RICMART V. GARBIN",
+    )
+    sign_table_data = [
+        [
+            Paragraph("Checked and Reviewed by:", sign_style),
+            Paragraph("Noted by:", sign_style),
+            Paragraph("Approved by:", sign_style),
+        ],
+        [
+            Spacer(1, 0.08 * inch),
+            Spacer(1, 0.08 * inch),
+            Spacer(1, 0.08 * inch),
+        ],
+        [
+            Paragraph("______________________________", sign_style),
+            Paragraph("<b>{}</b>".format(_legacy_sign_names[0]), sign_name_style),
+            Paragraph("<b>{}</b>".format(_legacy_sign_names[1]), sign_name_style),
+        ],
+        [
+            Paragraph("Adviser", sign_style),
+            Paragraph("Program Chair, CpE Program", sign_style),
+            Paragraph("Department Chair, EE Department", sign_style),
+        ],
+        [
+            Paragraph("Date:", sign_style),
+            Paragraph("Date:", sign_style),
+            Paragraph("Date:", sign_style),
+        ],
+    ]
+    sign_table = Table(sign_table_data, colWidths=[doc.width / 3.0] * 3, hAlign="LEFT", splitByRow=0)
+    sign_table.setStyle(
+        TableStyle(
+            [
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+                ("TOPPADDING", (0, 0), (-1, -1), 0),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+            ]
+        )
+    )
+    story.append(sign_table)
 
     def page_canvas(canvas, doc):
         _page_header_canvas(canvas, logo_path)
@@ -1288,7 +1323,10 @@ def build_preview_pos_pdf(
 
         if show_loa_row and not (rows or []):
             table_data.append(
-                [Paragraph("Leave of Absence", ParagraphStyle(name="LoaRowPrev", parent=normal, fontName="Times-Roman", fontSize=10, alignment=1))]
+                [Paragraph(
+                    '"LEAVE OF ABSENCE"',
+                    ParagraphStyle(name="LoaRowPrev", parent=normal, fontName="Times-Roman", fontSize=10, alignment=1),
+                )]
                 + [""] * (len(col_widths) - 1)
             )
 
@@ -1557,8 +1595,8 @@ def build_preview_pos_pdf(
     # Footer/signatories in a single row (3 columns).
     sign_table_data = [
         [
-            Paragraph("Checked and Reviewed:", sign_style),
-            Paragraph("Checked and Reviewed:", sign_style),
+            Paragraph("Checked and Reviewed by:", sign_style),
+            Paragraph("Noted by:", sign_style),
             Paragraph("Approved by:", sign_style),
         ],
         [

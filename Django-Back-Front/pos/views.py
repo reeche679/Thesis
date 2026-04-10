@@ -125,15 +125,6 @@ def get_logged_in_student(request):
         return None
 
 
-def _require_student(view_func):
-    """Redirect to login if no student in session."""
-    def wrapper(request, *args, **kwargs):
-        if get_logged_in_student(request) is None:
-            return redirect('login')
-        return view_func(request, *args, **kwargs)
-    return wrapper
-
-
 ACADEMIC_YEAR_CHOICES = [
     ('A.Y. 2025 – 2026', 'A.Y. 2025 – 2026'),
     ('A.Y. 2026 – 2027', 'A.Y. 2026 – 2027'),
@@ -147,6 +138,34 @@ ACADEMIC_YEAR_CHOICES = [
     ('A.Y. 2034 – 2035', 'A.Y. 2034 – 2035'),
     ('A.Y. 2035 – 2036', 'A.Y. 2035 – 2036'),
 ]
+
+_VALID_ACADEMIC_YEAR_VALUES = frozenset(c[0] for c in ACADEMIC_YEAR_CHOICES)
+
+
+def _ensure_session_academic_year_from_student(request, student):
+    """If session has no valid academic year, restore from Student (saved when using Generate POS on Home)."""
+    if student is None:
+        return
+    current = (request.session.get('academic_year') or '').strip()
+    if current in _VALID_ACADEMIC_YEAR_VALUES:
+        return
+    stored = (getattr(student, 'academic_year', None) or '').strip()
+    if stored in _VALID_ACADEMIC_YEAR_VALUES:
+        request.session['academic_year'] = stored
+        request.session.modified = True
+
+
+def _require_student(view_func):
+    """Redirect to login if no student in session."""
+    def wrapper(request, *args, **kwargs):
+        student = get_logged_in_student(request)
+        if student is None:
+            return redirect('login')
+        _ensure_session_academic_year_from_student(request, student)
+        return view_func(request, *args, **kwargs)
+    return wrapper
+
+
 SEMESTER_CHOICES = [
     ('First Semester', 'First Semester'),
     ('Second Semester', 'Second Semester'),
@@ -326,8 +345,12 @@ def set_academic_term(request):
     """Set session academic year and default POS path configuration."""
     ay = (request.POST.get('academic_year') or '').strip()
     valid_ays = {c[0] for c in ACADEMIC_YEAR_CHOICES}
+    student = get_logged_in_student(request)
     if ay in valid_ays:
         request.session['academic_year'] = ay
+        if student is not None:
+            student.academic_year = ay
+            student.save(update_fields=['academic_year'])
     # Single-path flow: always use irregular configuration.
     request.session['pos_path'] = 'irregular'
     # For Regular path, capture the chosen current semester index and map to (year_level, semester)
@@ -341,7 +364,6 @@ def set_academic_term(request):
             yl, sem = _INDEX_TO_YEAR_SEM[current_sem_index]
             request.session['year_level'] = yl
             request.session['semester'] = sem
-            student = get_logged_in_student(request)
             if student is not None:
                 # Persist on the Student record as well
                 student.year_level = yl
@@ -441,7 +463,7 @@ CURRENT_SEMESTER_CHOICES_REGULAR = [
 ]
 
 # Irregular path dropdowns (Generate POS): allow selection up to 5th Year Second Semester.
-# This dropdown is used for both "LAST SEMESTER ENROLLED" and "WHEN YOU BECAME IRREGULAR"
+# This dropdown is used for both "LAST SEMESTER ENROLLED" and "FIRST FAILED SEMESTER"
 # in the Irregular section of the Generate POS page.
 SECTION_INDEX_MAX_DROPDOWN_GENERATE = 13  # includes 5th Year First Sem (12) + 5th Year Second Sem (13)
 
@@ -464,6 +486,40 @@ def _saved_grades_by_section(student):
     return by_section
 
 
+def _merged_grades_by_section_for_policy(request, body_grades):
+    """
+    Merge saved DB grades with JSON body grades for policy checks (same-course fail cap).
+    Per section, request body overwrites saved grades for each course code.
+    """
+    body = body_grades if isinstance(body_grades, dict) else {}
+    saved = {}
+    try:
+        student = get_logged_in_student(request)
+        if student is not None:
+            saved = _saved_grades_by_section(student)
+    except Exception:
+        pass
+    section_keys = set()
+    for k in saved:
+        section_keys.add(str(k))
+    for k in body:
+        section_keys.add(str(k))
+    merged = {}
+    for sk in section_keys:
+        d_saved = {}
+        for kk, vv in saved.items():
+            if str(kk) == sk and isinstance(vv, dict):
+                d_saved = dict(vv)
+                break
+        d_body = {}
+        for kk, vv in body.items():
+            if str(kk) == sk and isinstance(vv, dict):
+                d_body = dict(vv)
+                break
+        merged[sk] = {**d_saved, **d_body}
+    return merged
+
+
 def _is_passing_grade(grade):
     """Return True if grade is a passing grade (not failed 5.00). Treat 5, 5.0, '5', '5.0', '5.00' as failed."""
     if grade is None or (isinstance(grade, str) and not grade.strip()):
@@ -475,6 +531,66 @@ def _is_passing_grade(grade):
         return float(grade) < 5.0
     except (TypeError, ValueError):
         return True
+
+
+def _is_failing_grade(grade):
+    """True only for an explicit failing grade (5.00), not blank rows."""
+    if grade is None or (isinstance(grade, str) and not str(grade).strip()):
+        return False
+    s = str(grade).strip()
+    if s in ("5", "5.0", "5.00"):
+        return True
+    try:
+        return float(grade) >= 5.0
+    except (TypeError, ValueError):
+        return False
+
+
+# Block automatic POS when the same course shows grade 5.00 in this many different semester rows.
+MAX_FAILED_ATTEMPTS_SAME_COURSE = 4
+
+# Per semester table only: 50% and 75% failed-unit rules apply only when the student entered
+# grades for at least this many units in that table (graded rows only; blanks excluded).
+MIN_GRADED_UNITS_PER_SEMESTER_TABLE_FOR_FAIL_RATIO = 10
+
+
+def _failed_attempt_counts_by_course(grades_by_section):
+    counts: dict[str, int] = {}
+    if not isinstance(grades_by_section, dict):
+        return counts
+    for _sk, section_grades in grades_by_section.items():
+        if not isinstance(section_grades, dict):
+            continue
+        for code, grade in section_grades.items():
+            if not code or not _is_failing_grade(grade):
+                continue
+            code_s = str(code).strip()
+            if code_s:
+                counts[code_s] = counts.get(code_s, 0) + 1
+    return counts
+
+
+def _first_excessive_failure_violation(grades_by_section):
+    """Return (code, count, title) if any course has >= MAX_FAILED_ATTEMPTS_SAME_COURSE fails; else None."""
+    counts = _failed_attempt_counts_by_course(grades_by_section)
+    if not counts:
+        return None
+    course_lookup = _course_lookup_from_curriculum()
+    for code, n in sorted(counts.items(), key=lambda x: (-x[1], x[0])):
+        if n >= MAX_FAILED_ATTEMPTS_SAME_COURSE:
+            info = course_lookup.get(code)
+            title = (info[0] if info else "") or ""
+            return (code, n, title)
+    return None
+
+
+def _message_excessive_same_course_failures(code: str, count: int, title: str) -> str:
+    title_part = f" ({title})" if title else ""
+    return (
+        f"You have failed {code}{title_part} {count} times across the semester tables you entered. "
+        "You cannot generate a Program of Study automatically after four or more failures in the same course. "
+        "Please refer to an academic adviser for assistance."
+    )
 
 
 def _flexible_courses_for_section(section_index):
@@ -725,7 +841,7 @@ def pos_generate(request):
             })
     else:
         # Irregular path: two key params from GET (or session fallback)
-        # irreg_start = semester index when user became irregular (curriculum listed up to here)
+        # irreg_start = semester index for first failed semester (optional; curriculum boundary)
         # current_sem = user's current semester (add-course sections stop here)
         def _safe_int(val, default=None):
             # Important for dropdowns that intentionally send an empty string:
@@ -785,7 +901,7 @@ def pos_generate(request):
                 effective_irreg_start_index = irreg_current_sem
 
             # Defense-in-depth:
-            # If WHEN YOU BECAME IRREGULAR is explicitly selected, honor that exact dropdown value.
+            # If FIRST FAILED SEMESTER is explicitly selected, honor that exact dropdown value.
             # This prevents any accidental fallback to "effective start = current semester".
             if became_irregular_explicit:
                 try:
@@ -847,7 +963,7 @@ def pos_generate(request):
                     if _is_passing_grade(grade):
                         all_passed_codes.add(code)
 
-            # When the user explicitly picked "WHEN YOU BECAME IRREGULAR",
+            # When the user explicitly picked "FIRST FAILED SEMESTER",
             # the semester tables after that boundary should be manual-add (empty),
             # even if we previously loaded a POS from history.
             # If we loaded a POS from history, we should continue using the saved Preview tables
@@ -1135,7 +1251,7 @@ def pos_generate(request):
                         })
 
                 if not courses_with_grades:
-                    # If user explicitly configured when they became irregular,
+                    # If user explicitly configured first failed semester,
                     # we still need to render the unlocked semesters as empty tables
                     # so the UI can show "+ Add courses" and let the user add courses.
                     if became_irregular_explicit:
@@ -1357,6 +1473,20 @@ def validate_pos(request):
     grades_by_section = data.get('grades_by_section') or {}
     if not isinstance(grades_by_section, dict):
         grades_by_section = {}
+
+    viol = _first_excessive_failure_violation(grades_by_section)
+    if viol:
+        code, n, title = viol
+        msg = _message_excessive_same_course_failures(code, n, title)
+        return JsonResponse(
+            {
+                'ok': False,
+                'status': 'infeasible',
+                'message': msg,
+                'errors': [msg],
+            }
+        )
+
     errors = []
     course_lookup = _course_lookup_from_curriculum()
     from .pos_pdf import POS_CURRICULUM
@@ -1369,33 +1499,59 @@ def validate_pos(request):
             continue
         if si < 0 or si >= len(POS_CURRICULUM):
             continue
-        _t1, _t2, total_units, _lec, _lab, rows = POS_CURRICULUM[si]
+        _t1, _t2, _total_units_cur, _lec, _lab, rows = POS_CURRICULUM[si]
         section_label = "{} - {}".format(_t1.title(), _t2.title())
-        total_u = 0
-        failed_u = 0
+        # Per this semester table only (not pooled with other tables). Denominator: units for rows
+        # with a non-empty grade only. Neither the 50% nor the 75% rule runs if graded units < minimum.
+        graded_u = 0.0
+        failed_u = 0.0
+        n_graded = 0
+        n_failed = 0
         for code, grade in section_grades.items():
             if not code:
                 continue
-            info = course_lookup.get(code)
-            units = info[1] if info else 0
-            total_u += units
-            if _is_passing_grade(grade):
+            if grade is None or (isinstance(grade, str) and not str(grade).strip()):
                 continue
-            failed_u += units
-        if total_u < 10:
+            info = course_lookup.get(code)
+            try:
+                units = float(info[1]) if info else 0.0
+            except (TypeError, ValueError):
+                units = 0.0
+            graded_u += units
+            n_graded += 1
+            if _is_failing_grade(grade):
+                failed_u += units
+                n_failed += 1
+        if graded_u < MIN_GRADED_UNITS_PER_SEMESTER_TABLE_FOR_FAIL_RATIO:
             continue
-        ratio = failed_u / total_u
+        ratio = failed_u / graded_u if graded_u else 0.0
+        pct = int(round(100.0 * ratio))
         if ratio >= 0.75:
-            errors.append("{}: 75% or more of units failed. Cannot generate POS.".format(section_label))
+            errors.append(
+                'In "{}" (this semester table only — grades here are not combined with other semesters): '
+                "you graded {} course(s) ({} units total); {} course(s) failed ({} units), about {}% of graded units in this table. "
+                "When 75% or more of graded units in one semester table are failures, automatic POS generation is not allowed. "
+                "Please consult your program adviser.".format(
+                    section_label, n_graded, int(round(graded_u)), n_failed, int(round(failed_u)), pct
+                )
+            )
         elif ratio >= 0.50:
-            errors.append("{}: 50% or more of units failed. Please proceed to the department for manual evaluation.".format(section_label))
-    # Fast fail: unit-failure ratio guard (keeps existing behavior and avoids unnecessary solver calls).
+            errors.append(
+                'In "{}" (this semester table only — grades here are not combined with other semesters): '
+                "you graded {} course(s) ({} units total); {} course(s) failed ({} units), about {}% of graded units in this table. "
+                "When 50% or more of graded units in one semester table are failures, manual evaluation is required before your Program of Study can be finalized. "
+                "Please consult your program adviser.".format(
+                    section_label, n_graded, int(round(graded_u)), n_failed, int(round(failed_u)), pct
+                )
+            )
+    # Fast fail: unit-failure ratio guard (per semester table, graded rows only).
     if errors:
+        main_message = errors[0] if len(errors) == 1 else errors[0] + "\n\n" + "\n\n".join(errors[1:])
         return JsonResponse(
             {
                 'ok': False,
                 'status': 'infeasible',
-                'message': 'Validation failed.',
+                'message': main_message,
                 'errors': errors,
             }
         )
@@ -1558,7 +1714,7 @@ def validate_pos(request):
         forced_semester_map=None,
     )
     status = solver_result.get('status')
-    message = solver_result.get('message') or 'Schedule is infeasible.'
+    message = _user_facing_solver_message(solver_result.get('message') or 'Schedule is infeasible.')
     ok = status == 'ok'
 
     return JsonResponse(
@@ -1581,6 +1737,46 @@ _UI_TO_SOLVER_ELECTIVE = {
     "CpEE 403": "Elective Course 3",
 }
 _SOLVER_TO_UI_ELECTIVE = {v: k for k, v in _UI_TO_SOLVER_ELECTIVE.items()}
+
+# CP-SAT pipes `_log_infeasible` stdout into `message`; students should not see that block.
+_SOLVER_VERBOSE_DIAGNOSTIC_MARKERS = (
+    "NO VALID SCHEDULE (Infeasible)",
+    "NO VALID SCHEDULE",
+    "Solver status:",
+    "CpSolverResponse summary:",
+    "Unit caps by semester (from current onward):",
+    "Possible reasons (check your curriculum and grades):",
+)
+
+_HORIZON_GAP_USER_MESSAGE = (
+    "Please proceed to manual evaluation. The POS has exceeded the horizon gap. "
+    "Please refer to the academic adviser to proceed."
+)
+
+
+def _user_facing_solver_message(message):
+    """Replace internal solver diagnostic dumps with a short student-facing prompt."""
+    if message is None:
+        return message
+    text = str(message).strip()
+    if not text:
+        return message
+    for marker in _SOLVER_VERBOSE_DIAGNOSTIC_MARKERS:
+        if marker in text:
+            return _HORIZON_GAP_USER_MESSAGE
+    return str(message)
+
+
+def _sanitize_solver_result_messages(result):
+    if not isinstance(result, dict):
+        return
+    if result.get("message") is not None:
+        result["message"] = _user_facing_solver_message(result.get("message"))
+    pos_options = result.get("pos_options")
+    if isinstance(pos_options, dict):
+        for opt in pos_options.values():
+            if isinstance(opt, dict) and opt.get("message") is not None:
+                opt["message"] = _user_facing_solver_message(opt["message"])
 
 
 @csrf_exempt
@@ -1633,6 +1829,13 @@ def generate_pos_api(request):
     if "alternative_algorithm" in data:
         payload["alternative_algorithm"] = data.get("alternative_algorithm")
 
+    merged_for_policy = _merged_grades_by_section_for_policy(request, data.get("grades_by_section"))
+    viol = _first_excessive_failure_violation(merged_for_policy)
+    if viol:
+        code, n, title = viol
+        msg = _message_excessive_same_course_failures(code, n, title)
+        return JsonResponse({"status": "infeasible", "message": msg, "pos": [], "errors": [msg]})
+
     try:
         result = generate_pos_via_solver(payload)
     except ValueError as e:
@@ -1652,6 +1855,7 @@ def generate_pos_api(request):
                     course["code"] = _SOLVER_TO_UI_ELECTIVE[solver_code]
 
     if isinstance(result, dict):
+        _sanitize_solver_result_messages(result)
         _translate_pos_courses(result.get("pos"))
         pos_options = result.get("pos_options")
         if isinstance(pos_options, dict):
@@ -2415,7 +2619,7 @@ def validate_tuned_pos(request):
 
     # Treat probation/infeasible as invalid for UI editing.
     # Provide best-effort diagnostics explaining HOW moved courses likely made it infeasible.
-    message = result.get("message") or "Schedule is infeasible."
+    message = _user_facing_solver_message(result.get("message") or "Schedule is infeasible.")
 
     MAX_MOVED_COURSES = 8
 
@@ -2862,7 +3066,7 @@ def save_tuned_pos(request):
             {
                 "ok": False,
                 "status": status,
-                "message": result.get("message") or "Schedule is infeasible.",
+                "message": _user_facing_solver_message(result.get("message") or "Schedule is infeasible."),
             }
         )
 
@@ -3453,7 +3657,7 @@ def download_pos_pdf_record(request, record_id):
 
 @_require_student
 def load_pos_record(request, record_id):
-    """Restore a history record into Generate POS (full grades + preview POS); user must re-select Last Semester Enrolled."""
+    """Restore a history record into Generate POS (full grades + preview POS); user must re-select Last Semester Enrolled (and First Failed Semester if used)."""
     student = get_logged_in_student(request)
     record = get_object_or_404(POSRecord, pk=record_id, student=student)
     snap = record.preview_snapshot if isinstance(record.preview_snapshot, dict) else {}
@@ -3565,8 +3769,10 @@ def login_view(request):
             return render(request, "auth/login.html", {'error': 'Invalid SR-Code or password.'})
 
         request.session['student_id'] = student.pk
-        if student.academic_year and student.semester:
-            request.session['academic_year'] = student.academic_year
+        ay_stored = (student.academic_year or '').strip()
+        if ay_stored in _VALID_ACADEMIC_YEAR_VALUES:
+            request.session['academic_year'] = ay_stored
+        if student.semester:
             request.session['semester'] = student.semester
         if student.year_level:
             request.session['year_level'] = student.year_level

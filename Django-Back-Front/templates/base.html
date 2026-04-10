@@ -180,9 +180,11 @@
             margin-bottom: 0;
             padding: 0.65rem 0.85rem;
             white-space: pre-line;
-            word-break: break-word;
-            overflow-wrap: anywhere;
-            hyphens: auto;
+            word-break: normal;
+            overflow-wrap: break-word;
+            hyphens: none;
+            -webkit-hyphens: none;
+            -ms-hyphens: none;
             color: #721c24;
             background-color: #f8d7da;
             border: 1px solid #f5c6cb;
@@ -1131,6 +1133,12 @@
                 if (primaryBtn) {
                     primaryBtn.textContent = _confirmPrimaryLabel;
                     primaryBtn.disabled = false;
+                    primaryBtn.classList.remove("btn-primary", "btn-danger");
+                    if (opts.primaryVariant === "danger") {
+                        primaryBtn.classList.add("btn-danger");
+                    } else {
+                        primaryBtn.classList.add("btn-primary");
+                    }
                 }
                 if (secondaryBtn) {
                     secondaryBtn.textContent = _confirmSecondaryLabel;
@@ -1155,6 +1163,7 @@
                     message: "Are you sure you want to sign out?",
                     primaryText: "Sign Out",
                     secondaryText: "Cancel",
+                    primaryVariant: "danger",
                     onPrimary: function (close) {
                         close();
                         window.location.href = dest;
@@ -1222,6 +1231,8 @@
                         if (primaryBtn) {
                             primaryBtn.disabled = false;
                             primaryBtn.textContent = _confirmPrimaryLabel;
+                            primaryBtn.classList.remove("btn-danger");
+                            primaryBtn.classList.add("btn-primary");
                         }
                         if (secondaryBtn) {
                             secondaryBtn.disabled = false;

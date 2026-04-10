@@ -86,6 +86,11 @@ def _ab886b_log(hypothesis_id: str, location: str, message: str, data: dict, run
     # #endregion
 
 
+# Align with Django `validate_pos`: 50%/75% rules apply per curriculum semester only when
+# the student has grades totaling at least this many units in that semester (graded courses only).
+MIN_GRADED_UNITS_PER_SEMESTER_FOR_FAIL_RATIO = 10
+
+
 def _assignment_fingerprint(state: dict, remaining: list) -> str:
     payload = json.dumps(
         {str(c): int(state.get(c, -1)) for c in sorted(remaining, key=str)},
@@ -187,27 +192,42 @@ def gather_input_and_grades():
 
 def check_probation(current_sem, passed_courses, failed_courses):
     """
-    Check per-semester failure rate. Returns None if OK to generate POS;
+    Check per-semester failure rate (by graded units, not course count). Returns None if OK;
     otherwise returns the message to display (no POS generated).
-    - >75% failed in any past semester: cannot generate.
-    - >50% failed in any past semester: proceed to Department Head.
+    - >=75% of graded units failed in any past semester (with >= min graded units): cannot generate.
+    - >=50% of graded units failed (same threshold): manual evaluation.
+    Semesters with fewer than MIN_GRADED_UNITS_PER_SEMESTER_FOR_FAIL_RATIO graded units are skipped
+    (e.g. short midterm tables).
     """
-    over_75 = []   # list of (sem_index, label, failed_count, total, pct)
+    passed_set = set(passed_courses or [])
+    failed_set = set(failed_courses or [])
+    over_75 = []  # (label, failed_units, graded_units, pct, n_failed_courses, n_graded_courses)
     over_50 = []
     for s in range(1, current_sem):
         in_sem = [c for c in courses if _first_semester(courses.get(c, {})) == s]
         if not in_sem:
             continue
-        graded = [c for c in in_sem if c in passed_courses or c in failed_courses]
+        graded = [c for c in in_sem if c in passed_set or c in failed_set]
         if not graded:
             continue
-        failed_in_sem = sum(1 for c in graded if c in failed_courses)
-        total = len(graded)
-        ratio = failed_in_sem / total
+        graded_units = 0.0
+        failed_units = 0.0
+        for c in graded:
+            try:
+                uu = float(courses.get(c, {}).get("units", 0) or 0)
+            except (TypeError, ValueError):
+                uu = 0.0
+            graded_units += uu
+            if c in failed_set:
+                failed_units += uu
+        if graded_units < MIN_GRADED_UNITS_PER_SEMESTER_FOR_FAIL_RATIO:
+            continue
+        ratio = failed_units / graded_units if graded_units else 0.0
         pct = round(ratio * 100)
         label = _sem_label(s)
-        entry = (s, label, failed_in_sem, total, pct)
-        # Treat exactly-75% cases as the 75% bucket too.
+        failed_c = sum(1 for c in graded if c in failed_set)
+        n_graded_c = len(graded)
+        entry = (label, failed_units, graded_units, pct, failed_c, n_graded_c)
         if ratio >= 0.75:
             over_75.append(entry)
         elif ratio >= 0.50:
@@ -217,8 +237,11 @@ def check_probation(current_sem, passed_courses, failed_courses):
             "Probation: POS cannot be generated.",
             "Failure rate is 75% or higher in:",
         ]
-        for _, label, failed, total, pct in over_75:
-            lines.append(f"  • {label}: {pct}% failed ({failed} of {total} courses graded)")
+        for label, fu, gu, pct, fc, tc in over_75:
+            lines.append(
+                f"  • {label}: {pct}% of graded units failed "
+                f"({int(round(fu))} of {int(round(gu))} units; {fc} of {tc} courses graded)"
+            )
         lines.append("Please proceed to the Department Head for manual evaluation.")
         return "\n".join(lines)
     if over_50:
@@ -226,8 +249,11 @@ def check_probation(current_sem, passed_courses, failed_courses):
             "Probation: Manual evaluation required.",
             "Failure rate is 50% or higher in:",
         ]
-        for _, label, failed, total, pct in over_50:
-            lines.append(f"  • {label}: {pct}% failed ({failed} of {total} courses graded)")
+        for label, fu, gu, pct, fc, tc in over_50:
+            lines.append(
+                f"  • {label}: {pct}% of graded units failed "
+                f"({int(round(fu))} of {int(round(gu))} units; {fc} of {tc} courses graded)"
+            )
         lines.append("Please proceed to the Department Head for manual evaluation.")
         return "\n".join(lines)
     return None

@@ -140,7 +140,7 @@
         max-width: 215px;
     }
 
-    /* Irregular "WHEN YOU BECAME IRREGULAR" dropdown: keep neutral gray when empty */
+    /* Irregular "FIRST FAILED SEMESTER" dropdown: keep neutral gray when empty */
     #irreg-start-sem {
         border-color: #7f868d !important;
         color: #3f454b !important;
@@ -271,7 +271,7 @@
         box-shadow: 0 0 0 0.15rem rgba(176, 42, 55, 0.22) !important;
     }
 
-    /* Irregular "WHEN YOU BECAME IRREGULAR" display button: keep neutral gray when empty.
+    /* Irregular "FIRST FAILED SEMESTER" display button: keep neutral gray when empty.
        The red outline above is for all empty semester dropdown display buttons;
        we override it only for this specific dropdown. */
     .pos-select-display-btn.irreg-sem-black-empty:not(.has-value) {
@@ -985,8 +985,8 @@
 <div class="pos-card p-4 mb-4" id="current-semester-card">
     <div class="pos-section-title mb-2">Program Configuration</div>
     <p class="small text-muted mb-3 text-justify">
-        Set your last semester enrolled and when you became irregular.
-        Curriculum courses up to that semester will be listed below.
+        Set your <strong>Last Semester Enrolled</strong> and optional <strong>First Failed Semester</strong>.
+        The course tables below are built from these settings.
     </p>
     <div class="row g-3 align-items-end">
         <div class="col-md-4">
@@ -1013,7 +1013,7 @@
         </div>
         <div class="col-md-4">
             <label class="form-label small text-uppercase text-muted pos-label-with-info" for="irreg-start-sem">
-                WHEN YOU BECAME IRREGULAR
+                FIRST FAILED SEMESTER
                 <button
                     type="button"
                     class="btn pos-info-btn"
@@ -1022,8 +1022,8 @@
                     data-bs-trigger="click"
                     data-bs-placement="right"
                     data-bs-custom-class="pos-info-popover"
-                    data-bs-content="Optional. Set when your path became irregular. If left blank, the system starts from Last Semester Enrolled."
-                    aria-label="When you became irregular info"
+                    data-bs-content="Optional. The first semester where you failed at least one course. If you leave this blank, the system uses Last Semester Enrolled for this setting."
+                    aria-label="First Failed Semester info"
                 >i</button>
             </label>
             <select class="form-select form-select-sm" id="irreg-start-sem">
@@ -1199,7 +1199,7 @@
 
     {% if not is_regular and not semester_tables_visible %}
     <div class="alert alert-info py-3 mb-3">
-        <strong>Select your semester to continue.</strong> Please choose your last semester enrolled and when you became irregular above, then click <strong>OK</strong> to proceed to adding grades.
+        <strong>Select your semester to continue.</strong> Choose your <strong>Last Semester Enrolled</strong> (and <strong>First Failed Semester</strong> if it applies), then click <strong>OK</strong> to load your course tables and add grades.
     </div>
     {% endif %}
 
@@ -1319,25 +1319,6 @@
                 <span class="pos-action-btn-text-full">Generate POS</span>
                 <span class="pos-action-btn-text-short">Generate</span>
             </button>
-        </div>
-    </div>
-
-    <!-- POS Delete confirmation -->
-    <div class="modal" id="delete-pos-modal" tabindex="-1" aria-labelledby="delete-pos-modal-label" aria-hidden="true">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="delete-pos-modal-label">Delete POS data?</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    Are you sure you want to delete <strong>all</strong> courses and grades from your current POS? This will reset Generate/Preview back to no input, but will <strong>not</strong> delete your History records.
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" class="btn btn-danger" id="confirmDeletePosBtn">Delete</button>
-                </div>
-            </div>
         </div>
     </div>
 
@@ -1591,7 +1572,19 @@
         raw = raw.trim();
         if (!raw) raw = 'Unable to generate your Program of Study right now. Please try again in a moment. If this keeps happening, refresh the page or contact support.';
         var compactMsg = raw;
-        if (/75%/i.test(raw)) {
+        /* Server sends detailed per-semester-table copy; do not replace with legacy one-line 50%/75% blurbs. */
+        if (/this semester table only/i.test(raw) || /graded units in this table/i.test(raw)) {
+            compactMsg = raw;
+        } else if (/four or more failures in the same course/i.test(raw) || /times across the semester tables/i.test(raw)) {
+            compactMsg = raw;
+        } else if (
+            /Probation:/i.test(raw) ||
+            /Failure rate is 75% or higher/i.test(raw) ||
+            /Failure rate is 50% or higher/i.test(raw)
+        ) {
+            /* Solver CP-SAT.py check_probation (unit-based); keep full text, not generic "enrolled units". */
+            compactMsg = raw;
+        } else if (/75%/i.test(raw)) {
             compactMsg = 'POS cannot be generated automatically because 75% or more of your enrolled units are marked as failed in one or more semesters. Under program rules, automatic generation is not allowed in this situation. Please consult your program adviser for a manual evaluation of your remaining coursework and any required approvals.';
         } else if (/50%/i.test(raw) || /manual evaluation/i.test(raw) || status === 'probation') {
             compactMsg = 'Manual evaluation is required before your Program of Study can be finalized, because 50% or more of your enrolled units are marked as failed in one or more semesters. Please consult your program adviser; they will help determine your remaining path, petitions, and any special approvals.';
@@ -1602,11 +1595,71 @@
             }
         } else {
             compactMsg = raw.trim();
+            if (compactMsg.indexOf('NO VALID SCHEDULE') !== -1 || compactMsg.indexOf('Solver status:') !== -1) {
+                compactMsg = 'Please proceed to manual evaluation. The POS has exceeded the horizon gap. Please refer to the academic adviser to proceed.';
+            }
             if (compactMsg.length > POS_ERROR_MSG_MAX_LEN) {
                 compactMsg = compactMsg.slice(0, POS_ERROR_MSG_MAX_LEN).trim() + '...';
             }
         }
         return compactMsg;
+    }
+
+    /** Must match server `MAX_FAILED_ATTEMPTS_SAME_COURSE` in pos/views.py */
+    var MAX_FAILED_ATTEMPTS_SAME_COURSE = 4;
+    /** Must match `MIN_GRADED_UNITS_PER_SEMESTER_TABLE_FOR_FAIL_RATIO` in pos/views.py */
+    var MIN_GRADED_UNITS_PER_SEMESTER_TABLE_FOR_FAIL_RATIO = 10;
+
+    function isExplicitFailingGradeForRatio(g) {
+        if (g == null || g === '') return false;
+        var s = String(g).trim();
+        if (!s) return false;
+        if (s === '5' || s === '5.0' || s === '5.00') return true;
+        var f = parseFloat(s);
+        return !isNaN(f) && f >= 5;
+    }
+
+    function lookupCourseTitleFromPageCurriculum(code) {
+        if (!code) return '';
+        try {
+            var el = document.getElementById('curriculum-data');
+            if (!el || !el.textContent) return '';
+            var curriculum = JSON.parse(el.textContent);
+            for (var i = 0; i < curriculum.length; i++) {
+                var courses = (curriculum[i] && curriculum[i].courses) || [];
+                for (var j = 0; j < courses.length; j++) {
+                    if (courses[j].code === code) return (courses[j].title || '').trim();
+                }
+            }
+        } catch (e) {}
+        return '';
+    }
+
+    function explicitFailCountByCourseFromGrades(gradesBySection) {
+        function isFail(g) {
+            if (g == null || g === '') return false;
+            var s = String(g).trim();
+            if (!s) return false;
+            if (s === '5' || s === '5.0' || s === '5.00') return true;
+            var f = parseFloat(s);
+            return !isNaN(f) && f >= 5;
+        }
+        var counts = {};
+        if (!gradesBySection || typeof gradesBySection !== 'object') return counts;
+        Object.keys(gradesBySection).forEach(function(sec) {
+            var sg = gradesBySection[sec];
+            if (!sg || typeof sg !== 'object') return;
+            Object.keys(sg).forEach(function(courseCode) {
+                if (!courseCode) return;
+                if (isFail(sg[courseCode])) counts[courseCode] = (counts[courseCode] || 0) + 1;
+            });
+        });
+        return counts;
+    }
+
+    function messageExcessiveSameCourseFailuresClient(code, count, title) {
+        var titlePart = title ? ' (' + title + ')' : '';
+        return 'You have failed ' + code + titlePart + ' ' + count + ' times across the semester tables you entered. You cannot generate a Program of Study automatically after four or more failures in the same course. Please refer to an academic adviser for assistance.';
     }
 
     function getCookie(name) {
@@ -1868,36 +1921,58 @@
     }
 
     var deleteMenuItem = document.getElementById('deletePosMenuItem');
-    var confirmDeleteBtn = document.getElementById('confirmDeletePosBtn');
-    if (deleteMenuItem && confirmDeleteBtn) {
+    if (deleteMenuItem) {
         deleteMenuItem.addEventListener('click', function() {
-            var mEl = document.getElementById('delete-pos-modal');
-            if (mEl && typeof bootstrap !== 'undefined' && bootstrap.Modal) {
-                new bootstrap.Modal(mEl).show();
-            }
-        });
-        confirmDeleteBtn.addEventListener('click', function() {
-            confirmDeleteBtn.disabled = true;
-            fetch("{% url 'delete_pos_data' %}", {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
-                body: JSON.stringify({}),
-                credentials: 'same-origin'
-            }).then(function(r) { return r.json(); }).then(function(data) {
-                confirmDeleteBtn.disabled = false;
-                if (!data || !data.ok) {
-                    showGeneratedPosErrorPopup('We could not delete your POS data on the server. Check your internet connection, wait a moment, and try again. If the problem continues, refresh the page or sign in again before retrying.', 'infeasible');
-                    return;
+            var deleteMsg = 'Are you sure you want to delete <strong>all</strong> courses and grades from your current POS? This will reset Generate/Preview back to no input, but will <strong>not</strong> delete your History records.';
+            function runDeletePos(closeModal) {
+                if (typeof window.setAppSystemConfirmBusy === 'function') {
+                    window.setAppSystemConfirmBusy(true, 'Deleting...');
                 }
-                try { localStorage.removeItem('posGrades'); } catch (e) {}
-                try { localStorage.removeItem('posCurrentSemIndex'); } catch (e) {}
-                try { sessionStorage.removeItem('posGeneratedResponse'); } catch (e) {}
-                try { localStorage.setItem('posDeleted', '1'); } catch (e) {}
-                // Reload Generate POS without params (resets dropdowns)
-                window.location.href = window.location.pathname;
-            }).catch(function() {
-                confirmDeleteBtn.disabled = false;
-                showGeneratedPosErrorPopup('We could not delete your POS data on the server. Check your internet connection, wait a moment, and try again. If the problem continues, refresh the page or sign in again before retrying.', 'infeasible');
+                fetch("{% url 'delete_pos_data' %}", {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+                    body: JSON.stringify({}),
+                    credentials: 'same-origin'
+                }).then(function(r) { return r.json(); }).then(function(data) {
+                    if (typeof window.setAppSystemConfirmBusy === 'function') {
+                        window.setAppSystemConfirmBusy(false);
+                    }
+                    if (!data || !data.ok) {
+                        showGeneratedPosErrorPopup('We could not delete your POS data on the server. Check your internet connection, wait a moment, and try again. If the problem continues, refresh the page or sign in again before retrying.', 'infeasible');
+                        return;
+                    }
+                    if (typeof closeModal === 'function') closeModal();
+                    try { localStorage.removeItem('posGrades'); } catch (e) {}
+                    try { localStorage.removeItem('posCurrentSemIndex'); } catch (e) {}
+                    try { sessionStorage.removeItem('posGeneratedResponse'); } catch (e) {}
+                    try { localStorage.setItem('posDeleted', '1'); } catch (e) {}
+                    window.location.href = window.location.pathname;
+                }).catch(function() {
+                    if (typeof window.setAppSystemConfirmBusy === 'function') {
+                        window.setAppSystemConfirmBusy(false);
+                    }
+                    showGeneratedPosErrorPopup('We could not delete your POS data on the server. Check your internet connection, wait a moment, and try again. If the problem continues, refresh the page or sign in again before retrying.', 'infeasible');
+                });
+            }
+            if (typeof window.showAppSystemConfirmModal !== 'function') {
+                if (window.confirm(deleteMsg.replace(/<[^>]+>/g, ''))) {
+                    runDeletePos(null);
+                }
+                return;
+            }
+            window.showAppSystemConfirmModal({
+                title: 'Delete POS data?',
+                message: deleteMsg,
+                html: true,
+                primaryText: 'Delete',
+                secondaryText: 'Cancel',
+                primaryVariant: 'danger',
+                onPrimary: function(close) {
+                    runDeletePos(close);
+                },
+                onSecondary: function(close) {
+                    close();
+                }
             });
         });
     }
@@ -1923,9 +1998,10 @@
                     return { ok: false, message: 'Missing grade in ' + sec + '. Every listed course must have a grade selected before POS can be generated. Open the grade control for each row and choose the correct grade, then try Generate POS again.' };
                 }
                 totalUnits += units;
-                if (grade === '5' || grade === '5.00') failedUnits += units;
+                if (isExplicitFailingGradeForRatio(grade)) failedUnits += units;
             }
-            if (totalUnits >= 10) {
+            // 50% / 75%: each semester table separately; skip if this table's graded units < minimum.
+            if (totalUnits >= MIN_GRADED_UNITS_PER_SEMESTER_TABLE_FOR_FAIL_RATIO) {
                 var ratio = failedUnits / totalUnits;
                 if (ratio >= 0.75) return { ok: false, message: '75%+ units failed. POS cannot be generated.' };
                 if (ratio >= 0.50) return { ok: false, message: "50%+ units failed. Manual evaluation required." };
@@ -1963,9 +2039,10 @@
                     return { ok: false, message: 'Missing grade in ' + sec + '. Every listed course must have a grade selected before POS can be generated. Open the grade control for each row and choose the correct grade, then try Generate POS again.' };
                 }
                 totalUnits += units;
-                if (grade === '5' || grade === '5.00') failedUnits += units;
+                if (isExplicitFailingGradeForRatio(grade)) failedUnits += units;
             }
-            if (totalUnits >= 10) {
+            // 50% / 75%: each visible semester table separately; no error if this table's units < minimum.
+            if (totalUnits >= MIN_GRADED_UNITS_PER_SEMESTER_TABLE_FOR_FAIL_RATIO) {
                 var ratio = failedUnits / totalUnits;
                 if (ratio >= 0.75) return { ok: false, message: '75%+ units failed. POS cannot be generated.' };
                 if (ratio >= 0.50) return { ok: false, message: "50%+ units failed. Manual evaluation required." };
@@ -1997,6 +2074,24 @@
             return;
         }
         var gradesBySection = mergedGradesForSave();
+        var failCountsPre = explicitFailCountByCourseFromGrades(gradesBySection);
+        var excessiveCodes = Object.keys(failCountsPre).filter(function(c) {
+            return failCountsPre[c] >= MAX_FAILED_ATTEMPTS_SAME_COURSE;
+        });
+        if (excessiveCodes.length) {
+            excessiveCodes.sort(function(a, b) {
+                var d = failCountsPre[b] - failCountsPre[a];
+                if (d !== 0) return d;
+                return a.localeCompare(b);
+            });
+            var bc = excessiveCodes[0];
+            showGeneratedPosModal({
+                status: 'infeasible',
+                message: messageExcessiveSameCourseFailuresClient(bc, failCountsPre[bc], lookupCourseTitleFromPageCurriculum(bc)),
+                pos: []
+            });
+            return;
+        }
         localStorage.setItem('posGrades', JSON.stringify(gradesBySection));
         // Persist current semester index so Preview can call /generate/api consistently
         try {
@@ -2085,7 +2180,13 @@
 
             var title = (result && result.status === 'probation') ? 'POS Generation Requires Manual Evaluation' : 'POS Generation Failed';
             var st = (result && result.status) ? result.status : 'infeasible';
-            var compactMsg = formatGeneratedPosErrorText((result && result.message) ? result.message : '', st);
+            var rawFail =
+                result && result.errors && result.errors.length
+                    ? result.errors.join("\n\n")
+                    : (result && result.message)
+                        ? result.message
+                        : "";
+            var compactMsg = formatGeneratedPosErrorText(rawFail, st);
             if (typeof window.showAppSystemErrorModal === 'function') {
                 window.showAppSystemErrorModal(title, compactMsg);
             } else {
@@ -2110,7 +2211,7 @@
                           fetch("{% url 'generate_pos_api' %}", {
                               method: "POST",
                               headers: { "Content-Type": "application/json", "X-CSRFToken": getCookie('csrftoken') },
-                              body: JSON.stringify(solverPayload),
+                              body: JSON.stringify(Object.assign({}, solverPayload, { grades_by_section: gradesBySection })),
                               credentials: "same-origin"
                           }).then(function(r2) { return r2.json(); })
                             .then(function(res) {
@@ -2125,7 +2226,12 @@
                       } else {
                           setGenerateLoading(false);
                           var st = (validationRes && validationRes.status) ? validationRes.status : "infeasible";
-                          var msg = (validationRes && validationRes.message) ? validationRes.message : "POS cannot be generated with the current grades and curriculum data. Review the validation details above if shown, fix any missing grades or prerequisite issues, then try Generate POS again.";
+                          var msg = "POS cannot be generated with the current grades and curriculum data. Review the validation details above if shown, fix any missing grades or prerequisite issues, then try Generate POS again.";
+                          if (validationRes && validationRes.errors && validationRes.errors.length) {
+                              msg = validationRes.errors.join("\n\n");
+                          } else if (validationRes && validationRes.message) {
+                              msg = validationRes.message;
+                          }
                           showGeneratedPosModal({ status: st, message: msg, pos: [] });
                       }
                   })
@@ -2558,7 +2664,7 @@
                 var currentSem = document.getElementById('irreg-current-sem').value;
                 var startSem = document.getElementById('irreg-start-sem').value;
                 if (currentSem === '') {
-                    showGeneratedPosErrorPopup('Please choose your Last Semester Enrolled in this dialog. That value tells the system how far you have progressed so irregular course tables and validation stay correct. Select a term from the list, then press OK again.', 'infeasible');
+                    showGeneratedPosErrorPopup('Please choose your Last Semester Enrolled in this dialog. That value tells the system how far you have progressed so your course tables and validation stay correct. Select a term from the list, then press OK again.', 'infeasible');
                     return;
                 }
                 var currentIdx = parseInt(currentSem, 10);
@@ -2567,17 +2673,17 @@
                     return;
                 }
 
-                // If "When you became irregular" is left blank, keep it blank.
+                // If First Failed Semester is left blank, keep it blank.
                 // Backend will treat it as effective start = current semester.
                 if (startSem !== '') {
                     var startIdx = parseInt(startSem, 10);
                     if (!Number.isFinite(startIdx)) {
-                        showGeneratedPosErrorPopup('The “when you became irregular” semester is not valid. Choose a semester from that dropdown or clear it to use the default, then try again.', 'infeasible');
+                        showGeneratedPosErrorPopup('The First Failed Semester choice is not valid. Pick a semester from that dropdown or clear it to use the default (same as Last Semester Enrolled), then try again.', 'infeasible');
                         return;
                     }
-                    // Current semester must be the same or ahead of when they became irregular
+                    // Last semester enrolled must be the same as or after First Failed Semester when both are set
                     if (currentIdx < startIdx) {
-                        showGeneratedPosErrorPopup('Your Last Semester Enrolled cannot be earlier than the term when you became irregular. Adjust one or both dropdowns so the last enrolled term is the same as or after the irregular start, then try again.', 'infeasible');
+                        showGeneratedPosErrorPopup('Your Last Semester Enrolled cannot be earlier than your First Failed Semester. Adjust one or both dropdowns so your last enrolled term is the same as or after the first failed semester, then try again.', 'infeasible');
                         return;
                     }
                 }
@@ -2759,6 +2865,7 @@
                     sel.addEventListener('change', saveGradesToStorage);
                 });
                 initGradeDropdowns(sectionDiv);
+                updateSectionTotalUnits(parseInt(editSectionIndex, 10));
                 var editBtn = sectionDiv.querySelector('.irreg-edit-section-btn');
                 if (editBtn) { editBtn.classList.remove('irreg-edit-hidden'); editBtn.classList.add('irreg-edit-visible'); }
                 var checkBtn = sectionDiv.querySelector('.irreg-check-section-btn');
