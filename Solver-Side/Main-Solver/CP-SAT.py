@@ -1192,6 +1192,37 @@ def _run_cp_sat_configuration_core(
     return _solve_and_collect(model, semester, passed_courses, failed_courses, current_sem)
 
 
+def _build_original_curriculum_pos(current_sem, passed_courses):
+    """
+    Build POS directly from the original curriculum (orig_sem) without solving.
+    Used when there are no failed courses — a regular student should see the
+    standard curriculum layout rather than an optimizer-rearranged one.
+    """
+    passed_set = set(passed_courses or [])
+    pos = []
+    for s in range(current_sem, u.MAX_SEMESTER + 1):
+        sem_list = [
+            c for c, info in courses.items()
+            if c not in passed_set and _first_semester(info) == s
+        ]
+        label = _sem_label(s)
+        total_u = sum(courses[c].get("units", 0) for c in sem_list) if sem_list else 0
+        pos.append({
+            "semester_index": s,
+            "label": label,
+            "total_units": total_u,
+            "courses": [
+                {
+                    "code": c,
+                    "title": courses[c].get("course_title", c),
+                    "units": courses[c].get("units", 0),
+                }
+                for c in sorted(sem_list)
+            ],
+        })
+    return {"status": "ok", "message": None, "pos": pos}
+
+
 def _run_core(current_sem, passed_courses, failed_courses, with_petition: bool, forced_semester_map=None):
     """
     Internal pipeline that runs the full model and returns a structured result dict.
@@ -1203,6 +1234,11 @@ def _run_core(current_sem, passed_courses, failed_courses, with_petition: bool, 
             "message": f"Unknown configuration '{CONFIGURATION}'.",
             "pos": [],
         }
+
+    # No failed courses and no forced overrides → regular student path.
+    # Return the original curriculum layout without running the optimizer.
+    if not failed_courses and not forced_semester_map:
+        return _build_original_curriculum_pos(current_sem, passed_courses)
 
     # 1b. Probation / failed-units check (per semester)
     probation_msg = check_probation(current_sem, passed_courses, failed_courses)
