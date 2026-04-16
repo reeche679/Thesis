@@ -14,6 +14,7 @@ class Student(models.Model):
     year_level = models.CharField(max_length=20, blank=True)  # e.g. 1st Year; set on home with AY/semester
     academic_year = models.CharField(max_length=32, blank=True)   # e.g. A.Y. 2025 – 2026 (persists across sign-out)
     semester = models.CharField(max_length=32, blank=True)         # e.g. First Semester (persists across sign-out)
+    current_pos_snapshot = models.JSONField(default=dict, blank=True)
 
     class Meta:
         ordering = ['last_name', 'first_name']

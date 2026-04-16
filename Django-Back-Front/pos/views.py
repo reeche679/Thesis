@@ -889,6 +889,11 @@ def pos_generate(request):
                     request.session['irreg_start_index'] = irreg_start_index
                 else:
                     request.session.pop('irreg_start_index', None)
+                # An explicit "First Failed Semester" selection means the user wants
+                # Generate POS to rebuild the irregular/add-course view from the dropdowns,
+                # not keep replaying a previously loaded Preview/history schedule.
+                request.session.pop('pos_loaded_from_history', None)
+                request.session.pop('pos_loaded_preview_ui_sections', None)
             if irreg_current_sem is not None:
                 request.session['irreg_current_sem'] = irreg_current_sem
             if with_petition in ('yes', 'no'):
@@ -969,7 +974,7 @@ def pos_generate(request):
             # If we loaded a POS from history, we should continue using the saved Preview tables
             # even when both dropdowns are selected (OK redirect includes both params).
             # Otherwise we would incorrectly switch to "manual add" mode and wipe courses.
-            use_loaded_schedule = bool(request.session.get('pos_loaded_from_history'))
+            use_loaded_schedule = bool(request.session.get('pos_loaded_from_history')) and not became_irregular_explicit
             loaded_preview_ui_sections = request.session.get("pos_loaded_preview_ui_sections") or {}
             use_loaded_preview_ui_sections = (
                 use_loaded_schedule and isinstance(loaded_preview_ui_sections, dict) and bool(loaded_preview_ui_sections)
@@ -1448,8 +1453,12 @@ def delete_pos_data(request):
         request.session.pop('last_generated_pos_options', None)
         request.session.pop('pos_reload_pending', None)
         request.session.pop('pos_loaded_from_history', None)
+        request.session.pop('pos_loaded_preview_ui_sections', None)
+        request.session.pop('preview_signatories', None)
     except Exception:
         pass
+
+    _clear_current_pos_snapshot(student)
 
     return JsonResponse({'ok': True})
 
@@ -1878,6 +1887,7 @@ def generate_pos_api(request):
                 if result.get("default_petition_mode"):
                     request.session["last_selected_petition_mode"] = result.get("default_petition_mode")
                 request.session["last_generated_payload"] = payload
+                _persist_current_pos_snapshot(request, student)
     except Exception:
         pass
 
@@ -1917,6 +1927,9 @@ def set_generated_pos_option(request):
     pos = opt.get("pos") or []
     request.session["last_generated_pos"] = pos
     request.session["last_selected_petition_mode"] = mode
+    student = get_logged_in_student(request)
+    if student is not None:
+        _persist_current_pos_snapshot(request, student)
     return JsonResponse({"ok": True, "mode": mode, "pos": pos})
 
 
@@ -3073,6 +3086,9 @@ def save_tuned_pos(request):
     if modified_any:
         request.session["last_generated_pos"] = updated_pos
         request.session["last_selected_petition_mode"] = mode
+        student = get_logged_in_student(request)
+        if student is not None:
+            _persist_current_pos_snapshot(request, student)
 
     return JsonResponse({"ok": True, "mode": mode, "pos": updated_pos})
 
@@ -3134,6 +3150,102 @@ def _max_ui_section_from_grades_and_pos(grades_by_section, generated_pos):
         except (ValueError, TypeError):
             pass
     return max(0, max_si)
+
+
+def _persist_current_pos_snapshot(request, student, extra_snapshot=None):
+    """Persist the student's current working Generate/Preview POS state across sign-outs."""
+    if student is None:
+        return
+    snapshot = {
+        "last_generated_pos_options": copy.deepcopy(request.session.get("last_generated_pos_options") or {}),
+        "last_generated_pos": copy.deepcopy(request.session.get("last_generated_pos") or []),
+        "last_selected_petition_mode": request.session.get("last_selected_petition_mode") or "no_petition",
+        "last_generated_payload": copy.deepcopy(request.session.get("last_generated_payload") or {}),
+        "irreg_start_index": request.session.get("irreg_start_index"),
+        "irreg_current_sem": request.session.get("irreg_current_sem"),
+        "irreg_with_petition": request.session.get("irreg_with_petition", "yes"),
+        "pos_loaded_from_history": bool(request.session.get("pos_loaded_from_history")),
+        "pos_loaded_preview_ui_sections": copy.deepcopy(request.session.get("pos_loaded_preview_ui_sections") or {}),
+        "preview_signatories": copy.deepcopy(request.session.get("preview_signatories") or {}),
+    }
+    if isinstance(extra_snapshot, dict) and extra_snapshot:
+        snapshot.update(copy.deepcopy(extra_snapshot))
+    student.current_pos_snapshot = snapshot
+    student.save(update_fields=["current_pos_snapshot"])
+
+
+def _restore_current_pos_snapshot(request, student):
+    """Rehydrate session state from the student's persisted working POS snapshot."""
+    snapshot = getattr(student, "current_pos_snapshot", None)
+    if not isinstance(snapshot, dict) or not snapshot:
+        return
+
+    pos_options = snapshot.get("last_generated_pos_options")
+    if isinstance(pos_options, dict) and pos_options:
+        request.session["last_generated_pos_options"] = copy.deepcopy(pos_options)
+    else:
+        request.session.pop("last_generated_pos_options", None)
+
+    generated_pos = snapshot.get("last_generated_pos")
+    if isinstance(generated_pos, list) and generated_pos:
+        request.session["last_generated_pos"] = copy.deepcopy(generated_pos)
+    else:
+        request.session.pop("last_generated_pos", None)
+
+    base_payload = snapshot.get("last_generated_payload")
+    if isinstance(base_payload, dict) and base_payload:
+        request.session["last_generated_payload"] = copy.deepcopy(base_payload)
+    else:
+        request.session.pop("last_generated_payload", None)
+
+    mode = snapshot.get("last_selected_petition_mode")
+    if mode in ("no_petition", "with_petition"):
+        request.session["last_selected_petition_mode"] = mode
+    else:
+        request.session.pop("last_selected_petition_mode", None)
+
+    preview_sections = snapshot.get("pos_loaded_preview_ui_sections")
+    if isinstance(preview_sections, dict) and preview_sections:
+        request.session["pos_loaded_preview_ui_sections"] = copy.deepcopy(preview_sections)
+    else:
+        request.session.pop("pos_loaded_preview_ui_sections", None)
+
+    preview_signatories = snapshot.get("preview_signatories")
+    if isinstance(preview_signatories, dict) and preview_signatories:
+        request.session["preview_signatories"] = copy.deepcopy(preview_signatories)
+    else:
+        request.session.pop("preview_signatories", None)
+
+    for key in ("irreg_start_index", "irreg_current_sem"):
+        val = snapshot.get(key)
+        if val is None or val == "":
+            request.session.pop(key, None)
+            continue
+        try:
+            request.session[key] = int(val)
+        except (TypeError, ValueError):
+            request.session.pop(key, None)
+
+    irreg_with_petition = snapshot.get("irreg_with_petition")
+    if irreg_with_petition in ("yes", "no"):
+        request.session["irreg_with_petition"] = irreg_with_petition
+    else:
+        request.session.pop("irreg_with_petition", None)
+
+    if snapshot.get("pos_loaded_from_history"):
+        request.session["pos_loaded_from_history"] = True
+    else:
+        request.session.pop("pos_loaded_from_history", None)
+
+    request.session.pop("pos_reload_pending", None)
+    request.session.pop("pos_reset", None)
+
+
+def _clear_current_pos_snapshot(student):
+    if student is None:
+        return
+    student.current_pos_snapshot = {}
+    student.save(update_fields=["current_pos_snapshot"])
 
 
 def _snapshot_for_pos_history(request, student):
@@ -3403,6 +3515,16 @@ def save_preview_pos_to_history(request):
         # Keys should be UI section indices; JSON forces them to be strings.
         snap["preview_ui_sections"] = preview_ui_sections
     snap["signatories"] = signatories
+    request.session["pos_loaded_preview_ui_sections"] = copy.deepcopy(snap.get("preview_ui_sections") or {})
+    _persist_current_pos_snapshot(
+        request,
+        student,
+        extra_snapshot={
+            "pos_loaded_from_history": bool(snap.get("preview_ui_sections")),
+            "pos_loaded_preview_ui_sections": copy.deepcopy(snap.get("preview_ui_sections") or {}),
+            "preview_signatories": copy.deepcopy(signatories),
+        },
+    )
 
     last = POSRecord.objects.filter(student=student).order_by('-generated_at').first()
     if last is not None and last.preview_snapshot == snap:
@@ -3692,11 +3814,17 @@ def load_pos_record(request, record_id):
             request.session["pos_loaded_preview_ui_sections"] = copy.deepcopy(pu)
         else:
             request.session.pop("pos_loaded_preview_ui_sections", None)
+        signatories = snap.get("signatories")
+        if isinstance(signatories, dict) and signatories:
+            request.session["preview_signatories"] = copy.deepcopy(signatories)
+        else:
+            request.session.pop("preview_signatories", None)
     else:
         request.session.pop("last_generated_pos_options", None)
         request.session["last_generated_pos"] = []
         request.session.pop("last_generated_payload", None)
         request.session.pop("pos_loaded_preview_ui_sections", None)
+        request.session.pop("preview_signatories", None)
 
     request.session.pop("irreg_current_sem", None)
     request.session.pop("year_level", None)
@@ -3704,6 +3832,15 @@ def load_pos_record(request, record_id):
     request.session["pos_reload_pending"] = True
     request.session["pos_loaded_from_history"] = True
     request.session.pop("pos_reset", None)
+    _persist_current_pos_snapshot(
+        request,
+        student,
+        extra_snapshot={
+            "pos_loaded_from_history": True,
+            "pos_loaded_preview_ui_sections": copy.deepcopy(request.session.get("pos_loaded_preview_ui_sections") or {}),
+            "preview_signatories": copy.deepcopy(request.session.get("preview_signatories") or {}),
+        },
+    )
     return redirect("pos_generate")
 
 
@@ -3776,6 +3913,7 @@ def login_view(request):
             request.session['semester'] = student.semester
         if student.year_level:
             request.session['year_level'] = student.year_level
+        _restore_current_pos_snapshot(request, student)
         return redirect('pos_home')
 
     return render(request, "auth/login.html")
