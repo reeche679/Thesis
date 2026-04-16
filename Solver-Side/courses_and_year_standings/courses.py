@@ -46,7 +46,7 @@ courses = {
 
     # --- SECOND YEAR: 1st Semester ---
     "CpE 201":  {"course_title": "CpE Discipline, Professional Practice and laws", "units": 3, "pre-requisites": [], "co-requisites": [], "orig_sem": 4, "category": "Rigid", "year_level": 2},
-    "CpE 202":  {"course_title": "Discrete Mathematics", "units": 3, "pre-requisites": ["MATH 101"], "co-requisites": [], "orig_sem": 4, "category": "Bottleneck", "year_level": 2},
+    "CpE 202":  {"course_title": "Discrete Mathematics", "units": 3, "pre-requisites": ["MATH 101"], "co-requisites": [], "orig_sem": 4, "category": "Rigid", "year_level": 2},
     "CpE 203":  {"course_title": "Programming Logic and Design", "units": 2, "pre-requisites": [], "co-requisites": [], "orig_sem": 4, "category": "Rigid", "year_level": 2},
     "EE 212":   {"course_title": "Fundamentals of Electrical Circuits", "units": 4, "pre-requisites": ["PHYS 103"], "co-requisites": [], "orig_sem": 4, "category": "Rigid", "year_level": 2},
     "ENGG 103": {"course_title": "Computer-Aided Design", "units": 1, "pre-requisites": ["ENGG 102"], "co-requisites": [], "orig_sem": 4, "category": "Rigid", "year_level": 2},

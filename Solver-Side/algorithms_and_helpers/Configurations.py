@@ -33,6 +33,7 @@ DEFAULT_COURSE_WEIGHTS = {
     "Elective Course 3": 8,
     "CpE 310": 8,
     "CpE 312": 8,
+    "ENGG 101": 10,
 }
 
 # ---------------------------------------------------------------------------
@@ -189,22 +190,42 @@ def add_baseline_objective(
     weights: dict | None = None,
 ):
     """
-    Baseline objective (your current behavior):
+    Baseline objective:
 
     1) Minimize the latest semester used (finish as early as possible).
-    2) Tie-break by minimizing sum(semester[c]) to pack courses earlier.
+    2) Minimize total deviation from orig_sem (keep courses near their
+       original curriculum position whenever possible).
+    3) Tie-break by minimizing sum(semester[c]) to pack courses earlier.
 
     `weights` is accepted for API compatibility but ignored here.
     """
-    max_sem_used = model.NewIntVar(current_sem, max_semester, "max_sem_used")
-    for c in courses:
-        if c not in passed_courses:
-            model.Add(max_sem_used >= semester[c])
+    remaining = [c for c in courses if c not in passed_courses]
+    n = max(1, len(remaining))
 
-    scale = max_semester * max_semester + 1
+    max_sem_used = model.NewIntVar(current_sem, max_semester, "max_sem_used")
+    for c in remaining:
+        model.Add(max_sem_used >= semester[c])
+
+    deviation_vars = []
+    for c in remaining:
+        orig = courses[c].get("orig_sem", 1)
+        dev = model.NewIntVar(0, max_semester, f"dev_{c}")
+        model.Add(dev >= semester[c] - orig)
+        model.Add(dev >= orig - semester[c])
+        deviation_vars.append(dev)
+
+    deviation_sum = sum(deviation_vars) if deviation_vars else 0
+    plain_sum = sum(semester[c] for c in remaining)
+
+    # Scaling: primary (max_sem) > deviation > plain_sum
+    R = n * max_semester
+    dev_scale = R + 1
+    primary_scale = dev_scale * R + R + 1
+
     model.Minimize(
-        max_sem_used * scale
-        + sum(semester[c] for c in courses if c not in passed_courses)
+        max_sem_used * primary_scale
+        + deviation_sum * dev_scale
+        + plain_sum
     )
 
 
@@ -221,24 +242,46 @@ def add_weighted_priority_objective(
     Configuration 2 (Weighted-priority objective):
 
     1) Minimize the latest semester used (finish as early as possible).
-    2) Tie-break by minimizing sum(weights[c] * semester[c]).
+    2) Minimize total deviation from orig_sem (keep courses near their
+       original curriculum position whenever possible).
+    3) Tie-break by minimizing sum(weights[c] * semester[c]).
 
-    Higher weights push those courses earlier whenever constraints allow.
+    Higher weights push those courses earlier whenever constraints allow,
+    but only when doing so doesn't increase deviation from orig_sem.
     """
     if weights is None:
         weights = DEFAULT_COURSE_WEIGHTS
 
     remaining = [c for c in courses if c not in passed_courses]
     max_weight = max([1, *[int(weights.get(c, 1)) for c in remaining]])
+    n = max(1, len(remaining))
 
     max_sem_used = model.NewIntVar(current_sem, max_semester, "max_sem_used")
     for c in remaining:
         model.Add(max_sem_used >= semester[c])
 
-    # Ensure primary objective dominates any possible change in the weighted term.
-    scale = (max_weight * max_semester * max(1, len(remaining))) + 1
+    deviation_vars = []
+    for c in remaining:
+        orig = courses[c].get("orig_sem", 1)
+        dev = model.NewIntVar(0, max_semester, f"dev_{c}")
+        model.Add(dev >= semester[c] - orig)
+        model.Add(dev >= orig - semester[c])
+        deviation_vars.append(dev)
+
+    deviation_sum = sum(deviation_vars) if deviation_vars else 0
     weighted_sum = sum(int(weights.get(c, 1)) * semester[c] for c in remaining)
-    model.Minimize(max_sem_used * scale + weighted_sum)
+
+    # Scaling: primary (max_sem) > deviation > weighted_sum
+    R_w = n * max_weight * max_semester
+    R_d = n * max_semester
+    dev_scale = R_w + 1
+    primary_scale = dev_scale * R_d + R_w + 1
+
+    model.Minimize(
+        max_sem_used * primary_scale
+        + deviation_sum * dev_scale
+        + weighted_sum
+    )
 
 
 # ---------------------------------------------------------------------------
