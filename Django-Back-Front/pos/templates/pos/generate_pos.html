@@ -1,0 +1,2916 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Generate POS | Program of Study Generation System{% endblock %}
+
+{% block nav_generate_active %}active{% endblock %}
+
+{% block extra_head %}
+<style>
+    .grade-select,
+    .edit-grade-select {
+        min-width: 3.75rem;
+        max-width: 4.5rem;
+        width: auto;
+        text-align: left;
+        margin: 0 auto;
+        display: block;
+        font-size: 0.8rem;
+        color: #212529;
+        -webkit-text-fill-color: #212529;
+        -webkit-appearance: none;
+        -moz-appearance: none;
+        appearance: none;
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e");
+        background-repeat: no-repeat;
+        background-position: right 0.15rem center;
+        background-size: 12px 10px;
+        padding: 0.15rem 1.1rem 0.15rem 0.4rem;
+    }
+
+    /* Custom grade dropdown (Generate POS only) */
+    .grade-cell {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    /* Grade dropdown button (keep the tuned sizing) */
+    .grade-display-btn {
+        min-width: 3.1rem;
+        max-width: 3.6rem;
+        width: 3.35rem;
+        min-height: 1.48rem;
+        padding: 0.19rem 1.05rem 0.19rem 0.35rem;
+        font-size: 0.75rem;
+        line-height: 1;
+        text-align: left;
+        position: relative;
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e");
+        background-repeat: no-repeat;
+        background-position: right 0.25rem center;
+        background-size: 11px 9px;
+    }
+
+    /* Path dropdown buttons (regular/irregular selects) – fill their column */
+    .pos-select-display-btn {
+        min-height: 1.8rem;
+        padding: 0.35rem 1.3rem 0.35rem 0.6rem;
+        font-size: 0.75rem;
+        line-height: 1;
+        text-align: left;
+        position: relative;
+        width: 100%;
+        display: inline-block;
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e");
+        background-repeat: no-repeat;
+        background-position: right 0.25rem center;
+        background-size: 11px 9px;
+    }
+    /* Filled state: reduce vertical padding so text isn't "too tall" */
+    .grade-display-btn.has-grade {
+        padding-top: 0.12rem;
+        padding-bottom: 0.12rem;
+        padding-left: 0.3rem;
+        color: #212529 !important;
+        -webkit-text-fill-color: #212529;
+    }
+    .pos-select-display-btn.has-value {
+        padding-top: 0.12rem;
+        padding-bottom: 0.12rem;
+        padding-left: 0.3rem;
+        color: #212529 !important;
+        -webkit-text-fill-color: #212529;
+    }
+
+    /* Irregular modal course search: black borders + lighter gray placeholder */
+    #irregular-modal-search {
+        border-color: #000 !important;
+        box-shadow: none !important;
+    }
+    #irregular-modal-search:focus {
+        border-color: #000 !important;
+        box-shadow: none !important;
+    }
+    #irregular-modal-search::placeholder {
+        color: #adb5bd !important; /* light gray */
+        opacity: 1 !important;
+    }
+
+    /* Small circular info button beside semester labels */
+    .pos-label-with-info {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        font-weight: 700;
+    }
+    .pos-info-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 0.86rem !important;
+        height: 0.86rem !important;
+        min-width: 0 !important;
+        min-height: 0 !important;
+        aspect-ratio: 1 / 1;
+        flex: 0 0 auto;
+        border-radius: 50% !important;
+        border: 1px solid #6c757d;
+        color: #495057;
+        background: #fff;
+        font-size: 0.58rem;
+        font-weight: 600;
+        line-height: 1;
+        padding: 0 !important;
+        box-sizing: border-box;
+    }
+    .pos-info-btn:hover,
+    .pos-info-btn:focus {
+        border-color: #495057;
+        color: #212529;
+        background: #f8f9fa;
+        box-shadow: none;
+    }
+    .popover.pos-info-popover {
+        border-radius: 0.5rem;
+    }
+    .popover.pos-info-popover .popover-body {
+        font-size: 0.74rem;
+        line-height: 1.2;
+        padding: 0.4rem 0.5rem;
+        max-width: 215px;
+    }
+
+    /* Irregular "FIRST FAILED SEMESTER" dropdown: keep neutral gray when empty */
+    #irreg-start-sem {
+        border-color: #7f868d !important;
+        color: #3f454b !important;
+        box-shadow: none !important;
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23495057' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2.5 5.5l5.5 5.5 5.5-5.5'/%3e%3c/svg%3e") !important;
+        background-repeat: no-repeat !important;
+        background-position: right 0.65rem center !important;
+        background-size: 12px 10px !important;
+    }
+    #irreg-start-sem:focus {
+        border-color: #6f7780 !important;
+        box-shadow: none !important;
+    }
+
+    /* If Bootstrap/browser marks it as invalid, keep it neutral gray */
+    #irreg-start-sem:invalid,
+    #irreg-start-sem.is-invalid {
+        border-color: #ced4da !important;
+        color: #6c757d !important;
+        box-shadow: none !important;
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%236c757d' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2.5 5.5l5.5 5.5 5.5-5.5'/%3e%3c/svg%3e") !important;
+        background-repeat: no-repeat !important;
+        background-position: right 0.65rem center !important;
+        background-size: 12px 10px !important;
+    }
+
+    #irreg-start-sem option[value=""] {
+        color: #adb5bd !important;
+    }
+
+    /* Hover: keep it light gray (not dark) */
+    .grade-display-btn:hover,
+    .pos-select-display-btn:hover {
+        background-color: rgba(108, 117, 125, 0.12) !important;
+        color: inherit !important;
+    }
+
+    /* Generate POS loading popup */
+    #generate-loading-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.28);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        z-index: 1085;
+        padding: 1rem;
+    }
+    #generate-loading-overlay.is-open {
+        display: flex;
+    }
+    /* Loading card: compact on mobile, larger from tablet/desktop up */
+    .generate-loading-card {
+        width: min(220px, 86vw);
+        background: #fdfdfd;
+        border-radius: 11px;
+        border: 1px solid rgba(0, 0, 0, 0.08);
+        box-shadow: 0 12px 28px rgba(0, 0, 0, 0.18);
+        padding: 0.45rem 0.5rem;
+    }
+    .generate-loading-title {
+        font-size: 0.65rem;
+        font-weight: 700;
+        color: #2f3438;
+        margin-top: 0.1rem;
+        margin-bottom: 0.35rem;
+        text-align: center;
+        line-height: 1.25;
+    }
+    .generate-loading-gif-wrap {
+        height: 82px;
+        background: #fdfdfd;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+    }
+    .generate-loading-gif {
+        width: auto;
+        max-width: 58px;
+        max-height: 58px;
+        height: auto;
+        object-fit: contain;
+        display: block;
+        opacity: 0.95;
+        border-radius: 9px;
+    }
+    @media (min-width: 576px) {
+        .generate-loading-card {
+            width: min(308px, 92vw);
+            border-radius: 16px;
+            box-shadow: 0 22px 48px rgba(0, 0, 0, 0.24);
+            padding: 0.85rem 0.95rem;
+        }
+        .generate-loading-title {
+            font-size: 0.92rem;
+            margin-top: 0.25rem;
+            margin-bottom: 0.5rem;
+        }
+        .generate-loading-gif-wrap {
+            height: 138px;
+        }
+        .generate-loading-gif {
+            max-width: 104px;
+            max-height: 104px;
+            border-radius: 14px;
+        }
+    }
+    .generate-loading-sub {
+        margin-top: 0.55rem;
+        font-size: 0.81rem;
+        color: #596067;
+    }
+    .grade-display-btn:active,
+    .pos-select-display-btn:active {
+        background-color: rgba(108, 117, 125, 0.18) !important;
+    }
+
+    /* Empty state: subtle reddish border to indicate required/unfinished */
+    .grade-display-btn:not(.has-grade),
+    .pos-select-display-btn:not(.has-value) {
+        border-color: rgba(176, 42, 55, 0.85) !important;
+        color: #b02a37 !important;
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23b02a37' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e") !important;
+    }
+    .grade-display-btn:not(.has-grade):focus,
+    .pos-select-display-btn:not(.has-value):focus {
+        box-shadow: 0 0 0 0.15rem rgba(176, 42, 55, 0.22) !important;
+    }
+
+    /* Irregular "FIRST FAILED SEMESTER" display button: keep neutral gray when empty.
+       The red outline above is for all empty semester dropdown display buttons;
+       we override it only for this specific dropdown. */
+    .pos-select-display-btn.irreg-sem-black-empty:not(.has-value) {
+        border-color: #8b939b !important;
+        color: #495057 !important;
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23495057' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e") !important;
+        background-repeat: no-repeat !important;
+        background-position: right 0.15rem center !important;
+        background-size: 12px 10px !important;
+    }
+    .pos-select-display-btn.irreg-sem-black-empty:not(.has-value):focus {
+        box-shadow: 0 0 0 0.15rem rgba(73, 80, 87, 0.22) !important;
+    }
+
+    @media (max-width: 575.98px) {
+        .grade-display-btn { min-height: 1.58rem; }
+        .pos-select-display-btn { min-height: 1.9rem; }
+        /* Regular & irregular path: dropdowns take full row on mobile */
+        .regular-semester-row .pos-select-cell,
+        .irregular-path-config .pos-select-cell {
+            flex: 1 1 100%;
+        }
+        .regular-semester-row .pos-select-display-btn,
+        .irregular-path-config .pos-select-display-btn {
+            width: 100%;
+        }
+    }
+    .grade-cell .grade-select,
+    .grade-cell .edit-grade-select {
+        position: absolute;
+        opacity: 0;
+        pointer-events: none;
+        width: 0;
+        height: 0;
+        padding: 0;
+        margin: 0;
+    }
+    #grade-menu-popup {
+        position: absolute;
+        z-index: 1055;
+        background-color: #ffffff;
+        border: 1px solid rgba(0,0,0,0.15);
+        border-radius: 0.375rem;
+        box-shadow: 0 0.5rem 1rem rgba(0,0,0,0.15);
+        padding: 0.25rem 0;
+        min-width: 4.5rem;
+        max-height: 200px;
+        overflow-y: auto;
+        font-size: 0.8rem;
+        display: none;
+        color: #212529;
+        -webkit-text-fill-color: #212529;
+    }
+    #grade-menu-popup button {
+        display: block;
+        width: 100%;
+        padding: 0.2rem 0.6rem;
+        text-align: left;
+        border: none;
+        background: transparent;
+        font-size: 0.8rem;
+        color: #212529;
+        -webkit-text-fill-color: #212529;
+    }
+    #grade-menu-popup button:hover,
+    #grade-menu-popup button:focus {
+        background-color: rgba(220,53,69,0.08);
+        color: #212529;
+        -webkit-text-fill-color: #212529;
+    }
+    #grade-menu-backdrop {
+        position: fixed;
+        inset: 0;
+        background: transparent;
+        z-index: 1054;
+        display: none;
+    }
+    /* Generic path-select popup list: add left padding so text is not hugging edge */
+    #pos-select-menu-popup {
+        color: #212529;
+        -webkit-text-fill-color: #212529;
+    }
+    #pos-select-menu-popup button,
+    #pos-select-menu-popup .dropdown-item {
+        display: block;
+        width: 100%;
+        padding-left: 0.8rem;
+        text-align: left;
+        color: #212529 !important;
+        -webkit-text-fill-color: #212529;
+    }
+    #pos-select-menu-popup .dropdown-item:hover,
+    #pos-select-menu-popup .dropdown-item:focus,
+    #pos-select-menu-popup .dropdown-item:active {
+        color: #212529 !important;
+        -webkit-text-fill-color: #212529;
+    }
+    /* Regular path layout: label on its own line, dropdown + OK on same row (web & mobile) */
+    .regular-ok-btn {
+        min-width: 6rem;
+    }
+    .regular-semester-row .d-flex {
+        flex-direction: row;
+        align-items: center;
+        gap: 0.5rem;
+        flex-wrap: nowrap;
+    }
+    .regular-semester-row #regular-current-semester {
+        max-width: 260px;
+        flex: 0 1 auto;
+    }
+    /* Mobile: let semester dropdown grow and wrap OK to next row */
+    @media (max-width: 575.98px) {
+        .regular-semester-row .d-flex {
+            flex-wrap: wrap;
+        }
+        .regular-semester-row #regular-current-semester {
+            max-width: 100%;
+            flex: 1 1 auto;
+        }
+        .regular-semester-row .regular-ok-btn {
+            margin-top: 0.35rem;
+            margin-bottom: 0.5rem;
+            width: 100%;
+        }
+    }
+
+    .grade-select option,
+    .edit-grade-select option {
+        text-align: left;
+        padding-left: 0.5rem;
+        font-size: 0.8rem;
+    }
+    /* Main semester tables: keep grade column wide enough for full value (e.g. 1.00, 5.00) but not too wide */
+    .main-sem .grade-col-header,
+    .main-sem table td:nth-child(8) {
+        min-width: 4.5rem;
+    }
+
+    .elective-course-cell {
+        text-align: left;
+        vertical-align: middle;
+        font-size: 1rem !important;
+        color: #212529 !important;
+    }
+
+    .course-title-cell {
+        text-align: left;
+        vertical-align: middle;
+        font-size: 1rem !important;
+        color: #212529 !important;
+        /* Allow long course titles to wrap into multiple lines */
+        white-space: normal;
+        word-break: break-word;
+        overflow-wrap: break-word;
+        line-height: 1.2;
+    }
+
+    /* "No. of hour/s" - small so it fits above Lec and Lab only */
+    .table thead th.hours-header {
+        font-size: 0.7rem;
+        font-weight: 700;
+        line-height: 1.1;
+        white-space: nowrap;
+        min-width: 4.5rem;
+    }
+
+    .table thead th {
+        text-align: center;
+        vertical-align: middle;
+        font-size: 0.9rem;
+        white-space: nowrap;
+        padding-top: 0.35rem;
+        padding-bottom: 0.35rem;
+    }
+
+    .pos-card h6.fw-bold {
+        text-align: center;
+        font-size: 0.95rem;
+    }
+
+    /* Horizontal scroll is handled by the script in base.html so the table under the finger scrolls. */
+    .main-sem .table-responsive,
+    .table-responsive {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior-x: contain;
+        position: relative;
+        max-width: 100%;
+        border-left: 1px solid #dee2e6;
+        border-right: 1px solid #dee2e6;
+    }
+    /* Mobile/short-screen usability: keep Course Code visible while swiping */
+    @media (max-width: 991.98px) {
+        /* Keep non-frozen cells behind the frozen first column */
+        .main-sem .table-responsive thead th,
+        .main-sem .table-responsive tbody td,
+        .main-sem .table-responsive tfoot th,
+        #irreg-edit-modal .table-responsive thead th,
+        #irreg-edit-modal .table-responsive tbody td,
+        #irreg-edit-modal .table-responsive tfoot th,
+        #irregular-add-modal .table-responsive thead th,
+        #irregular-add-modal .table-responsive tbody td,
+        #irregular-add-modal .table-responsive tfoot th {
+            position: relative;
+            z-index: 1;
+        }
+        .main-sem .table-responsive,
+        #irreg-edit-modal .table-responsive,
+        #irregular-add-modal .table-responsive {
+            position: relative;
+            left: 0;
+            margin-left: 0;
+            max-width: 100%;
+        }
+        /* Semester outer vertical borders on wrapper layer (outside scroll content) */
+        .main-sem .table-responsive {
+            box-shadow: -1px 0 0 #dee2e6, 1px 0 0 #dee2e6;
+        }
+        .main-sem .table,
+        #irreg-edit-modal .table,
+        #irregular-add-modal .table {
+            margin-left: 0 !important;
+        }
+        .main-sem .table-responsive thead tr:first-child th:first-child,
+        .main-sem .table-responsive tbody td:first-child,
+        .main-sem .table-responsive tfoot th:first-child,
+        #irreg-edit-modal .table-responsive thead tr:first-child th:first-child,
+        #irreg-edit-modal .table-responsive tbody td:first-child,
+        #irreg-edit-modal .table-responsive tfoot th:first-child,
+        #irregular-add-modal .table-responsive thead tr:first-child th:first-child,
+        #irregular-add-modal .table-responsive tbody td:first-child {
+            position: sticky;
+            left: -1px !important;
+            top: auto !important;
+        }
+        .main-sem .table-responsive thead tr:first-child th:first-child::before,
+        .main-sem .table-responsive tbody td:first-child::before,
+        .main-sem .table-responsive tfoot th:first-child::before,
+        #irreg-edit-modal .table-responsive thead tr:first-child th:first-child::before,
+        #irreg-edit-modal .table-responsive tbody td:first-child::before,
+        #irreg-edit-modal .table-responsive tfoot th:first-child::before,
+        #irregular-add-modal .table-responsive thead tr:first-child th:first-child::before,
+        #irregular-add-modal .table-responsive tbody td:first-child::before {
+            content: "";
+            position: absolute;
+            left: -1px;
+            top: 0;
+            bottom: 0;
+            width: 3px;
+            background: #fff;
+            z-index: 20;
+            pointer-events: none;
+        }
+        .main-sem .table-responsive thead tr:first-child th:first-child,
+        .main-sem .table-responsive tfoot th:first-child,
+        #irreg-edit-modal .table-responsive thead tr:first-child th:first-child,
+        #irreg-edit-modal .table-responsive tfoot th:first-child,
+        #irregular-add-modal .table-responsive thead tr:first-child th:first-child {
+            z-index: 6;
+            background: #f8f9fa !important;
+            border-left: 1px solid #dee2e6 !important;
+            border-right: 1px solid #dee2e6 !important;
+            border-top: 1px solid #dee2e6 !important;
+            border-bottom: 1px solid #dee2e6 !important; /* title/header line border */
+        }
+        .main-sem .table-responsive tbody td:first-child,
+        #irreg-edit-modal .table-responsive tbody td:first-child,
+        #irregular-add-modal .table-responsive tbody td:first-child {
+            z-index: 5;
+            background: #fff !important;
+            border-left: 1px solid #dee2e6 !important;
+            border-right: 1px solid #dee2e6 !important;
+            border-top: 1px solid #dee2e6 !important;
+            border-bottom: 1px solid #dee2e6 !important;
+            box-shadow: none !important;
+            background-clip: padding-box;
+        }
+        .main-sem .table-responsive tfoot th:first-child,
+        #irreg-edit-modal .table-responsive tfoot th:first-child {
+            z-index: 3;
+            background: #f8f9fa !important;
+            border-left: 1px solid #dee2e6 !important;
+            border-top: 1px solid #dee2e6 !important;
+            border-bottom: 1px solid #dee2e6 !important;
+            border-right: 1px solid #dee2e6 !important;
+            box-shadow: none !important;
+        }
+        /* Ensure the bottom line is visible under the frozen left footer cell */
+        .main-sem .table-responsive tfoot tr:last-child th.total-left-cell,
+        #irreg-edit-modal .table-responsive tfoot tr:last-child th.total-left-cell {
+            border-bottom: 1px solid #dee2e6 !important;
+            border-left: 1px solid #dee2e6 !important;
+            border-right: 1px solid #dee2e6 !important;
+            border-top: 1px solid #dee2e6 !important;
+            background: #f8f9fa !important;
+        }
+        /* Match the rightmost footer cell background with Total Units footer color */
+        .main-sem .table-responsive tfoot th:last-child,
+        #irreg-edit-modal .table-responsive tfoot th:last-child {
+            background: #f8f9fa !important;
+        }
+    }
+    .table {
+        table-layout: auto;
+        width: 100%;
+        min-width: 720px; /* full headers/content visible when scrolling horizontally */
+        border-left: 1px solid #dee2e6 !important;
+        border-right: 1px solid #dee2e6 !important;
+    }
+
+    .table thead th,
+    .table tbody td {
+        text-align: center;
+        vertical-align: middle;
+        box-sizing: border-box;
+        padding-left: 0.5rem;
+        padding-right: 0.5rem;
+        padding-top: 0.25rem;
+        padding-bottom: 0.25rem;
+        font-size: 0.85rem;
+        white-space: nowrap;
+    }
+    /* Override: course titles always left-aligned, including in edit modal rows */
+    .table tbody td.course-title-cell {
+        text-align: left !important;
+    }
+
+    .table td:nth-child(4),
+    .table td:nth-child(5) {
+        font-size: 0.75rem;
+    }
+    .table td:nth-child(6),
+    .table td:nth-child(7) {
+        white-space: normal;
+        word-break: break-word;
+        overflow-wrap: break-word;
+        overflow: visible;
+        text-overflow: clip;
+        font-size: 0.7rem;
+        line-height: 1.25;
+        vertical-align: middle;
+    }
+
+    /* Slightly smaller table text on small screens */
+    @media (max-width: 575.98px) {
+        .table thead th,
+        .table tbody td {
+            font-size: 0.8rem;
+        }
+        .table .course-title-cell,
+        .table .elective-course-cell {
+            font-size: 0.8rem !important;
+            /* Let long titles wrap instead of forcing very wide columns */
+            white-space: normal;
+            word-break: break-word;
+            overflow-wrap: break-word;
+        }
+        /* Units, Lec, Lab: equal, shorter width on mobile */
+        .table thead th:nth-child(3),
+        .table tbody td:nth-child(3),
+        .table thead th:nth-child(4),
+        .table tbody td:nth-child(4),
+        .table thead th:nth-child(5),
+        .table tbody td:nth-child(5) {
+            min-width: 2.4rem;
+        }
+    }
+
+    .generate-photo-box {
+        width: clamp(72px, 18vw, 100px);
+        height: clamp(72px, 18vw, 100px);
+        min-width: 72px;
+        min-height: 72px;
+        border: 2px solid #3a3a3a;
+        border-radius: 0.5rem;
+        background: rgba(255, 255, 255, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+    }
+    .generate-photo-box img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+    .generate-photo-box .photo-placeholder {
+        text-align: center;
+        color: #666;
+        font-size: 0.7rem;
+        padding: 4px;
+    }
+    .irregular-picker-table tbody tr.irregular-picker-row {
+        cursor: pointer;
+        outline: none;
+    }
+    .irregular-picker-table tbody tr.irregular-picker-row:focus,
+    .irregular-picker-table tbody tr.irregular-picker-row:focus-visible {
+        outline: none;
+    }
+    .irregular-picker-table tbody tr.irregular-picker-row:hover {
+        background-color: #e9ecef !important;
+    }
+    .irregular-picker-table tbody tr.irregular-picker-row:hover td {
+        background-color: #e9ecef !important;
+    }
+    .irregular-picker-table tbody tr.irregular-picker-row.selected {
+        background-color: #cfe2ff !important;
+    }
+    .irregular-picker-table tbody tr.irregular-picker-row.selected td {
+        background-color: #cfe2ff !important;
+    }
+    #irregular-add-modal .modal-dialog {
+        max-width: 90%;
+        width: 900px;
+    }
+    #irregular-add-modal .modal-body {
+        max-height: 70vh;
+        overflow-y: auto;
+    }
+    #irregular-add-modal .irregular-picker-table {
+        font-size: 0.8rem;
+    }
+    #irregular-add-modal .irregular-picker-table th,
+    #irregular-add-modal .irregular-picker-table td {
+        padding: 0.25rem 0.35rem;
+    }
+    #irregular-add-modal .course-title-cell {
+        font-size: 0.8rem !important;
+    }
+    #irregular-add-modal .irregular-picker-row:focus,
+    #irregular-add-modal .irregular-picker-row:focus-visible {
+        outline: none !important;
+    }
+    .irregular-my-pos-table .grade-select {
+        max-width: 56px;
+    }
+    .irreg-edit-section-btn.irreg-edit-visible { display: inline-block !important; }
+    .irreg-edit-section-btn.irreg-edit-hidden { display: none !important; }
+    /* Edit semester modal: grade column as compact as possible but still readable */
+    #irreg-edit-modal .irreg-edit-grade-col,
+    #irreg-edit-modal table td:nth-child(8) {
+        min-width: 3.75rem;
+        width: 8%;
+    }
+    #irreg-edit-modal .grade-select {
+        min-width: 4.5rem;
+        max-width: none;
+    }
+    /* Edit popup remove (x) button: small centered square */
+    #irreg-edit-modal .edit-remove-row {
+        padding: 0;
+        width: 1.6rem;
+        height: 1.6rem;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        line-height: 1;
+        font-size: 0.85rem;
+    }
+    /* Irregular check (✓) button under tables: small centered square */
+    .irreg-check-section-btn {
+        padding: 0;
+        width: 1.6rem;
+        height: 1.6rem;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        line-height: 1;
+        font-size: 0.85rem;
+    }
+    @media (max-width: 575.98px) {
+        #irreg-edit-modal .irreg-edit-grade-col,
+        #irreg-edit-modal table td:nth-child(8) {
+            min-width: 5.5rem;
+        }
+    }
+
+    /* Student profile scroll: keep photo fixed, allow details to scroll on small screens */
+    .pos-student-profile-scroll {
+        flex: 1 1 auto;
+        max-width: 100%;
+    }
+
+    /* Responsive: keep student profile landscape (photo left, details right) on all screens,
+       and keep text left-aligned while the details area scrolls only inside the card. */
+    @media (max-width: 767.98px) {
+        .pos-card.p-4.mb-4 .d-flex.justify-content-between.align-items-start { flex-wrap: wrap; gap: 0.75rem; }
+        #pos-action-buttons .d-flex { flex-wrap: wrap; }
+        #pos-action-buttons .btn { min-width: 0; }
+        .pos-student-profile-scroll {
+            overflow: visible;
+            -webkit-overflow-scrolling: touch;
+        }
+        .pos-student-profile-details {
+            min-width: 0;
+            text-align: left;
+        }
+        .pos-student-profile-row .generate-photo-box {
+            width: 82px;
+            height: 82px;
+            min-width: 82px;
+            min-height: 82px;
+        }
+        .pos-student-profile-details > .col-4:nth-child(n+2) { display: none; }
+        .pos-student-profile-details > .col-4:first-child { width: 100%; }
+        .pos-student-profile-row { gap: 0.75rem; }
+        .pos-student-profile-details .text-muted { font-size: 0.65rem; }
+        .pos-student-profile-details .fw-semibold { font-size: 0.8rem; }
+    }
+    @media (max-width: 575.98px) {
+        .main-sem .d-flex.justify-content-between.align-items-center.mb-2 { flex-wrap: wrap; gap: 0.5rem; }
+        .main-sem .d-flex.align-items-center[style*="min-width: 120px"] { min-width: 0; }
+        .pos-student-profile-row .generate-photo-box {
+            width: 74px;
+            height: 74px;
+            min-width: 74px;
+            min-height: 74px;
+        }
+        .pos-student-profile-row {
+            gap: 0.5rem;
+            align-items: flex-start;
+        }
+        .pos-student-profile-details .text-muted { font-size: 0.6rem; }
+        .pos-student-profile-details .fw-semibold { font-size: 0.75rem; }
+        .pos-student-profile-details {
+            min-width: 0;
+            text-align: left;
+        }
+    }
+    /* Keep landscape layout even on very small screens (photo left, text right) */
+
+    /* Semester table header: center title (First Year First Sem, etc.) */
+    .main-sem-header {
+        display: grid;
+        grid-template-columns: 1fr auto 1fr;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    .main-sem-title {
+        grid-column: 2;
+        font-size: 0.95rem;
+    }
+    .main-sem-header-left { justify-self: start; }
+    .main-sem-header-right { justify-self: end; }
+    @media (max-width: 575.98px) {
+        .main-sem-header { grid-template-columns: 1fr 1fr; grid-template-rows: auto auto; }
+        .main-sem-header-left { grid-column: 1; grid-row: 1; }
+        .main-sem-title {
+            grid-column: 1 / -1;
+            grid-row: 2;
+            font-size: 0.9rem;
+        }
+        .main-sem-header-right { grid-column: 2; grid-row: 1; }
+    }
+
+    /* Bottom buttons: Validate left; Clear Grades + Generate POS right */
+    #pos-action-buttons {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+    #pos-action-buttons .pos-actions-right {
+        display: flex;
+        gap: 0.5rem;
+        flex-shrink: 0;
+    }
+    .pos-gear-btn {
+        width: 2.1rem;
+        height: 2.1rem;
+        padding: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    /* Bottom buttons: compact + short labels on mobile so all fit one row */
+    #pos-action-buttons .pos-action-btn-text-short { display: none; }
+    @media (max-width: 575.98px) {
+        #pos-action-buttons { flex-wrap: nowrap; gap: 0.45rem; }
+        #pos-action-buttons .pos-actions-right { gap: 0.45rem; }
+        /* Mobile: slightly enlarged gear + Generate POS vs desktop (not as large as prior pass). */
+        #pos-action-buttons .pos-gear-btn {
+            width: 2.35rem;
+            height: 2.35rem;
+            min-width: 2.35rem;
+            min-height: 2.35rem;
+            padding: 0;
+        }
+        #pos-action-buttons .pos-gear-btn .bi {
+            font-size: 1.05rem;
+            line-height: 1;
+        }
+        #pos-action-buttons #generatePosBtn {
+            font-size: 0.9rem;
+            font-weight: 600;
+            padding: 0.45rem 0.85rem;
+            min-width: 7.75rem;
+            line-height: 1.25;
+            white-space: nowrap;
+        }
+        #pos-action-buttons .pos-action-btn-text-full { display: inline; }
+        #pos-action-buttons .pos-action-btn-text-short { display: none; }
+    }
+    /* Mobile: make header + Academic Term smaller on Generate POS */
+    @media (max-width: 575.98px) {
+        .generate-page-header h1.h5 {
+            font-size: 1rem;
+        }
+        .generate-page-header p.text-muted {
+            font-size: 0.8rem;
+        }
+        .generate-academic-term .small,
+        .generate-academic-term .fw-semibold {
+            font-size: 0.8rem !important;
+        }
+    }
+    @media (max-width: 380px) {
+        #pos-action-buttons .pos-gear-btn {
+            width: 2.2rem;
+            height: 2.2rem;
+            min-width: 2.2rem;
+            min-height: 2.2rem;
+        }
+        #pos-action-buttons .pos-gear-btn .bi { font-size: 0.98rem; }
+        #pos-action-buttons #generatePosBtn {
+            font-size: 0.85rem;
+            padding: 0.42rem 0.72rem;
+            min-width: 7.1rem;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="mb-3 d-flex justify-content-between align-items-start generate-page-header">
+    <div>
+        <h1 class="h5 mb-1">Generate Program of Study</h1>
+        <p class="text-muted mb-0">
+            Review your current academic profile and specify grades for enrolled courses.
+        </p>
+    </div>
+    <div class="text-end generate-academic-term">
+        <div class="small text-muted text-uppercase">Academic Term</div>
+        <div class="fw-semibold">{{ session_academic_year|default:"—" }}{% if session_semester %} · {{ session_semester }}{% endif %}</div>
+    </div>
+</div>
+
+<div class="pos-card p-4 mb-4 pos-student-profile-card-bg">
+    <div class="pos-student-profile-inner">
+    <div class="d-flex justify-content-between align-items-start mb-3">
+        <div>
+            <div class="pos-section-title mb-1">Student Profile</div>
+        </div>
+        <div class="fw-semibold text-muted">{% now "F d, Y" %}</div>
+    </div>
+
+    <div class="d-flex align-items-start gap-3 pos-student-profile-row">
+        <div class="generate-photo-box flex-shrink-0">
+            {% if student.profile_photo %}
+            <img src="{{ student.profile_photo.url }}" alt="Student photo">
+            {% else %}
+            <span class="photo-placeholder">Photo</span>
+            {% endif %}
+        </div>
+        <div class="pos-student-profile-scroll flex-grow-1">
+        <div class="row small pos-student-profile-details">
+            <div class="col-4 mb-2">
+                <div class="mb-1">
+                    <div class="text-muted text-uppercase">Student Name</div>
+                    <div class="fw-semibold">{{ student.full_name|default:"—"|upper }}</div>
+                </div>
+                <div>
+                    <div class="text-muted text-uppercase">SR-Code</div>
+                    <div class="fw-semibold">{{ student.sr_code|default:"—" }}</div>
+                </div>
+            </div>
+            <div class="col-4 mb-2">
+                <div class="mb-1">
+                    <div class="text-muted text-uppercase">Year Level</div>
+                    <div class="fw-semibold">{{ student.year_level|default:"—" }}</div>
+                </div>
+                <div>
+                    <div class="text-muted text-uppercase">Program</div>
+                    <div class="fw-semibold">BS Computer Engineering</div>
+                </div>
+            </div>
+            <div class="col-4 mb-2">
+                <div class="mb-1">
+                    <div class="text-muted text-uppercase">Curriculum</div>
+                    <div class="fw-semibold text-nowrap">BSCpE Curriculum 2025-2026</div>
+                </div>
+                <div>
+                    <div class="text-muted text-uppercase">Campus</div>
+                    <div class="fw-semibold">Alangilan Campus</div>
+                </div>
+            </div>
+        </div>
+        </div>
+    </div>
+    </div>
+</div>
+
+{{ curriculum_sections|json_script:"curriculum-data" }}
+{{ picker_available_by_section|json_script:"picker-available-by-section" }}
+
+{% if not is_regular %}
+<div class="pos-card p-4 mb-4" id="current-semester-card">
+    <div class="pos-section-title mb-2">Program Configuration</div>
+    <p class="small text-muted mb-3 text-justify">
+        Set your <strong>Last Semester Enrolled</strong> and optional <strong>First Failed Semester</strong>.
+        The course tables below are built from these settings.
+    </p>
+    <div class="row g-3 align-items-end">
+        <div class="col-md-4">
+            <label class="form-label small text-uppercase text-muted pos-label-with-info" for="irreg-current-sem">
+                LAST SEMESTER ENROLLED
+                <button
+                    type="button"
+                    class="btn pos-info-btn"
+                    data-pos-info="popover"
+                    data-bs-toggle="popover"
+                    data-bs-trigger="click"
+                    data-bs-placement="right"
+                    data-bs-custom-class="pos-info-popover"
+                    data-bs-content="Choose the most recent semester you finished. Only semesters up to this point are included for grade input."
+                    aria-label="Last Semester Enrolled info"
+                >i</button>
+            </label>
+            <select class="form-select form-select-sm" id="irreg-current-sem">
+                <option value="" {% if irreg_current_unset %}selected{% endif %}>- Select Semester -</option>
+                {% for sec in curriculum_sections_dropdown %}
+                <option value="{{ forloop.counter0 }}" {% if not irreg_current_unset and irreg_current_sem == forloop.counter0 %}selected{% endif %}>{{ sec.label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-4">
+            <label class="form-label small text-uppercase text-muted pos-label-with-info" for="irreg-start-sem">
+                FIRST FAILED SEMESTER
+                <button
+                    type="button"
+                    class="btn pos-info-btn"
+                    data-pos-info="popover"
+                    data-bs-toggle="popover"
+                    data-bs-trigger="click"
+                    data-bs-placement="right"
+                    data-bs-custom-class="pos-info-popover"
+                    data-bs-content="Optional. The first semester where you failed at least one course. If you leave this blank, the system uses Last Semester Enrolled for this setting."
+                    aria-label="First Failed Semester info"
+                >i</button>
+            </label>
+            <select class="form-select form-select-sm" id="irreg-start-sem">
+                <option value="" {% if irreg_start_unset %}selected{% endif %}>- Select Semester -</option>
+                {% for sec in curriculum_sections_dropdown %}
+                <option value="{{ forloop.counter0 }}" {% if not irreg_start_unset and irreg_start_index == forloop.counter0 %}selected{% endif %}>{{ sec.label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-2">
+            <button type="button" class="btn btn-sm btn-primary w-100" id="irreg-ok-btn">OK</button>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% if is_regular %}
+<div class="pos-card p-4 mb-4" id="regular-path-card">
+    <div class="pos-section-title mb-2">Regular Path</div>
+    <p class="small text-muted mb-3 text-justify">
+        Choose the last semester you have finished, then click OK.
+        Curriculum courses up to that semester will be listed below.
+    </p>
+    <div class="regular-semester-row row g-3 align-items-end">
+        <!-- 1st column: current semester -->
+        <div class="col-md-3 col-12">
+            <label class="form-label small text-uppercase text-muted pos-label-with-info" for="regular-current-semester">
+                LAST SEMESTER ENROLLED
+                <button
+                    type="button"
+                    class="btn pos-info-btn"
+                    data-pos-info="popover"
+                    data-bs-toggle="popover"
+                    data-bs-trigger="click"
+                    data-bs-placement="right"
+                    data-bs-custom-class="pos-info-popover"
+                    data-bs-content="Choose the most recent semester you finished. Only semesters up to this point are included for grade input."
+                    aria-label="Last Semester Enrolled info"
+                >i</button>
+            </label>
+            <select class="form-select form-select-sm" id="regular-current-semester">
+                <option value="" {% if current_semester_index is none or current_semester_index < 0 %}selected{% endif %}>- Select Semester -</option>
+                {% for value, label in current_semester_choices_regular %}
+                <option value="{{ value }}" {% if current_semester_index == value %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <!-- 3rd column: OK button -->
+        <div class="col-md-2 col-12">
+            <button type="button" class="btn btn-sm btn-primary w-100 regular-ok-btn" id="regular-semester-ok-btn">
+                OK
+            </button>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<div class="modal" id="irregular-add-modal" tabindex="-1" aria-labelledby="irregular-add-modal-label" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="irregular-add-modal-label">Add courses</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <p class="small text-muted mb-0">Select Courses to Take.</p>
+                    <div class="form-check form-check-sm">
+                        <input class="form-check-input" type="checkbox" id="irregular-select-all">
+                        <label class="form-check-label small" for="irregular-select-all">Deselect all</label>
+                    </div>
+                </div>
+                <div class="mb-2">
+                    <div class="input-group input-group-sm" style="max-width: 220px;">
+                        <input
+                            type="text"
+                            class="form-control"
+                            id="irregular-modal-search"
+                            placeholder="Search Course Code"
+                            style="border-color:#000 !important; box-shadow:none;"
+                            onfocus="this.style.borderColor='#000';"
+                            onblur="this.style.borderColor='#000';"
+                        >
+                        <button
+                            class="btn btn-outline-primary"
+                            type="button"
+                            id="irregular-modal-clear-search"
+                            style="border-color:#000; color:#000; background-color:transparent;"
+                            onmouseover="this.style.backgroundColor='#e9ecef'; this.style.borderColor='#000'; this.style.color='#000';"
+                            onmouseout="this.style.backgroundColor='transparent'; this.style.borderColor='#000'; this.style.color='#000';"
+                        >Clear</button>
+                    </div>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle table-bordered mb-0 irregular-picker-table" id="irregular-modal-picker-table">
+                        <thead class="table-light">
+                            <tr class="text-center">
+                                <th rowspan="2" style="width:8%">Course Code</th>
+                                <th rowspan="2" style="width:30%">Course Title</th>
+                                <th rowspan="2" style="width:4%">Units</th>
+                                <th colspan="2" class="hours-header" style="width:6%">No. of hour/s</th>
+                                <th rowspan="2" style="width:13%">Pre-requisite(s)</th>
+                                <th rowspan="2" style="width:13%">Co-requisite(s)</th>
+                            </tr>
+                            <tr class="text-center">
+                                <th style="width:4%">Lec</th>
+                                <th style="width:4%">Lab</th>
+                            </tr>
+                        </thead>
+                        <tbody id="irregular-modal-picker-tbody"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="irregular-modal-add-btn">Add selected to my POS</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit semester modal (irregular path) -->
+<div class="modal" id="irreg-edit-modal" tabindex="-1" aria-labelledby="irreg-edit-modal-label" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="irreg-edit-modal-label">Edit semester</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle table-bordered mb-0">
+                        <thead class="table-light">
+                            <tr class="text-center">
+                                <th rowspan="2" style="width:8%">Course Code</th>
+                                <th rowspan="2" style="width:24%">Course Title</th>
+                                <th rowspan="2" style="width:4%">Units</th>
+                                <th colspan="2" class="hours-header" style="width:6%">No. of hour/s</th>
+                                <th rowspan="2" style="width:11%">Pre-requisite(s)</th>
+                                <th rowspan="2" style="width:11%">Co-requisite(s)</th>
+                                <th rowspan="2" class="irreg-edit-grade-col" style="width:8%">Grade</th>
+                                <th rowspan="2" style="width:4%"></th>
+                            </tr>
+                            <tr class="text-center">
+                                <th style="width:4%">Lec</th>
+                                <th style="width:4%">Lab</th>
+                            </tr>
+                        </thead>
+                        <tbody id="irreg-edit-tbody"></tbody>
+                    </table>
+                </div>
+                <button type="button" class="btn btn-sm btn-outline-primary mt-2" id="irreg-edit-add-course-btn">+ Add course</button>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="irreg-edit-save-btn">Save changes</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="pos-card p-4" id="course-list-by-semester-card">
+    <div class="mb-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div class="pos-section-title mb-0">Course List by Semester</div>
+    </div>
+
+    {% if pos_reload_banner %}
+    <div class="alert alert-warning py-2 mb-3 small">
+        You loaded a saved POS. Choose <strong>LAST SEMESTER ENROLLED</strong> and click <strong>OK</strong> before generating again.
+    </div>
+    {% endif %}
+
+    {% if not is_regular and not semester_tables_visible %}
+    <div class="alert alert-info py-3 mb-3">
+        <strong>Select your semester to continue.</strong> Choose your <strong>Last Semester Enrolled</strong> (and <strong>First Failed Semester</strong> if it applies), then click <strong>OK</strong> to load your course tables and add grades.
+    </div>
+    {% endif %}
+
+{% for item in display_sections %}
+    <div class="mb-4 main-sem" id="main-sem-{{ item.section_index }}" data-section-index="{{ item.section_index }}" data-curriculum-locked="{{ item.is_curriculum_locked|yesno:"true,false" }}"{% if is_regular and not item.courses_with_grades %} style="display:none;"{% endif %}>
+        <div class="main-sem-header d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+            <div class="main-sem-header-left d-flex align-items-center">
+                {% if not is_regular and not item.is_curriculum_locked %}
+                <button type="button" class="btn btn-sm btn-outline-primary" data-section-index="{{ item.section_index }}">+ Add courses</button>
+                {% endif %}
+            </div>
+            <h6 class="main-sem-title fw-bold mb-0 text-center">{{ item.section.label }}</h6>
+            <div class="main-sem-header-right d-flex align-items-center justify-content-end">
+                {% if not is_regular %}
+                <button type="button" class="btn btn-sm btn-outline-secondary irreg-edit-section-btn irreg-edit-hidden" data-section-index="{{ item.section_index }}" title="Edit this semester">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                </button>
+                {% endif %}
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle table-bordered mb-0">
+                <colgroup>
+                    <col style="width:8%;">   <!-- Code -->
+                    <col style="width:34%;">  <!-- Title (slightly longer) -->
+                    <col style="width:4%;">   <!-- Units -->
+                    <col style="width:3%;">   <!-- Lec -->
+                    <col style="width:3%;">   <!-- Lab -->
+                    <col style="width:12%;">  <!-- Pre-req -->
+                    <col style="width:12%;">  <!-- Co-req -->
+                    <col style="width:8%;">   <!-- Grade -->
+                </colgroup>
+                <thead class="table-light">
+                    <tr class="text-center">
+                        <th rowspan="2" style="width: 8%;">Course Code</th>
+                        <th rowspan="2" style="width: 30%;">Course Title</th>
+                        <th rowspan="2" style="width: 4%;">Units</th>
+                        <th colspan="2" class="hours-header" style="width: 6%;">No. of hour/s</th>
+                        <th rowspan="2" style="width: 13%;">Pre-requisite(s)</th>
+                        <th rowspan="2" style="width: 13%;">Co-requisite(s)</th>
+                        <th rowspan="2" class="grade-col-header" style="width: 7%; min-width: 4.5rem;">Grade</th>
+                    </tr>
+                    <tr class="text-center">
+                        <th style="width: 4%;">Lec</th>
+                        <th style="width: 4%;">Lab</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for cg in item.courses_with_grades %}
+                    <tr data-course-code="{{ cg.course.code }}" data-units="{{ cg.course.units|floatformat:'0' }}">
+                        <td class="{% if cg.course.display_code|default:cg.course.code != cg.course.code %}elective-course-cell text-start{% else %}text-center{% endif %}">{{ cg.course.display_code|default:cg.course.code }}</td>
+                        <td class="course-title-cell">{{ cg.course.title }}</td>
+                        <td class="text-center">{{ cg.course.units|floatformat:"0" }}</td>
+                        <td class="text-center">{{ cg.course.lec }}</td>
+                        <td class="text-center">{{ cg.course.lab }}</td>
+                        <td class="small text-muted text-center">{{ cg.course.prereq|default:"" }}</td>
+                        <td class="small text-muted text-center">{{ cg.course.coreq|default:"" }}</td>
+                        <td>
+                            <select class="form-select form-select-sm grade-select" data-course-code="{{ cg.course.code }}">
+                                <option value="" {% if not cg.grade %}selected{% endif %}></option>
+                                <option value="1.00" {% if cg.grade == '1.00' %}selected{% endif %}>1.00</option>
+                                <option value="1.25" {% if cg.grade == '1.25' %}selected{% endif %}>1.25</option>
+                                <option value="1.50" {% if cg.grade == '1.50' %}selected{% endif %}>1.50</option>
+                                <option value="1.75" {% if cg.grade == '1.75' %}selected{% endif %}>1.75</option>
+                                <option value="2.00" {% if cg.grade == '2.00' %}selected{% endif %}>2.00</option>
+                                <option value="2.25" {% if cg.grade == '2.25' %}selected{% endif %}>2.25</option>
+                                <option value="2.50" {% if cg.grade == '2.50' %}selected{% endif %}>2.50</option>
+                                <option value="2.75" {% if cg.grade == '2.75' %}selected{% endif %}>2.75</option>
+                                <option value="3.00" {% if cg.grade == '3.00' %}selected{% endif %}>3.00</option>
+                                <option value="5.00" {% if cg.grade == '5.00' %}selected{% endif %}>5.00</option>
+                            </select>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot class="table-light">
+                    <tr>
+                        <th class="total-left-cell">&nbsp;</th>
+                        <th class="text-end">Total Units</th>
+                        <th class="text-center" id="total-units-sem-{{ item.section_index }}">{{ item.total_units|default:0|floatformat:"0" }}</th>
+                        {% if not is_regular %}
+                        <th colspan="4"></th>
+                        <th class="text-center">
+                            <button type="button" class="btn btn-sm btn-outline-success irreg-check-section-btn p-1" data-section-index="{{ item.section_index }}" title="Save &amp; lock this semester">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                            </button>
+                        </th>
+                        {% else %}
+                        <th colspan="5"></th>
+                        {% endif %}
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+{% endfor %}
+
+
+
+    <div class="mt-4" id="pos-action-buttons" {% if not semester_tables_visible %}style="display:none;"{% endif %}>
+        <div class="d-flex align-items-center gap-2">
+            <div class="dropdown">
+                <button type="button" class="btn btn-outline-secondary btn-sm pos-gear-btn" data-bs-toggle="dropdown" aria-expanded="false" title="Options" aria-label="Options">
+                    <i class="bi bi-gear"></i>
+                </button>
+                <ul class="dropdown-menu">
+                    <li><button type="button" class="dropdown-item" id="clearGradesMenuItem">Clear Grades</button></li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li><button type="button" class="dropdown-item text-danger" id="deletePosMenuItem">POS Delete</button></li>
+                </ul>
+            </div>
+
+        </div>
+
+        <div class="pos-actions-right">
+            <button type="button" class="btn btn-danger" id="generatePosBtn">
+                <span class="pos-action-btn-text-full">Generate POS</span>
+                <span class="pos-action-btn-text-short">Generate</span>
+            </button>
+        </div>
+    </div>
+
+    <div id="generate-loading-overlay" aria-hidden="true">
+        <div class="generate-loading-card" role="status" aria-live="polite" aria-label="Generating POS">
+            <div class="generate-loading-gif-wrap" aria-hidden="true">
+                <img class="generate-loading-gif" src="{% static 'img/paper_pen.gif' %}" alt="Generating animation">
+            </div>
+            <div class="generate-loading-title">Generating Program of Study...</div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+{{ saved_only|json_script:"pos-saved-grades" }}
+{{ pos_config|json_script:"pos-config" }}
+<script>
+    var GRADE_OPTIONS = ['', '1.00', '1.25', '1.50', '1.75', '2.00', '2.25', '2.50', '2.75', '3.00', '5.00'];
+
+    var gradeMenuPopup = null;
+    var gradeMenuBackdrop = null;
+    var currentGradeSelect = null;
+    var genericMenuPopup = null;
+    var genericCurrentSelect = null;
+
+    function getGradeLabel(value) {
+        return value && value.trim() ? value.trim() : '';
+    }
+
+    function asWholeUnits(value) {
+        var n = Number(value);
+        if (!isNaN(n)) return String(Math.round(n));
+        return String(value == null ? '' : value).replace(/\.0+$/, '');
+    }
+
+    function setGenerateLoading(isOpen) {
+        var overlay = document.getElementById('generate-loading-overlay');
+        var btn = document.getElementById('generatePosBtn');
+        if (overlay) {
+            overlay.classList.toggle('is-open', !!isOpen);
+            overlay.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
+        }
+        if (btn) btn.disabled = !!isOpen;
+    }
+
+    function ensureGradeMenuElements() {
+        if (!gradeMenuPopup) {
+            gradeMenuPopup = document.createElement('div');
+            gradeMenuPopup.id = 'grade-menu-popup';
+            document.body.appendChild(gradeMenuPopup);
+        }
+        if (!gradeMenuBackdrop) {
+            gradeMenuBackdrop = document.createElement('div');
+            gradeMenuBackdrop.id = 'grade-menu-backdrop';
+            gradeMenuBackdrop.addEventListener('click', function() {
+                closeGradeMenu();
+                closeGenericMenu();
+            });
+            document.body.appendChild(gradeMenuBackdrop);
+        }
+        if (!genericMenuPopup) {
+            genericMenuPopup = document.createElement('div');
+            genericMenuPopup.id = 'pos-select-menu-popup';
+            genericMenuPopup.className = 'position-absolute bg-white border rounded shadow-sm';
+            genericMenuPopup.style.zIndex = '1055';
+            genericMenuPopup.style.minWidth = '8rem';
+            genericMenuPopup.style.maxHeight = '240px';
+            genericMenuPopup.style.overflowY = 'auto';
+            genericMenuPopup.style.display = 'none';
+            genericMenuPopup.style.padding = '0.25rem 0';
+            document.body.appendChild(genericMenuPopup);
+        }
+    }
+
+    function openGradeMenuForSelect(selectEl, anchorButton) {
+        if (!selectEl || !anchorButton) return;
+        ensureGradeMenuElements();
+        currentGradeSelect = selectEl;
+
+        gradeMenuPopup.innerHTML = '';
+        var currentVal = (selectEl.value || '').trim();
+        GRADE_OPTIONS.forEach(function(opt) {
+            var label = opt ? opt : '__';
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.textContent = label;
+            if (!opt) btn.style.color = '#aaa';
+            if (opt === currentVal || (!opt && !currentVal)) {
+                btn.classList.add('fw-semibold');
+            }
+            btn.addEventListener('click', function() {
+                if (!currentGradeSelect) return;
+                currentGradeSelect.value = opt;
+                var ev = new Event('change', { bubbles: true });
+                currentGradeSelect.dispatchEvent(ev);
+                var cell = currentGradeSelect.closest('.grade-cell');
+                if (cell) {
+                    var displayBtn = cell.querySelector('.grade-display-btn');
+                    if (displayBtn) {
+                        var txt = getGradeLabel(opt);
+                        displayBtn.textContent = txt;
+                        displayBtn.classList.toggle('has-grade', !!txt);
+                    }
+                }
+                closeGradeMenu();
+            });
+            gradeMenuPopup.appendChild(btn);
+        });
+
+        var rect = anchorButton.getBoundingClientRect();
+        var popupWidth = Math.max(gradeMenuPopup.offsetWidth || 0, rect.width);
+        gradeMenuPopup.style.minWidth = popupWidth + 'px';
+
+        var top = rect.bottom + window.scrollY + 4;
+        var left = rect.left + window.scrollX;
+        gradeMenuPopup.style.top = top + 'px';
+        gradeMenuPopup.style.left = left + 'px';
+
+        gradeMenuBackdrop.style.display = 'block';
+        gradeMenuPopup.style.display = 'block';
+    }
+
+    function closeGradeMenu() {
+        if (gradeMenuPopup) gradeMenuPopup.style.display = 'none';
+        if (gradeMenuBackdrop) gradeMenuBackdrop.style.display = 'none';
+        currentGradeSelect = null;
+    }
+
+    function closeGenericMenu() {
+        if (genericMenuPopup) genericMenuPopup.style.display = 'none';
+        if (gradeMenuBackdrop) gradeMenuBackdrop.style.display = 'none';
+        genericCurrentSelect = null;
+    }
+
+    function initGradeSelectVisual(selectEl) {
+        if (!selectEl) return;
+        if (selectEl.closest('.grade-cell')) return;
+        var td = selectEl.closest('td');
+        if (!td) return;
+        var container = document.createElement('div');
+        container.className = 'grade-cell';
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn btn-sm btn-outline-secondary grade-display-btn';
+        var initialTxt = getGradeLabel(selectEl.value || '');
+        btn.textContent = initialTxt;
+        btn.classList.toggle('has-grade', !!initialTxt);
+        btn.addEventListener('click', function() {
+            if (selectEl.disabled) return;
+            openGradeMenuForSelect(selectEl, btn);
+        });
+        td.replaceChild(container, selectEl);
+        container.appendChild(btn);
+        container.appendChild(selectEl);
+    }
+
+    function initGradeDropdowns(root) {
+        var scope = root || document;
+        var selects = scope.querySelectorAll('.grade-select, .edit-grade-select');
+        selects.forEach(function(sel) {
+            initGradeSelectVisual(sel);
+        });
+        ensureGradeMenuElements();
+    }
+
+    function initPosSelectVisual(selectEl) {
+        if (!selectEl) return;
+        if (selectEl.closest('.pos-select-cell')) return;
+        var wrapper = document.createElement('div');
+        wrapper.className = 'pos-select-cell';
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn btn-sm btn-outline-secondary pos-select-display-btn';
+        var selectedOption = selectEl.options[selectEl.selectedIndex];
+        var label = (selectedOption && selectedOption.value) ? selectedOption.textContent.trim() : '';
+        btn.textContent = label || '- Select Semester -';
+        if (label) btn.classList.add('has-value');
+        // Only this irregular dropdown should stay black when empty.
+        if (selectEl.id === 'irreg-start-sem') btn.classList.add('irreg-sem-black-empty');
+        btn.addEventListener('click', function() {
+            if (selectEl.disabled) return;
+            openGenericMenuForSelect(selectEl, btn);
+        });
+        var parent = selectEl.parentNode;
+        parent.replaceChild(wrapper, selectEl);
+        wrapper.appendChild(btn);
+        wrapper.appendChild(selectEl);
+        selectEl.style.position = 'absolute';
+        selectEl.style.opacity = '0';
+        selectEl.style.pointerEvents = 'none';
+        selectEl.style.width = '0';
+        selectEl.style.height = '0';
+        selectEl.style.padding = '0';
+        selectEl.style.margin = '0';
+    }
+
+    function openGenericMenuForSelect(selectEl, anchorButton) {
+        if (!selectEl || !anchorButton) return;
+        ensureGradeMenuElements();
+        genericCurrentSelect = selectEl;
+        genericMenuPopup.innerHTML = '';
+        for (var i = 0; i < selectEl.options.length; i++) {
+            (function(opt) {
+                var btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'dropdown-item small';
+                btn.textContent = opt.textContent;
+                if (!opt.value) btn.style.color = '#aaa';
+                if (opt.selected) btn.classList.add('fw-semibold');
+                btn.addEventListener('click', function() {
+                    if (!genericCurrentSelect) return;
+                    genericCurrentSelect.value = opt.value;
+                    var ev = new Event('change', { bubbles: true });
+                    genericCurrentSelect.dispatchEvent(ev);
+                    var cell = genericCurrentSelect.closest('.pos-select-cell');
+                    if (cell) {
+                        var displayBtn = cell.querySelector('.pos-select-display-btn');
+                        if (displayBtn) {
+                            var txt = opt.value ? opt.textContent.trim() : '';
+                            displayBtn.textContent = txt || '- Select Semester -';
+                            displayBtn.classList.toggle('has-value', !!txt);
+                        }
+                    }
+                    closeGenericMenu();
+                });
+                genericMenuPopup.appendChild(btn);
+            })(selectEl.options[i]);
+        }
+        var rect = anchorButton.getBoundingClientRect();
+        var popupWidth = Math.max(genericMenuPopup.offsetWidth || 0, rect.width);
+        genericMenuPopup.style.minWidth = popupWidth + 'px';
+        genericMenuPopup.style.top = (rect.bottom + window.scrollY + 4) + 'px';
+        genericMenuPopup.style.left = (rect.left + window.scrollX) + 'px';
+        gradeMenuBackdrop.style.display = 'block';
+        genericMenuPopup.style.display = 'block';
+    }
+    var posConfig = (function() {
+        var el = document.getElementById('pos-config');
+        return el && el.textContent ? JSON.parse(el.textContent) : { is_regular: false, has_generated_pos: false, irreg_configured: false, pos_reload_pending: false };
+    })();
+    var IS_REGULAR = !!posConfig.is_regular;
+    var HAS_GENERATED_POS = !!posConfig.has_generated_pos;
+    var IRREG_CONFIGURED = IS_REGULAR || posConfig.irreg_configured === true;
+
+    /** Max characters shown in POS error modal (solver / server text); higher = more detail on desktop. */
+    var POS_ERROR_MSG_MAX_LEN = 4500;
+
+    function formatGeneratedPosErrorText(rawMsg, status) {
+        var raw = (rawMsg != null && rawMsg.toString) ? String(rawMsg) : '';
+        raw = raw.trim();
+        if (!raw) raw = 'Unable to generate your Program of Study right now. Please try again in a moment. If this keeps happening, refresh the page or contact support.';
+        var compactMsg = raw;
+        /* Server sends detailed per-semester-table copy; do not replace with legacy one-line 50%/75% blurbs. */
+        if (/this semester table only/i.test(raw) || /graded units in this table/i.test(raw)) {
+            compactMsg = raw;
+        } else if (/four or more failures in the same course/i.test(raw) || /times across the semester tables/i.test(raw)) {
+            compactMsg = raw;
+        } else if (
+            /Probation:/i.test(raw) ||
+            /Failure rate is 75% or higher/i.test(raw) ||
+            /Failure rate is 50% or higher/i.test(raw)
+        ) {
+            /* Solver CP-SAT.py check_probation (unit-based); keep full text, not generic "enrolled units". */
+            compactMsg = raw;
+        } else if (/75%/i.test(raw)) {
+            compactMsg = 'POS cannot be generated automatically because 75% or more of your enrolled units are marked as failed in one or more semesters. Under program rules, automatic generation is not allowed in this situation. Please consult your program adviser for a manual evaluation of your remaining coursework and any required approvals.';
+        } else if (/50%/i.test(raw) || /manual evaluation/i.test(raw) || status === 'probation') {
+            compactMsg = 'Manual evaluation is required before your Program of Study can be finalized, because 50% or more of your enrolled units are marked as failed in one or more semesters. Please consult your program adviser; they will help determine your remaining path, petitions, and any special approvals.';
+        } else if (/missing grade/i.test(raw)) {
+            compactMsg = raw;
+            if (compactMsg.length > POS_ERROR_MSG_MAX_LEN) {
+                compactMsg = compactMsg.slice(0, POS_ERROR_MSG_MAX_LEN).trim() + '...';
+            }
+        } else {
+            compactMsg = raw.trim();
+            if (compactMsg.indexOf('NO VALID SCHEDULE') !== -1 || compactMsg.indexOf('Solver status:') !== -1) {
+                compactMsg = 'Please proceed to manual evaluation. The POS has exceeded the horizon gap. Please refer to the academic adviser to proceed.';
+            }
+            if (compactMsg.length > POS_ERROR_MSG_MAX_LEN) {
+                compactMsg = compactMsg.slice(0, POS_ERROR_MSG_MAX_LEN).trim() + '...';
+            }
+        }
+        return compactMsg;
+    }
+
+    /** Must match server `MAX_FAILED_ATTEMPTS_SAME_COURSE` in pos/views.py */
+    var MAX_FAILED_ATTEMPTS_SAME_COURSE = 4;
+    /** Must match `MIN_GRADED_UNITS_PER_SEMESTER_TABLE_FOR_FAIL_RATIO` in pos/views.py */
+    var MIN_GRADED_UNITS_PER_SEMESTER_TABLE_FOR_FAIL_RATIO = 10;
+
+    function isExplicitFailingGradeForRatio(g) {
+        if (g == null || g === '') return false;
+        var s = String(g).trim();
+        if (!s) return false;
+        if (s === '5' || s === '5.0' || s === '5.00') return true;
+        var f = parseFloat(s);
+        return !isNaN(f) && f >= 5;
+    }
+
+    function lookupCourseTitleFromPageCurriculum(code) {
+        if (!code) return '';
+        try {
+            var el = document.getElementById('curriculum-data');
+            if (!el || !el.textContent) return '';
+            var curriculum = JSON.parse(el.textContent);
+            for (var i = 0; i < curriculum.length; i++) {
+                var courses = (curriculum[i] && curriculum[i].courses) || [];
+                for (var j = 0; j < courses.length; j++) {
+                    if (courses[j].code === code) return (courses[j].title || '').trim();
+                }
+            }
+        } catch (e) {}
+        return '';
+    }
+
+    function explicitFailCountByCourseFromGrades(gradesBySection) {
+        function isFail(g) {
+            if (g == null || g === '') return false;
+            var s = String(g).trim();
+            if (!s) return false;
+            if (s === '5' || s === '5.0' || s === '5.00') return true;
+            var f = parseFloat(s);
+            return !isNaN(f) && f >= 5;
+        }
+        var counts = {};
+        if (!gradesBySection || typeof gradesBySection !== 'object') return counts;
+        Object.keys(gradesBySection).forEach(function(sec) {
+            var sg = gradesBySection[sec];
+            if (!sg || typeof sg !== 'object') return;
+            Object.keys(sg).forEach(function(courseCode) {
+                if (!courseCode) return;
+                if (isFail(sg[courseCode])) counts[courseCode] = (counts[courseCode] || 0) + 1;
+            });
+        });
+        return counts;
+    }
+
+    function messageExcessiveSameCourseFailuresClient(code, count, title) {
+        var titlePart = title ? ' (' + title + ')' : '';
+        return 'You have failed ' + code + titlePart + ' ' + count + ' times across the semester tables you entered. You cannot generate a Program of Study automatically after four or more failures in the same course. Please refer to an academic adviser for assistance.';
+    }
+
+    function getCookie(name) {
+        var match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+        return match ? match[2] : null;
+    }
+
+    function showGeneratedPosErrorPopup(message, status) {
+        var title = (status === 'probation') ? 'POS Generation Requires Manual Evaluation' : 'POS Generation Failed';
+        var text = formatGeneratedPosErrorText(message, status);
+        if (typeof window.showAppSystemErrorModal === 'function') {
+            window.showAppSystemErrorModal(title, text);
+        } else {
+            window.alert(text);
+        }
+    }
+
+    function collectGrades() {
+        const grades = {};
+        document.querySelectorAll('.grade-select').forEach(function(select) {
+            const courseCode = select.getAttribute('data-course-code');
+            const value = select.value;
+            if (courseCode && value) { grades[courseCode] = value; }
+        });
+        return grades;
+    }
+
+    function getServerGradesForMerge() {
+        try {
+            var el = document.getElementById('pos-saved-grades');
+            if (el && el.textContent) return JSON.parse(el.textContent);
+        } catch (e) {}
+        return {};
+    }
+
+    function collectGradesBySection() {
+        var mainSection = document.querySelector('[id^="main-sem-"]');
+        if (!mainSection) return {};
+        var sectionIndex = mainSection.getAttribute('data-section-index');
+        if (sectionIndex === null) return {};
+        var sectionGrades = {};
+        mainSection.querySelectorAll('.grade-select').forEach(function(select) {
+            var code = select.getAttribute('data-course-code');
+            var value = select.value;
+            if (code && value) sectionGrades[code] = value;
+        });
+        var out = {};
+        out[sectionIndex] = sectionGrades;
+        return out;
+    }
+
+    function getGradeFromRow(row) {
+        var sel = row.querySelector('.grade-select');
+        if (sel) return (sel.value || '').trim();
+        var cells = row.querySelectorAll('td');
+        var gradeCell = cells[7];
+        if (!gradeCell) return '';
+        var span = gradeCell.querySelector('span');
+        var t = span ? span.textContent : gradeCell.textContent;
+        t = (t || '').trim();
+        if (t === '—') return '';
+        return t;
+    }
+
+    function collectGradesFromAllSections() {
+        var out = {};
+        document.querySelectorAll('[id^="main-sem-"]').forEach(function(mainDiv) {
+            var sectionIndex = mainDiv.getAttribute('data-section-index');
+            if (sectionIndex === null) return;
+            var sectionGrades = {};
+            mainDiv.querySelectorAll('tbody tr[data-course-code]').forEach(function(row) {
+                var code = row.getAttribute('data-course-code');
+                var value = getGradeFromRow(row);
+                if (code && value) sectionGrades[code] = value;
+            });
+            out[sectionIndex] = sectionGrades;
+        });
+        return out;
+    }
+
+    function mergedGradesForSave() {
+        var base = getServerGradesForMerge();
+        if (typeof base !== 'object' || base === null) base = {};
+        // IMPORTANT: trim server grades to the user-selected "current semester to take".
+        // Otherwise, previously-saved grades from invisible future semester tables would
+        // still be included in the solver payload and saved back to the DB.
+        var cutOffIndex = null;
+        try {
+            if (IS_REGULAR) {
+                var regSel = document.getElementById('regular-current-semester');
+                if (regSel && regSel.value !== '') cutOffIndex = parseInt(regSel.value, 10);
+            } else {
+                var irSel = document.getElementById('irreg-current-sem');
+                if (irSel && irSel.value !== '') cutOffIndex = parseInt(irSel.value, 10);
+            }
+        } catch (e) {}
+        if (cutOffIndex !== null && !isNaN(cutOffIndex)) {
+            Object.keys(base).forEach(function(secKey) {
+                var si = parseInt(secKey, 10);
+                if (!isNaN(si) && si > cutOffIndex) delete base[secKey];
+            });
+        }
+        var fromForm = collectGradesFromAllSections();
+        for (var sec in fromForm) {
+            if (!base[sec]) base[sec] = {};
+            for (var c in fromForm[sec]) base[sec][c] = fromForm[sec][c];
+        }
+        return base;
+    }
+
+    function saveGradesToServer(gradesBySection, done) {
+        if (typeof gradesBySection === 'function') { done = gradesBySection; gradesBySection = {}; }
+        var payload = { grades_by_section: gradesBySection };
+        fetch("{% url 'save_pos_grades' %}", {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken')
+            },
+            body: JSON.stringify(payload),
+            credentials: 'same-origin'
+        }).then(function(r) { return r.json(); }).then(function(data) { if (done) done(data); }).catch(function() { if (done) done({ ok: false }); });
+    }
+
+    var saveToServerTimer = null;
+    function saveGradesToStorage() {
+        var gradesBySection = mergedGradesForSave();
+        localStorage.setItem('posGrades', JSON.stringify(gradesBySection));
+        clearTimeout(saveToServerTimer);
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        function scrollToCourseListCardIfRequested() {
+            var shouldScroll = false;
+            try {
+                shouldScroll = sessionStorage.getItem('posScrollToCourseList') === '1';
+                if (shouldScroll) sessionStorage.removeItem('posScrollToCourseList');
+            } catch (e) {}
+            if (!shouldScroll) return;
+            var card = document.getElementById('course-list-by-semester-card');
+            if (!card) return;
+            setTimeout(function() {
+                card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 60);
+        }
+
+        if (typeof bootstrap !== 'undefined' && bootstrap.Popover) {
+            document.querySelectorAll('[data-pos-info="popover"]').forEach(function(el) {
+                new bootstrap.Popover(el, { container: 'body' });
+            });
+            document.addEventListener('click', function(e) {
+                var trigger = e.target.closest('[data-pos-info="popover"]');
+                var insidePopover = e.target.closest('.popover');
+                if (trigger || insidePopover) return;
+                document.querySelectorAll('[data-pos-info="popover"]').forEach(function(el) {
+                    var pop = bootstrap.Popover.getInstance(el);
+                    if (pop) pop.hide();
+                });
+            });
+        }
+
+        const gradeSelects = document.querySelectorAll('.grade-select');
+        gradeSelects.forEach(function(select) {
+            const row = select.closest('tr');
+            if (row) {
+                const courseCodeCell = row.querySelector('td:first-child');
+                if (courseCodeCell) {
+                    const courseCode = courseCodeCell.textContent.trim();
+                    select.setAttribute('data-course-code', courseCode);
+                }
+            }
+        });
+
+        var bySection = {};
+        try {
+            var el = document.getElementById('pos-saved-grades');
+            if (el && el.textContent) { bySection = JSON.parse(el.textContent); }
+        } catch (e) {}
+        document.querySelectorAll('[id^="main-sem-"]').forEach(function(mainSection) {
+            var sectionIndex = mainSection.getAttribute('data-section-index');
+            var sectionGrades = (sectionIndex !== null) ? (bySection[sectionIndex] || bySection[String(sectionIndex)] || {}) : {};
+            mainSection.querySelectorAll('.grade-select').forEach(function(select) {
+                var courseCode = select.getAttribute('data-course-code');
+                if (courseCode && sectionGrades[courseCode]) {
+                    select.value = sectionGrades[courseCode];
+                }
+                var cell = select.closest('.grade-cell');
+                if (cell) {
+                    var displayBtn = cell.querySelector('.grade-display-btn');
+                    if (displayBtn) {
+                        var txt = getGradeLabel(select.value || '');
+                        displayBtn.textContent = txt;
+                        displayBtn.classList.toggle('has-grade', !!txt);
+                    }
+                }
+            });
+        });
+
+        gradeSelects.forEach(function(select) {
+            select.addEventListener('change', saveGradesToStorage);
+        });
+
+        initGradeDropdowns(document);
+        // Custom dropdowns for irregular & regular path selects
+        ['irreg-current-sem', 'irreg-start-sem', 'regular-current-semester'].forEach(function(id) {
+            var sel = document.getElementById(id);
+            if (sel) initPosSelectVisual(sel);
+        });
+
+        // Regular path: apply semester only when OK is clicked (dropdown is not hyperlinked)
+        if (IS_REGULAR) {
+            var regSelect = document.getElementById('regular-current-semester');
+            var regOkBtn = document.getElementById('regular-semester-ok-btn');
+            if (regSelect && regOkBtn) {
+                regOkBtn.addEventListener('click', function() {
+                    var v = regSelect.value;
+                    var url = new URL(window.location.href);
+                    if (v !== '') {
+                        url.searchParams.set('section', v);
+                    } else {
+                        url.searchParams.delete('section');
+                    }
+                    try { sessionStorage.setItem('posScrollToCourseList', '1'); } catch (e) {}
+                    window.location.href = url.toString();
+                });
+            }
+        }
+
+        scrollToCourseListCardIfRequested();
+    });
+
+    function clearAllGradesUIAndStorage() {
+        var gradesToKeep = {};
+        var sections = document.querySelectorAll('[id^="main-sem-"]');
+        sections.forEach(function(mainSection) {
+            var sectionIndex = mainSection.getAttribute('data-section-index');
+            if (sectionIndex === null) return;
+            mainSection.querySelectorAll('.grade-select').forEach(function(select) {
+                select.selectedIndex = 0;
+                var cell = select.closest('.grade-cell');
+                if (cell) {
+                    var displayBtn = cell.querySelector('.grade-display-btn');
+                    if (displayBtn) {
+                        displayBtn.textContent = '';
+                        displayBtn.classList.remove('has-grade');
+                    }
+                }
+            });
+            gradesToKeep[sectionIndex] = {};
+        });
+        localStorage.setItem('posGrades', JSON.stringify(gradesToKeep));
+    }
+
+    var clearMenuItem = document.getElementById('clearGradesMenuItem');
+    if (clearMenuItem) {
+        clearMenuItem.addEventListener('click', function() {
+            clearAllGradesUIAndStorage();
+        });
+    }
+
+    var deleteMenuItem = document.getElementById('deletePosMenuItem');
+    if (deleteMenuItem) {
+        deleteMenuItem.addEventListener('click', function() {
+            var deleteMsg = 'Are you sure you want to delete <strong>all</strong> courses and grades from your current POS? This will reset Generate/Preview back to no input, but will <strong>not</strong> delete your History records.';
+            function runDeletePos(closeModal) {
+                if (typeof window.setAppSystemConfirmBusy === 'function') {
+                    window.setAppSystemConfirmBusy(true, 'Deleting...');
+                }
+                fetch("{% url 'delete_pos_data' %}", {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+                    body: JSON.stringify({}),
+                    credentials: 'same-origin'
+                }).then(function(r) { return r.json(); }).then(function(data) {
+                    if (typeof window.setAppSystemConfirmBusy === 'function') {
+                        window.setAppSystemConfirmBusy(false);
+                    }
+                    if (!data || !data.ok) {
+                        showGeneratedPosErrorPopup('We could not delete your POS data on the server. Check your internet connection, wait a moment, and try again. If the problem continues, refresh the page or sign in again before retrying.', 'infeasible');
+                        return;
+                    }
+                    if (typeof closeModal === 'function') closeModal();
+                    try { localStorage.removeItem('posGrades'); } catch (e) {}
+                    try { localStorage.removeItem('posCurrentSemIndex'); } catch (e) {}
+                    try { sessionStorage.removeItem('posGeneratedResponse'); } catch (e) {}
+                    try { localStorage.setItem('posDeleted', '1'); } catch (e) {}
+                    window.location.href = window.location.pathname;
+                }).catch(function() {
+                    if (typeof window.setAppSystemConfirmBusy === 'function') {
+                        window.setAppSystemConfirmBusy(false);
+                    }
+                    showGeneratedPosErrorPopup('We could not delete your POS data on the server. Check your internet connection, wait a moment, and try again. If the problem continues, refresh the page or sign in again before retrying.', 'infeasible');
+                });
+            }
+            if (typeof window.showAppSystemConfirmModal !== 'function') {
+                if (window.confirm(deleteMsg.replace(/<[^>]+>/g, ''))) {
+                    runDeletePos(null);
+                }
+                return;
+            }
+            window.showAppSystemConfirmModal({
+                title: 'Delete POS data?',
+                message: deleteMsg,
+                html: true,
+                primaryText: 'Delete',
+                secondaryText: 'Cancel',
+                primaryVariant: 'danger',
+                onPrimary: function(close) {
+                    runDeletePos(close);
+                },
+                onSecondary: function(close) {
+                    close();
+                }
+            });
+        });
+    }
+
+    // (Removed) Add Existing Grades (PDF upload/extract)
+
+    function validateCurrentSectionForGenerate() {
+        var sections = document.querySelectorAll('[id^="main-sem-"]');
+        for (var s = 0; s < sections.length; s++) {
+            var mainSection = sections[s];
+            var tbody = mainSection.querySelector('tbody');
+            if (!tbody) continue;
+            var rows = tbody.querySelectorAll('tr[data-course-code][data-units]');
+            var totalUnits = 0;
+            var failedUnits = 0;
+            for (var i = 0; i < rows.length; i++) {
+                var row = rows[i];
+                var units = parseInt(row.getAttribute('data-units'), 10) || 0;
+                var grade = getGradeFromRow(row);
+                if (!grade) {
+                    var label = mainSection.querySelector('h6');
+                    var sec = label ? label.textContent.trim() : 'this section';
+                    return { ok: false, message: 'Missing grade in ' + sec + '. Every listed course must have a grade selected before POS can be generated. Open the grade control for each row and choose the correct grade, then try Generate POS again.' };
+                }
+                totalUnits += units;
+                if (isExplicitFailingGradeForRatio(grade)) failedUnits += units;
+            }
+            // 50% / 75%: each semester table separately; skip if this table's graded units < minimum.
+            if (totalUnits >= MIN_GRADED_UNITS_PER_SEMESTER_TABLE_FOR_FAIL_RATIO) {
+                var ratio = failedUnits / totalUnits;
+                if (ratio >= 0.75) return { ok: false, message: '75%+ units failed. POS cannot be generated.' };
+                if (ratio >= 0.50) return { ok: false, message: "50%+ units failed. Manual evaluation required." };
+            }
+        }
+        return { ok: true };
+    }
+
+    function validateAllSectionsForGenerate() {
+        var sections = document.querySelectorAll('[id^="main-sem-"]');
+        for (var s = 0; s < sections.length; s++) {
+            var mainSection = sections[s];
+            // Hidden sections shouldn't block generation.
+            if (window.getComputedStyle(mainSection).display === 'none') continue;
+
+            var curriculumLocked = (mainSection.getAttribute('data-curriculum-locked') || '').toLowerCase() === 'true';
+            var tbody = mainSection.querySelector('tbody');
+            if (!tbody) continue;
+            var rows = tbody.querySelectorAll('tr[data-course-code][data-units]');
+            // For irregular "add-course" (unlocked) semesters, an empty table means the user never added courses
+            // for that semester. Block generation with a friendly message.
+            if (!curriculumLocked && rows.length === 0) {
+                var label = mainSection.querySelector('h6');
+                var sec = label && label.textContent ? label.textContent.trim() : 'the open semester';
+                return { ok: false, message: 'Add at least one course to ' + sec + ' before generating your POS. For irregular paths, each visible semester block must list the courses you took or plan to take; empty tables cannot be scheduled. Use Add courses if needed, fill the table, then try Generate POS again.' };
+            }
+            var totalUnits = 0, failedUnits = 0;
+            for (var i = 0; i < rows.length; i++) {
+                var row = rows[i];
+                var units = parseInt(row.getAttribute('data-units'), 10) || 0;
+                var grade = getGradeFromRow(row);
+                if (!grade) {
+                    var label = mainSection.querySelector('h6');
+                    var sec = label ? label.textContent.trim() : 'this section';
+                    return { ok: false, message: 'Missing grade in ' + sec + '. Every listed course must have a grade selected before POS can be generated. Open the grade control for each row and choose the correct grade, then try Generate POS again.' };
+                }
+                totalUnits += units;
+                if (isExplicitFailingGradeForRatio(grade)) failedUnits += units;
+            }
+            // 50% / 75%: each visible semester table separately; no error if this table's units < minimum.
+            if (totalUnits >= MIN_GRADED_UNITS_PER_SEMESTER_TABLE_FOR_FAIL_RATIO) {
+                var ratio = failedUnits / totalUnits;
+                if (ratio >= 0.75) return { ok: false, message: '75%+ units failed. POS cannot be generated.' };
+                if (ratio >= 0.50) return { ok: false, message: "50%+ units failed. Manual evaluation required." };
+            }
+        }
+        return { ok: true };
+    }
+
+    document.getElementById('generatePosBtn').addEventListener('click', function() {
+        if (!IS_REGULAR && !IRREG_CONFIGURED) {
+            showGeneratedPosErrorPopup('Please select your Last Semester Enrolled before generating your Program of Study. The system uses this to anchor your curriculum progress and build the correct sequence of remaining courses. Choose the term from the dropdown, confirm your grades, then click Generate POS again.', 'infeasible');
+            return;
+        }
+        if (IS_REGULAR) {
+            var regSel = document.getElementById('regular-current-semester');
+            if (!regSel || !regSel.value) {
+                showGeneratedPosErrorPopup('Please select your Last Semester Enrolled before generating your Program of Study. The system uses this to anchor your curriculum progress and build the correct sequence of remaining courses. Choose the term from the dropdown, confirm your grades, then click Generate POS again.', 'infeasible');
+                return;
+            }
+        }
+        var sections = document.querySelectorAll('[id^="main-sem-"]');
+        if (!IS_REGULAR && sections.length === 0) {
+            showGeneratedPosErrorPopup('Please select your Last Semester Enrolled before generating your Program of Study. After you choose it, your course tables will load so you can enter grades. Then click Generate POS again.', 'infeasible');
+            return;
+        }
+        var validation = validateAllSectionsForGenerate();
+        if (!validation.ok) {
+            showGeneratedPosModal({ status: "infeasible", message: validation.message, pos: [] });
+            return;
+        }
+        var gradesBySection = mergedGradesForSave();
+        var failCountsPre = explicitFailCountByCourseFromGrades(gradesBySection);
+        var excessiveCodes = Object.keys(failCountsPre).filter(function(c) {
+            return failCountsPre[c] >= MAX_FAILED_ATTEMPTS_SAME_COURSE;
+        });
+        if (excessiveCodes.length) {
+            excessiveCodes.sort(function(a, b) {
+                var d = failCountsPre[b] - failCountsPre[a];
+                if (d !== 0) return d;
+                return a.localeCompare(b);
+            });
+            var bc = excessiveCodes[0];
+            showGeneratedPosModal({
+                status: 'infeasible',
+                message: messageExcessiveSameCourseFailuresClient(bc, failCountsPre[bc], lookupCourseTitleFromPageCurriculum(bc)),
+                pos: []
+            });
+            return;
+        }
+        localStorage.setItem('posGrades', JSON.stringify(gradesBySection));
+        // Persist current semester index so Preview can call /generate/api consistently
+        try {
+            var currentSemIndex = null;
+            if (IS_REGULAR) {
+                var regSel = document.getElementById('regular-current-semester');
+                currentSemIndex = regSel ? regSel.value : null;
+            } else {
+                var irSel = document.getElementById('irreg-current-sem');
+                currentSemIndex = irSel ? irSel.value : null;
+            }
+            if (currentSemIndex !== null && currentSemIndex !== undefined && currentSemIndex !== '') {
+                localStorage.setItem('posCurrentSemIndex', String(currentSemIndex));
+            }
+        } catch (e) {}
+
+        function isPassingGrade(grade) {
+            if (!grade) return false;
+            var s = String(grade).trim();
+            if (!s) return false;
+            return !(s === '5' || s === '5.0' || s === '5.00');
+        }
+        function isFailedGrade(grade) {
+            if (!grade) return false;
+            var s = String(grade).trim();
+            return (s === '5' || s === '5.0' || s === '5.00');
+        }
+
+        function buildSolverPayloadFromGrades(gradesBySection) {
+            var passed = new Set();
+            var failed = new Set();
+            Object.keys(gradesBySection || {}).forEach(function(sectionIndex) {
+                var sec = gradesBySection[sectionIndex] || {};
+                Object.keys(sec).forEach(function(code) {
+                    var g = sec[code];
+                    if (isPassingGrade(g)) passed.add(code);
+                    if (isFailedGrade(g)) failed.add(code);
+                });
+            });
+            // If a course is both in passed and failed (retake), keep it in passed.
+            passed.forEach(function(code) { if (failed.has(code)) failed.delete(code); });
+
+            // NOTE: UI uses 0-based "section index" (0=1st Yr 1st Sem).
+            // Solver uses 1-based "semester_index" (1=1st Yr 1st Sem).
+            // Therefore: solver_sem = ui_section + 1.
+            var currentSemInt = 1; // default to solver sem 1
+            if (IS_REGULAR) {
+                var regSel = document.getElementById('regular-current-semester');
+                if (regSel && regSel.value !== '') {
+                    var finishedSectionIdx = parseInt(regSel.value, 10);
+                    if (!isNaN(finishedSectionIdx)) {
+                        // Regular: dropdown is LAST finished section.
+                        // Next section to schedule = finishedSectionIdx + 1 (still UI index).
+                        // Convert to solver semester_index by adding 1 more.
+                        currentSemInt = finishedSectionIdx + 2;
+                    }
+                }
+            } else {
+                var irSel = document.getElementById('irreg-current-sem');
+                if (irSel && irSel.value !== '') {
+                    var currentSectionIdx = parseInt(irSel.value, 10);
+                    if (!isNaN(currentSectionIdx)) {
+                        // Irregular: dropdown is CURRENT semester section (UI index).
+                        // UI dropdown stores "last semester enrolled" (0-based).
+                        // Solver expects "current_sem" as the next semester index to schedule from (1-based),
+                        // so add +2 to move from last enrolled -> next semester.
+                        currentSemInt = currentSectionIdx + 2;
+                    }
+                }
+            }
+
+            return {
+                current_sem: currentSemInt,
+                passed_courses: Array.from(passed),
+                failed_courses: Array.from(failed)
+            };
+        }
+
+        function showGeneratedPosModal(result) {
+            if (result && result.status === 'ok') {
+                try { sessionStorage.removeItem('posPreviewHistorySaved'); } catch (e) {}
+                var previewUrl = "{% url 'pos_preview' %}?t=" + Date.now();
+                window.location.href = previewUrl;
+                return;
+            }
+
+            var title = (result && result.status === 'probation') ? 'POS Generation Requires Manual Evaluation' : 'POS Generation Failed';
+            var st = (result && result.status) ? result.status : 'infeasible';
+            var rawFail =
+                result && result.errors && result.errors.length
+                    ? result.errors.join("\n\n")
+                    : (result && result.message)
+                        ? result.message
+                        : "";
+            var compactMsg = formatGeneratedPosErrorText(rawFail, st);
+            if (typeof window.showAppSystemErrorModal === 'function') {
+                window.showAppSystemErrorModal(title, compactMsg);
+            } else {
+                window.alert(compactMsg);
+            }
+        }
+
+        saveGradesToServer(gradesBySection, function(data) {
+            if (data && data.ok) {
+                // Validate with CP-SAT first so we don't generate when prerequisites are violated.
+                fetch("{% url 'validate_pos' %}", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", "X-CSRFToken": getCookie('csrftoken') },
+                    body: JSON.stringify({ grades_by_section: gradesBySection }),
+                    credentials: "same-origin"
+                }).then(function(r) { return r.json(); })
+                  .then(function(validationRes) {
+                      if (validationRes && validationRes.ok) {
+                          setGenerateLoading(true);
+                          // Call solver API and store response for Preview page to render dynamically
+                          var solverPayload = buildSolverPayloadFromGrades(gradesBySection);
+                          fetch("{% url 'generate_pos_api' %}", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json", "X-CSRFToken": getCookie('csrftoken') },
+                              body: JSON.stringify(Object.assign({}, solverPayload, { grades_by_section: gradesBySection })),
+                              credentials: "same-origin"
+                          }).then(function(r2) { return r2.json(); })
+                            .then(function(res) {
+                                setGenerateLoading(false);
+                                try { sessionStorage.setItem('posGeneratedResponse', JSON.stringify(res)); } catch (e) {}
+                                showGeneratedPosModal(res);
+                            })
+                            .catch(function() {
+                                setGenerateLoading(false);
+                                showGeneratedPosModal({ status: "infeasible", message: "The request to generate your Program of Study did not complete. Check your connection, wait a few seconds, and click Generate POS again. If this keeps happening, refresh the page or try another network.", pos: [] });
+                            });
+                      } else {
+                          setGenerateLoading(false);
+                          var st = (validationRes && validationRes.status) ? validationRes.status : "infeasible";
+                          var msg = "POS cannot be generated with the current grades and curriculum data. Review the validation details above if shown, fix any missing grades or prerequisite issues, then try Generate POS again.";
+                          if (validationRes && validationRes.errors && validationRes.errors.length) {
+                              msg = validationRes.errors.join("\n\n");
+                          } else if (validationRes && validationRes.message) {
+                              msg = validationRes.message;
+                          }
+                          showGeneratedPosModal({ status: st, message: msg, pos: [] });
+                      }
+                  })
+                  .catch(function() {
+                      setGenerateLoading(false);
+                      showGeneratedPosModal({ status: "infeasible", message: "The server could not validate your POS input (network or server error). Check your connection, refresh the page, and click Generate POS again. If the error persists, try again later.", pos: [] });
+                  });
+            } else {
+                setGenerateLoading(false);
+                showGeneratedPosErrorPopup('Your grades could not be saved before generation. Check your internet connection and try Generate POS again. If you continue to see this message, refresh the page so your session stays valid, then re-enter any unsaved grades.', 'infeasible');
+            }
+        });
+    });
+
+    (function() {
+        function displayPosCourseCode(code) {
+            return code || '';
+        }
+        var curriculum = [];
+        var pickerAvailableBySection = {};
+        var el = document.getElementById('curriculum-data');
+        if (el && el.textContent) {
+            try { curriculum = JSON.parse(el.textContent); } catch (e) {}
+        }
+        el = document.getElementById('picker-available-by-section');
+        if (el && el.textContent) {
+            try { pickerAvailableBySection = JSON.parse(el.textContent); } catch (e) {}
+        }
+
+        function buildGradeSelect(courseCode, savedGrade) {
+            var sel = document.createElement('select');
+            sel.className = 'form-select form-select-sm grade-select';
+            sel.setAttribute('data-course-code', courseCode);
+            GRADE_OPTIONS.forEach(function(opt) {
+                var o = document.createElement('option');
+                o.textContent = opt || '';
+                if (opt === savedGrade || (!opt && !savedGrade)) o.selected = true;
+                sel.appendChild(o);
+            });
+            sel.addEventListener('change', saveGradesToStorage);
+            return sel;
+        }
+
+        var modalPickerTbody = document.getElementById('irregular-modal-picker-tbody');
+        var irregularModal = document.getElementById('irregular-add-modal');
+        var selectAllCheckbox = document.getElementById('irregular-select-all');
+        var courseSearchInput = document.getElementById('irregular-modal-search');
+        var clearCourseSearchBtn = document.getElementById('irregular-modal-clear-search');
+        var currentSectionIndex = -1;
+        var modalSelectedCodes = new Set();
+
+        function updateSelectAllState() {
+            if (!selectAllCheckbox) return;
+            var rows = Array.from(modalPickerTbody.querySelectorAll('.irregular-picker-row'));
+            var visibleRows = rows.filter(function(r) { return r.style.display !== 'none'; });
+            if (!visibleRows.length) {
+                selectAllCheckbox.checked = false;
+                selectAllCheckbox.indeterminate = false;
+                return;
+            }
+            var selectedCount = 0;
+            visibleRows.forEach(function(r) {
+                if (r.classList.contains('selected')) selectedCount++;
+            });
+            if (selectedCount === 0) {
+                selectAllCheckbox.checked = false;
+                selectAllCheckbox.indeterminate = false;
+            } else if (selectedCount === visibleRows.length) {
+                selectAllCheckbox.checked = true;
+                selectAllCheckbox.indeterminate = false;
+            } else {
+                selectAllCheckbox.checked = false;
+                selectAllCheckbox.indeterminate = true;
+            }
+        }
+
+        function applyCourseSearchFilter() {
+            if (!courseSearchInput) return;
+            var term = (courseSearchInput.value || '').toString().trim().toLowerCase();
+            var rows = modalPickerTbody.querySelectorAll('.irregular-picker-row');
+            rows.forEach(function(r) {
+                var code = (r.getAttribute('data-course-code') || '').toString().toLowerCase();
+                var show = !term || code.indexOf(term) !== -1;
+                r.style.display = show ? '' : 'none';
+            });
+            updateSelectAllState();
+        }
+
+        if (courseSearchInput) {
+            courseSearchInput.addEventListener('input', function() {
+                applyCourseSearchFilter();
+            });
+        }
+        if (clearCourseSearchBtn) {
+            clearCourseSearchBtn.addEventListener('click', function() {
+                if (!courseSearchInput) return;
+                courseSearchInput.value = '';
+                applyCourseSearchFilter();
+                try { courseSearchInput.focus(); } catch (e) {}
+            });
+        }
+
+        function getServerGrades() {
+            var g = {};
+            try {
+                var el = document.getElementById('pos-saved-grades');
+                if (el && el.textContent) g = JSON.parse(el.textContent);
+            } catch (e) {}
+            return g;
+        }
+
+        function getCurrentGradesForSection(sectionIndex) {
+            var bySection = getServerGrades();
+            var sectionGrades = bySection[sectionIndex] || bySection[String(sectionIndex)] || {};
+            var merged = {};
+            for (var k in sectionGrades) merged[k] = sectionGrades[k];
+            var mainDiv = document.querySelector('#main-sem-' + sectionIndex);
+            if (mainDiv) {
+                mainDiv.querySelectorAll('.grade-select').forEach(function(sel) {
+                    var code = sel.getAttribute('data-course-code');
+                    if (code) merged[code] = (sel.value || '').trim();
+                });
+            }
+            return merged;
+        }
+
+        function isPassingGrade(grade) {
+            var g = (grade || '').toString().trim();
+            if (!g || g === '—') return false;
+            if (g === '5' || g === '5.0' || g === '5.00') return false;
+            return true;
+        }
+
+        function collectAllPassedCodes(excludeSectionIndex) {
+            var passed = new Set();
+            document.querySelectorAll('[id^="main-sem-"]').forEach(function(mainDiv) {
+                var si = mainDiv.getAttribute('data-section-index');
+                if (si === String(excludeSectionIndex)) return;
+                mainDiv.querySelectorAll('tbody tr[data-course-code]').forEach(function(row) {
+                    var code = row.getAttribute('data-course-code');
+                    if (!code) return;
+                    var grade = '';
+                    var sel = row.querySelector('.grade-select');
+                    if (sel) {
+                        grade = (sel.value || '').trim();
+                    } else {
+                        var cells = row.querySelectorAll('td');
+                        var gradeCell = cells[7];
+                        if (gradeCell) {
+                            var span = gradeCell.querySelector('span');
+                            grade = span ? span.textContent.trim() : gradeCell.textContent.trim();
+                        }
+                    }
+                    if (isPassingGrade(grade)) passed.add(code);
+                });
+            });
+            return passed;
+        }
+
+        function getCodesAlreadyInSection(sectionIndex) {
+            var codes = new Set();
+            // If picker is opened from Edit modal, use the live rows in edit table.
+            // This allows removed courses to reappear in "Add courses" immediately.
+            if (addCoursesButtonSource === 'edit-modal' &&
+                editTbody &&
+                editSectionIndex !== null &&
+                String(editSectionIndex) === String(sectionIndex)) {
+                editTbody.querySelectorAll('tr[data-course-code]').forEach(function(row) {
+                    var code = row.getAttribute('data-course-code');
+                    if (code) codes.add(code);
+                });
+                return codes;
+            }
+            var mainDiv = document.getElementById('main-sem-' + sectionIndex);
+            if (mainDiv) {
+                mainDiv.querySelectorAll('tbody tr[data-course-code]').forEach(function(row) {
+                    var code = row.getAttribute('data-course-code');
+                    if (code) codes.add(code);
+                });
+            }
+            return codes;
+        }
+
+        function openModalForSection(idx) {
+            var sec = curriculum[idx];
+            if (!sec) return;
+            currentSectionIndex = idx;
+            document.getElementById('irregular-add-modal-label').textContent = 'Add courses – ' + sec.label;
+            modalSelectedCodes.clear();
+            modalPickerTbody.innerHTML = '';
+            if (courseSearchInput) {
+                courseSearchInput.value = '';
+                applyCourseSearchFilter();
+            }
+            if (selectAllCheckbox) {
+                selectAllCheckbox.checked = false;
+                selectAllCheckbox.indeterminate = false;
+            }
+            var coursesToShow;
+            if (IS_REGULAR) {
+                coursesToShow = sec.courses.slice();
+            } else {
+                // Global course picker (not semester-based): aggregate candidates across all sections,
+                // then filter by already-passed and already-present in the selected section.
+                coursesToShow = [];
+                var seen = new Set();
+                Object.keys(pickerAvailableBySection || {}).forEach(function(sectionKey) {
+                    var list = pickerAvailableBySection[sectionKey] || [];
+                    if (!Array.isArray(list)) return;
+                    list.forEach(function(c) {
+                        if (!c || !c.code) return;
+                        if (seen.has(c.code)) return;
+                        seen.add(c.code);
+                        coursesToShow.push(c);
+                    });
+                });
+                if (!coursesToShow.length) coursesToShow = sec.courses.slice();
+            }
+
+            var passedCodes = collectAllPassedCodes(idx);
+            var alreadyInSection = getCodesAlreadyInSection(idx);
+            coursesToShow = coursesToShow.filter(function(c) {
+                if (passedCodes.has(c.code)) return false;
+                if (alreadyInSection.has(c.code)) return false;
+                return true;
+            });
+
+            coursesToShow.forEach(function(c) {
+                var tr = document.createElement('tr');
+                tr.className = 'irregular-picker-row';
+                tr.setAttribute('data-course-code', c.code);
+                var codeCell = (c.display_code || displayPosCourseCode(c.code));
+                tr.innerHTML = '<td class="text-center">' + codeCell + '</td><td class="course-title-cell">' + c.title + '</td>' +
+                    '<td class="text-center">' + asWholeUnits(c.units) + '</td><td class="text-center">' + c.lec + '</td><td class="text-center">' + c.lab + '</td>' +
+                    '<td class="small text-muted text-center">' + (c.prereq || '') + '</td><td class="small text-muted text-center">' + (c.coreq || '') + '</td>';
+                tr.addEventListener('click', function() {
+                    if (modalSelectedCodes.has(c.code)) {
+                        modalSelectedCodes.delete(c.code);
+                        tr.classList.remove('selected');
+                    } else {
+                        modalSelectedCodes.add(c.code);
+                        tr.classList.add('selected');
+                    }
+                    updateSelectAllState();
+                });
+                modalPickerTbody.appendChild(tr);
+            });
+            updateSelectAllState();
+            // Apply current search term (if user typed before reopening modal).
+            applyCourseSearchFilter();
+
+            var bsModal = typeof bootstrap !== 'undefined' && bootstrap.Modal ? new bootstrap.Modal(irregularModal) : null;
+            if (bsModal) bsModal.show(); else irregularModal.classList.add('show'); irregularModal.style.display = 'block';
+        }
+        // Expose to other handlers (e.g., regular path controls)
+        window.openModalForSection = openModalForSection;
+
+        var addCoursesButtonSource = null;
+
+        function clearSectionAndGrades(sectionIndex) {
+            var mainDiv = document.getElementById('main-sem-' + sectionIndex);
+            if (mainDiv) {
+                var tbody = mainDiv.querySelector('tbody');
+                if (tbody) {
+                    tbody.innerHTML = '';
+                }
+                var totalEl = document.getElementById('total-units-sem-' + sectionIndex);
+                if (totalEl) totalEl.textContent = '0';
+                if (IS_REGULAR) {
+                    mainDiv.style.display = 'none';
+                    // Restore top-level +Add courses for first semester if we cleared it
+                    if (sectionIndex === 0) {
+                        var startContainer = document.getElementById('regular-start-container');
+                        if (startContainer) startContainer.style.display = '';
+                    }
+                }
+            }
+            var grades = getServerGradesForMerge();
+            if (typeof grades !== 'object' || grades === null) grades = {};
+            delete grades[sectionIndex];
+            delete grades[String(sectionIndex)];
+            localStorage.setItem('posGrades', JSON.stringify(grades));
+        }
+
+        // Handle bottom Undo buttons in Regular path
+        document.body.addEventListener('click', function(e) {
+            var undoBtn = e.target.closest('button.regular-undo-btn');
+            if (!undoBtn || !IS_REGULAR) return;
+            var idx = parseInt(undoBtn.getAttribute('data-section-index') || '0', 10);
+            clearSectionAndGrades(idx);
+        });
+
+        // Any "+ Add courses" button with data-section-index opens picker for that section.
+        // NOTE: Regular path next-semester buttons have their own click handler with validation,
+        // so we skip them here to avoid opening the picker when grades are incomplete.
+        document.body.addEventListener('click', function(e) {
+            var btn = e.target.closest('button[data-section-index]');
+            if (!btn) return;
+            // Skip undo buttons (handled above)
+            if (btn.classList.contains('regular-undo-btn')) return;
+            // Skip edit and check/lock buttons – they have their own handlers
+            if (btn.classList.contains('irreg-edit-section-btn')) return;
+            if (btn.classList.contains('irreg-check-section-btn')) return;
+            // In Regular path, skip next-semester buttons here; they are handled in the IS_REGULAR block above
+            if (IS_REGULAR && btn.classList.contains('regular-add-next-btn')) return;
+            // Extra safety: when central first "+ Add courses" is clicked, hide its container immediately
+            if (IS_REGULAR && btn.id === 'regular-start-add-btn') {
+                var startContainer = document.getElementById('regular-start-container');
+                if (startContainer) startContainer.style.display = 'none';
+            }
+            var idx = parseInt(btn.getAttribute('data-section-index'), 10);
+            if (curriculum[idx]) {
+                addCoursesButtonSource = 'main';
+                currentSectionIndex = idx;
+                openModalForSection(idx);
+            }
+        });
+
+        function findCourseInCurriculum(code) {
+            for (var i = 0; i < curriculum.length; i++) {
+                var sec = curriculum[i];
+                if (sec && sec.courses) {
+                    var c = sec.courses.find(function(x) { return x.code === code; });
+                    if (c) return c;
+                }
+            }
+            return null;
+        }
+
+        function updateSectionTotalUnits(sectionIndex) {
+            var mainDiv = document.getElementById('main-sem-' + sectionIndex);
+            if (!mainDiv) return;
+            var tbody = mainDiv.querySelector('tbody');
+            var totalEl = document.getElementById('total-units-sem-' + sectionIndex);
+            if (!tbody || !totalEl) return;
+            var total = 0;
+            tbody.querySelectorAll('tr[data-course-code][data-units]').forEach(function(row) {
+                total += parseInt(row.getAttribute('data-units'), 10) || 0;
+            });
+            totalEl.textContent = total;
+        }
+
+        document.getElementById('irregular-modal-add-btn').addEventListener('click', function() {
+            if (currentSectionIndex < 0) return;
+            var sec = curriculum[currentSectionIndex];
+            var tbody = (addCoursesButtonSource === 'irregular')
+                ? document.querySelector('#irregular-sec-' + currentSectionIndex + ' tbody')
+                : document.querySelector('#main-sem-' + currentSectionIndex + ' tbody');
+            if (!sec || !tbody) return;
+            var bySection = getServerGrades();
+            var sectionGrades = bySection[currentSectionIndex] || bySection[String(currentSectionIndex)] || {};
+            var addedRows = [];
+            modalSelectedCodes.forEach(function(code) {
+                var c = findCourseInCurriculum(code);
+                if (!c) return;
+                if (tbody.querySelector('tr[data-course-code="' + code + '"]')) return;
+                var row = document.createElement('tr');
+                row.setAttribute('data-course-code', code);
+                row.setAttribute('data-units', asWholeUnits(c.units != null ? c.units : 0));
+                row.classList.add('just-added');
+                var tdGrade = document.createElement('td');
+                var gradeSel = buildGradeSelect(code, sectionGrades[code]);
+                gradeSel.disabled = true;
+                gradeSel.title = 'Choose grade after adding';
+                tdGrade.appendChild(gradeSel);
+                initGradeDropdowns(tdGrade);
+                var showCode = (c.display_code || displayPosCourseCode(c.code));
+                row.innerHTML = '<td class="text-center">' + showCode + '</td><td class="course-title-cell">' + c.title + '</td>' +
+                    '<td class="text-center">' + asWholeUnits(c.units) + '</td><td class="text-center">' + c.lec + '</td><td class="text-center">' + c.lab + '</td>' +
+                    '<td class="small text-muted text-center">' + (c.prereq || '') + '</td><td class="small text-muted text-center">' + (c.coreq || '') + '</td>';
+                row.appendChild(tdGrade);
+                tbody.appendChild(row);
+                addedRows.push(row);
+            });
+            updateSectionTotalUnits(currentSectionIndex);
+            modalSelectedCodes.clear();
+            modalPickerTbody.querySelectorAll('.irregular-picker-row.selected').forEach(function(r) { r.classList.remove('selected'); });
+            updateSelectAllState();
+            function enableGradeDropdowns() {
+                addedRows.forEach(function(row) {
+                    row.classList.remove('just-added');
+                    var sel = row.querySelector('.grade-select');
+                    if (sel) { sel.disabled = false; sel.removeAttribute('title'); }
+                });
+            }
+            if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+                var m = bootstrap.Modal.getInstance(irregularModal);
+                if (m) {
+                    irregularModal.addEventListener('hidden.bs.modal', function onHidden() {
+                        irregularModal.removeEventListener('hidden.bs.modal', onHidden);
+                        enableGradeDropdowns();
+                    }, { once: true });
+                    m.hide();
+                } else {
+                    irregularModal.classList.remove('show');
+                    irregularModal.style.display = 'none';
+                    enableGradeDropdowns();
+                }
+            } else {
+                irregularModal.classList.remove('show');
+                irregularModal.style.display = 'none';
+                enableGradeDropdowns();
+            }
+        });
+
+        if (selectAllCheckbox) {
+            selectAllCheckbox.addEventListener('change', function() {
+                var rows = Array.from(modalPickerTbody.querySelectorAll('.irregular-picker-row')).filter(function(r) {
+                    return r.style.display !== 'none';
+                });
+                if (this.checked) {
+                    // "Deselect all" behavior: clear user's selections.
+                    modalSelectedCodes.clear();
+                    rows.forEach(function(r) {
+                        r.classList.remove('selected');
+                    });
+                    // Immediately uncheck to behave like a button.
+                    this.checked = false;
+                    this.indeterminate = false;
+                } else {
+                    // No-op: users can still select rows individually.
+                }
+                updateSelectAllState();
+            });
+        }
+
+        var irregOkBtn = document.getElementById('irreg-ok-btn');
+        if (irregOkBtn) {
+            irregOkBtn.addEventListener('click', function() {
+                var currentSem = document.getElementById('irreg-current-sem').value;
+                var startSem = document.getElementById('irreg-start-sem').value;
+                if (currentSem === '') {
+                    showGeneratedPosErrorPopup('Please choose your Last Semester Enrolled in this dialog. That value tells the system how far you have progressed so your course tables and validation stay correct. Select a term from the list, then press OK again.', 'infeasible');
+                    return;
+                }
+                var currentIdx = parseInt(currentSem, 10);
+                if (!Number.isFinite(currentIdx)) {
+                    showGeneratedPosErrorPopup('The Last Semester Enrolled value is not valid. Pick a real semester from the dropdown (do not leave a placeholder selected), then try again. If the list looks wrong, refresh the page and reopen this dialog.', 'infeasible');
+                    return;
+                }
+
+                // If First Failed Semester is left blank, keep it blank.
+                // Backend will treat it as effective start = current semester.
+                if (startSem !== '') {
+                    var startIdx = parseInt(startSem, 10);
+                    if (!Number.isFinite(startIdx)) {
+                        showGeneratedPosErrorPopup('The First Failed Semester choice is not valid. Pick a semester from that dropdown or clear it to use the default (same as Last Semester Enrolled), then try again.', 'infeasible');
+                        return;
+                    }
+                    // Last semester enrolled must be the same as or after First Failed Semester when both are set
+                    if (currentIdx < startIdx) {
+                        showGeneratedPosErrorPopup('Your Last Semester Enrolled cannot be earlier than your First Failed Semester. Adjust one or both dropdowns so your last enrolled term is the same as or after the first failed semester, then try again.', 'infeasible');
+                        return;
+                    }
+                }
+                var params = [];
+                params.push('current_sem=' + encodeURIComponent(currentSem));
+                params.push('irreg_start=' + encodeURIComponent(startSem));
+                try { sessionStorage.setItem('posScrollToCourseList', '1'); } catch (e) {}
+                window.location.href = window.location.pathname + '?' + params.join('&');
+            });
+        }
+
+        // --- Irregular check (save & lock) button ---
+        function isIrregularStartConfigured() {
+            var startEl = document.getElementById('irreg-start-sem');
+            return !!(startEl && (startEl.value || '').trim() !== '');
+        }
+
+        function refreshIrregularCheckButtonsVisibility() {
+            if (IS_REGULAR) return;
+            var shouldShowCheck = isIrregularStartConfigured();
+            document.querySelectorAll('.irreg-check-section-btn').forEach(function(btn) {
+                if (!btn) return;
+                if (!shouldShowCheck) {
+                    btn.style.display = 'none';
+                    return;
+                }
+                var sectionDiv = btn.closest('.main-sem');
+                if (sectionDiv && sectionDiv.getAttribute('data-curriculum-locked') === 'true') {
+                    btn.style.display = 'none';
+                    return;
+                }
+                btn.style.display = '';
+            });
+        }
+        var irregStartSelectForCheckBtn = document.getElementById('irreg-start-sem');
+        if (irregStartSelectForCheckBtn) {
+            irregStartSelectForCheckBtn.addEventListener('change', refreshIrregularCheckButtonsVisibility);
+        }
+
+        function lockSectionToPreview(sectionDiv) {
+            var si = sectionDiv.getAttribute('data-section-index');
+            sectionDiv.querySelectorAll('.grade-select').forEach(function(sel) {
+                var td = sel.closest('td');
+                var val = sel.value || '—';
+                td.innerHTML = '<span class="fw-semibold">' + val + '</span>';
+            });
+            var addBtn = sectionDiv.querySelector('.btn-outline-primary[data-section-index]');
+            if (addBtn) addBtn.style.display = 'none';
+            var checkBtn = sectionDiv.querySelector('.irreg-check-section-btn');
+            if (checkBtn) checkBtn.style.display = 'none';
+            var editBtn = sectionDiv.querySelector('.irreg-edit-section-btn');
+            // Only allow edit icon for non-curriculum-locked semesters.
+            var isCurriculumLocked = sectionDiv.getAttribute('data-curriculum-locked') === 'true';
+            if (editBtn && !isCurriculumLocked) { editBtn.classList.remove('irreg-edit-hidden'); editBtn.classList.add('irreg-edit-visible'); }
+        }
+
+        document.body.addEventListener('click', function(e) {
+            var btn = e.target.closest('.irreg-check-section-btn');
+            if (!btn) return;
+            var si = btn.getAttribute('data-section-index');
+            var sectionDiv = document.getElementById('main-sem-' + si);
+            if (!sectionDiv) return;
+            lockSectionToPreview(sectionDiv);
+        });
+
+        // --- Irregular edit button: open modal ---
+        var editModalEl = document.getElementById('irreg-edit-modal');
+        var editModal = editModalEl ? new bootstrap.Modal(editModalEl) : null;
+        var editTbody = document.getElementById('irreg-edit-tbody');
+        var editSectionIndex = null;
+
+        function gradeOptionsHtml(selected) {
+            var opts = '';
+            GRADE_OPTIONS.forEach(function(g) {
+                var sel = (g === selected) ? ' selected' : '';
+                var label = g || '';
+                opts += '<option value="' + g + '"' + sel + '>' + label + '</option>';
+            });
+            return opts;
+        }
+
+        function addEditRow(code, title, units, lec, lab, prereq, coreq, grade) {
+            var tr = document.createElement('tr');
+            tr.setAttribute('data-course-code', code);
+            tr.innerHTML =
+                '<td class="text-center">' + code + '</td>' +
+                '<td class="course-title-cell">' + title + '</td>' +
+                '<td class="text-center">' + units + '</td>' +
+                '<td class="text-center">' + lec + '</td>' +
+                '<td class="text-center">' + lab + '</td>' +
+                '<td class="small text-muted text-center">' + (prereq || '') + '</td>' +
+                '<td class="small text-muted text-center">' + (coreq || '') + '</td>' +
+                '<td><select class="form-select form-select-sm edit-grade-select" data-course-code="' + code + '">' + gradeOptionsHtml(grade || '') + '</select></td>' +
+                '<td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger edit-remove-row" title="Remove">&times;</button></td>';
+            editTbody.appendChild(tr);
+            initGradeDropdowns(tr);
+        }
+
+        document.body.addEventListener('click', function(e) {
+            var btn = e.target.closest('.irreg-edit-section-btn');
+            if (!btn || !editModal) return;
+            editSectionIndex = btn.getAttribute('data-section-index');
+            var sectionDiv = document.getElementById('main-sem-' + editSectionIndex);
+            if (!sectionDiv) return;
+            var label = sectionDiv.querySelector('h6');
+            document.getElementById('irreg-edit-modal-label').textContent = 'Edit – ' + (label ? label.textContent : 'Semester');
+            editTbody.innerHTML = '';
+            sectionDiv.querySelectorAll('tbody tr[data-course-code]').forEach(function(row) {
+                var code = row.getAttribute('data-course-code');
+                var cells = row.querySelectorAll('td');
+                var title = cells[1] ? cells[1].textContent.trim() : '';
+                var units = cells[2] ? cells[2].textContent.trim() : '0';
+                var lec = cells[3] ? cells[3].textContent.trim() : '0';
+                var lab = cells[4] ? cells[4].textContent.trim() : '0';
+                var prereq = cells[5] ? cells[5].textContent.trim() : '';
+                var coreq = cells[6] ? cells[6].textContent.trim() : '';
+                var gradeEl = row.querySelector('.grade-select, .edit-grade-select');
+                var gradeSpan = cells[7] ? cells[7].querySelector('span') : null;
+                var grade = gradeEl ? gradeEl.value : (gradeSpan ? gradeSpan.textContent.trim() : '');
+                if (grade === '—') grade = '';
+                addEditRow(code, title, units, lec, lab, prereq, coreq, grade);
+            });
+            editModal.show();
+        });
+
+        if (editTbody) {
+            editTbody.addEventListener('click', function(e) {
+                if (e.target.closest('.edit-remove-row')) {
+                    e.target.closest('tr').remove();
+                }
+            });
+        }
+
+        var editAddBtn = document.getElementById('irreg-edit-add-course-btn');
+        if (editAddBtn) {
+            editAddBtn.addEventListener('click', function() {
+                if (editSectionIndex === null) return;
+                editModal.hide();
+                currentSectionIndex = parseInt(editSectionIndex, 10);
+                addCoursesButtonSource = 'edit-modal';
+                openModalForSection(currentSectionIndex);
+            });
+        }
+
+        var editSaveBtn = document.getElementById('irreg-edit-save-btn');
+        if (editSaveBtn) {
+            editSaveBtn.addEventListener('click', function() {
+                if (editSectionIndex === null) return;
+                var sectionDiv = document.getElementById('main-sem-' + editSectionIndex);
+                if (!sectionDiv) return;
+                var tbody = sectionDiv.querySelector('tbody');
+                tbody.innerHTML = '';
+                editTbody.querySelectorAll('tr[data-course-code]').forEach(function(eRow) {
+                    var code = eRow.getAttribute('data-course-code');
+                    var cells = eRow.querySelectorAll('td');
+                    var title = cells[1] ? cells[1].textContent.trim() : '';
+                    var units = cells[2] ? cells[2].textContent.trim() : '0';
+                    var lec = cells[3] ? cells[3].textContent.trim() : '0';
+                    var lab = cells[4] ? cells[4].textContent.trim() : '0';
+                    var prereq = cells[5] ? cells[5].textContent.trim() : '';
+                    var coreq = cells[6] ? cells[6].textContent.trim() : '';
+                    var gradeSel = eRow.querySelector('.edit-grade-select');
+                    var grade = gradeSel ? gradeSel.value : '';
+                    var tr = document.createElement('tr');
+                    tr.setAttribute('data-course-code', code);
+                    tr.setAttribute('data-units', units);
+                    tr.innerHTML =
+                        '<td class="text-center">' + code + '</td>' +
+                        '<td class="course-title-cell">' + title + '</td>' +
+                        '<td class="text-center">' + units + '</td>' +
+                        '<td class="text-center">' + lec + '</td>' +
+                        '<td class="text-center">' + lab + '</td>' +
+                        '<td class="small text-muted text-center">' + prereq + '</td>' +
+                        '<td class="small text-muted text-center">' + coreq + '</td>' +
+                        '<td><select class="form-select form-select-sm grade-select" data-course-code="' + code + '">' + gradeOptionsHtml(grade) + '</select></td>';
+                    tbody.appendChild(tr);
+                });
+                tbody.querySelectorAll('.grade-select').forEach(function(sel) {
+                    sel.addEventListener('change', saveGradesToStorage);
+                });
+                initGradeDropdowns(sectionDiv);
+                updateSectionTotalUnits(parseInt(editSectionIndex, 10));
+                var editBtn = sectionDiv.querySelector('.irreg-edit-section-btn');
+                if (editBtn) { editBtn.classList.remove('irreg-edit-hidden'); editBtn.classList.add('irreg-edit-visible'); }
+                var checkBtn = sectionDiv.querySelector('.irreg-check-section-btn');
+                if (checkBtn) checkBtn.style.display = isIrregularStartConfigured() ? '' : 'none';
+                saveGradesToStorage();
+                if (HAS_GENERATED_POS && sectionDiv.getAttribute('data-curriculum-locked') === 'true') {
+                    lockSectionToPreview(sectionDiv);
+                }
+                editModal.hide();
+            });
+        }
+
+        // When the irregular-add-modal finishes adding courses and the source was edit-modal, re-open edit modal
+        var origAddConfirm = document.getElementById('irregular-modal-add-btn');
+        if (origAddConfirm) {
+            origAddConfirm.addEventListener('click', function() {
+                if (addCoursesButtonSource === 'edit-modal') {
+                    setTimeout(function() {
+                        if (editModal && editSectionIndex !== null) {
+                            var sectionDiv = document.getElementById('main-sem-' + editSectionIndex);
+                            if (sectionDiv) {
+                                editTbody.innerHTML = '';
+                                sectionDiv.querySelectorAll('tbody tr[data-course-code]').forEach(function(row) {
+                                    var code = row.getAttribute('data-course-code');
+                                    var cells = row.querySelectorAll('td');
+                                    var title = cells[1] ? cells[1].textContent.trim() : '';
+                                    var units = cells[2] ? cells[2].textContent.trim() : '0';
+                                    var lec = cells[3] ? cells[3].textContent.trim() : '0';
+                                    var lab = cells[4] ? cells[4].textContent.trim() : '0';
+                                    var prereq = cells[5] ? cells[5].textContent.trim() : '';
+                                    var coreq = cells[6] ? cells[6].textContent.trim() : '';
+                                    var gradeSel = row.querySelector('.grade-select');
+                                    var grade = gradeSel ? gradeSel.value : '';
+                                    addEditRow(code, title, units, lec, lab, prereq, coreq, grade);
+                                });
+                                editModal.show();
+                            }
+                        }
+                        addCoursesButtonSource = null;
+                    }, 400);
+                }
+            });
+        }
+
+        refreshIrregularCheckButtonsVisibility();
+    })();
+</script>
+{% endblock %}

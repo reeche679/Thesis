@@ -1,0 +1,3185 @@
+{% extends "base.html" %}
+
+{% block title %}Preview POS | Program of Study Generation System{% endblock %}
+
+{% block nav_preview_active %}active{% endblock %}
+
+{% block extra_head %}
+<style>
+    .course-title-cell {
+        text-align: left;
+        vertical-align: middle;
+        font-size: 0.9rem !important;
+        color: #212529 !important;
+    }
+
+    .elective-course-cell {
+        text-align: left;
+        vertical-align: middle;
+        font-size: 0.9rem !important;
+        color: #212529 !important;
+    }
+
+    /* "No. of hour/s" - small so it fits above Lec and Lab only */
+    .table thead th.hours-header {
+        font-size: 0.7rem;
+        font-weight: 700;
+        line-height: 1.1;
+        white-space: nowrap;
+    }
+
+    .table thead th {
+        text-align: center;
+        vertical-align: middle;
+        font-size: 0.85rem;
+        white-space: nowrap;
+    }
+
+    .pos-card h6.fw-bold {
+        text-align: center;
+        font-size: 0.95rem;
+    }
+
+    .table-responsive {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior-x: contain;
+    }
+    .table {
+        table-layout: auto;
+        width: 100%;
+        min-width: 960px;
+    }
+
+    .table thead th,
+    .table tbody td {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        text-align: center;
+        vertical-align: middle;
+        box-sizing: border-box;
+        padding-left: 0.5rem;
+        padding-right: 0.5rem;
+        font-size: 0.85rem;
+    }
+
+    .table .course-title-cell,
+    .table .elective-course-cell {
+        text-align: left;
+        white-space: normal;
+        word-break: break-word;
+        overflow-wrap: break-word;
+        font-size: 0.85rem !important;
+    }
+
+    .table td:nth-child(4),
+    .table td:nth-child(5) {
+        font-size: 0.75rem;
+    }
+    .table td:nth-child(6),
+    .table td:nth-child(7) {
+        font-size: 0.75rem;
+        line-height: 1.25;
+        vertical-align: middle;
+    }
+
+    /* Slightly smaller table text on small screens */
+    @media (max-width: 575.98px) {
+        .table thead th,
+        .table tbody td {
+            font-size: 0.8rem;
+        }
+        .table .course-title-cell,
+        .table .elective-course-cell {
+            font-size: 0.8rem !important;
+        }
+    }
+    /* Mobile: make header + Academic Term smaller on Preview POS */
+    @media (max-width: 575.98px) {
+        .preview-page-header h1.h5 {
+            font-size: 1rem;
+        }
+        .preview-page-header p.text-muted {
+            font-size: 0.8rem;
+        }
+        .preview-academic-term .small,
+        .preview-academic-term .fw-semibold {
+            font-size: 0.8rem !important;
+        }
+    }
+
+    .grade-display {
+        font-weight: 500;
+    }
+
+    /* Preview Save: stable width for Save / Saving... / Saved */
+    #preview-save-history-btn {
+        min-width: 6.75rem;
+        text-align: center;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+    @media (max-width: 575.98px) {
+        /* Bottom action controls on mobile:
+           Row 1: Show feasible move targets (left aligned)
+           Row 2: Edit/Apply (full width)
+           Row 3: Save/Saved (full width)
+           Row 4: Download PDF (full width) */
+        .preview-bottom-actions {
+            display: flex !important;
+            flex-direction: column;
+            align-items: stretch;
+            width: 100%;
+        }
+        .preview-bottom-left {
+            display: flex !important;
+            flex-direction: column;
+            align-items: stretch;
+            width: 100%;
+        }
+        #pos-edit-toggle {
+            display: flex !important;
+            width: 100%;
+            order: 2;
+            margin-bottom: 0.6rem;
+        }
+        .preview-signatory-row {
+            margin-bottom: 0.7rem;
+        }
+    .preview-feasible-wrap {
+        margin-left: 0 !important;
+        order: 1;
+        margin-top: 0.75rem; /* space from signatory dropdown section */
+        margin-bottom: 0.7rem;
+        text-align: left;
+        align-self: flex-start;
+    }
+        .preview-feasible-wrap .form-check,
+        .preview-feasible-wrap .form-check-label {
+            text-align: left !important;
+        }
+        .preview-bottom-right {
+            display: flex !important;
+            flex-direction: column;
+            align-items: stretch !important;
+            gap: 0.55rem !important;
+            width: 100%;
+        }
+        .preview-bottom-right .btn,
+        #preview-save-history-btn,
+        #preview-download-pdf-btn {
+            width: 100%;
+            display: inline-flex;
+            justify-content: center;
+            min-width: 0;
+        }
+    }
+    .preview-label-with-info {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+    }
+    /* While editing, hide Save/Download action group on all viewports. */
+    body.pos-editing .preview-bottom-right {
+        display: none !important;
+    }
+    /* Hide feasible-move controls unless user is actively editing. */
+    .preview-feasible-wrap {
+        display: none;
+    }
+    body.pos-editing .preview-feasible-wrap {
+        display: block;
+    }
+    .preview-info-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 0.9rem !important;
+        height: 0.9rem !important;
+        min-width: 0 !important;
+        min-height: 0 !important;
+        border-radius: 50% !important;
+        border: 1px solid #6c757d;
+        color: #495057;
+        background: #fff;
+        font-size: 0.58rem;
+        font-weight: 600;
+        line-height: 1;
+        padding: 0 !important;
+        box-sizing: border-box;
+    }
+    .preview-info-btn:hover,
+    .preview-info-btn:focus {
+        border-color: #495057;
+        color: #212529;
+        background: #f8f9fa;
+        box-shadow: none;
+    }
+    .popover.preview-info-popover {
+        border-radius: 0.5rem;
+    }
+    .popover.preview-info-popover .popover-body {
+        font-size: 0.74rem;
+        line-height: 1.2;
+        padding: 0.45rem 0.55rem;
+        max-width: 235px;
+    }
+
+    .preview-photo-box {
+        width: 100px;
+        height: 100px;
+        min-width: 100px;
+        min-height: 100px;
+        border: 2px solid #3a3a3a;
+        border-radius: 0.5rem;
+        background: rgba(255, 255, 255, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+    }
+    .preview-photo-box img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+    .preview-photo-box .photo-placeholder {
+        text-align: center;
+        color: #666;
+        font-size: 0.7rem;
+        padding: 4px;
+    }
+    /* Student profile scroll: keep photo fixed, allow details to scroll on small screens */
+    .pos-student-profile-scroll {
+        flex: 1 1 auto;
+        max-width: 100%;
+    }
+    /* Match Generate POS mobile student profile layout (landscape, text left, horizontal scroll inside card) */
+    @media (max-width: 767.98px) {
+        .pos-student-profile-row .preview-photo-box {
+            width: 82px;
+            height: 82px;
+            min-width: 82px;
+            min-height: 82px;
+        }
+        .pos-student-profile-row { gap: 0.75rem; }
+        .pos-student-profile-details .text-muted { font-size: 0.65rem; }
+        .pos-student-profile-details .fw-semibold { font-size: 0.8rem; }
+        .pos-student-profile-scroll {
+            overflow: visible;
+            -webkit-overflow-scrolling: touch;
+        }
+        .pos-student-profile-details {
+            min-width: 0;
+            text-align: left;
+        }
+        .pos-student-profile-details > .col-4:nth-child(n+2) { display: none; }
+        .pos-student-profile-details > .col-4:first-child { width: 100%; }
+    }
+    @media (max-width: 575.98px) {
+        .pos-student-profile-row .preview-photo-box {
+            width: 74px;
+            height: 74px;
+            min-width: 74px;
+            min-height: 74px;
+        }
+        .pos-student-profile-row {
+            gap: 0.5rem;
+            align-items: flex-start;
+        }
+        .pos-student-profile-details .text-muted { font-size: 0.6rem; }
+        .pos-student-profile-details .fw-semibold { font-size: 0.75rem; }
+        .pos-student-profile-details {
+            min-width: 0;
+            text-align: left;
+        }
+    }
+
+    /* SortableJS drag-and-drop visuals for POS edit mode */
+    .pos-course-row {
+        cursor: grab;
+    }
+    .pos-editing .pos-course-row {
+        cursor: grabbing;
+    }
+    .pos-dnd-ghost {
+        opacity: 0.6;
+    }
+    .pos-dnd-chosen {
+        background-color: #f8f9fa;
+    }
+    .pos-dnd-semester.pos-dnd-locked {
+        opacity: 0.95;
+    }
+
+    /* Feasible-move highlight (computed per course; not just "draggable") */
+    .pos-course-row.pos-feasible-move td {
+        box-shadow: inset 0 0 0 2px rgba(25, 135, 84, 0.7);
+        background-color: rgba(25, 135, 84, 0.03);
+    }
+
+    /* Feasible destination semester highlight (computed for the dragged course) */
+    .pos-dnd-semester.pos-feasible-target-sem {
+        position: relative;
+        box-shadow: inset 0 0 0 2px rgba(13, 110, 253, 0.9);
+        background-color: rgba(13, 202, 240, 0.12);
+        border-radius: 0.25rem;
+    }
+    .pos-dnd-semester.pos-feasible-target-sem::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: rgba(13, 202, 240, 0.22);
+        border: 2px solid rgba(13, 110, 253, 0.9);
+        border-radius: 0.25rem;
+        pointer-events: none;
+        z-index: 3;
+    }
+    .pos-dnd-semester.pos-feasible-target-sem .table,
+    .pos-dnd-semester.pos-feasible-target-sem .table thead,
+    .pos-dnd-semester.pos-feasible-target-sem .table tbody,
+    .pos-dnd-semester.pos-feasible-target-sem .table tfoot {
+        background-color: rgba(13, 202, 240, 0.12);
+    }
+
+    /* Signatory dropdowns (Preview bottom controls) */
+    .preview-signatory-row .preview-signatory-select-wrap select {
+        position: absolute;
+        opacity: 0;
+        pointer-events: none;
+        width: 0;
+        height: 0;
+        padding: 0;
+        margin: 0;
+    }
+    .preview-signatory-display-btn {
+        min-height: 1.8rem;
+        padding: 0.35rem 1.3rem 0.35rem 0.6rem;
+        font-size: 0.75rem;
+        line-height: 1;
+        text-align: left;
+        width: 100%;
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e");
+        background-repeat: no-repeat;
+        background-position: right 0.25rem center;
+        background-size: 11px 9px;
+    }
+    .preview-signatory-display-btn.has-value {
+        padding-top: 0.12rem;
+        padding-bottom: 0.12rem;
+        padding-left: 0.3rem;
+    }
+    .preview-signatory-display-btn:hover {
+        background-color: rgba(108, 117, 125, 0.12) !important;
+        color: inherit !important;
+    }
+    .preview-signatory-display-btn:active {
+        background-color: rgba(108, 117, 125, 0.18) !important;
+    }
+
+    /* Default red outline when empty (Adviser must be selected) */
+    .preview-signatory-display-btn:not(.has-value) {
+        border-color: rgba(176, 42, 55, 0.85) !important;
+        color: #b02a37 !important;
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23b02a37' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e") !important;
+        background-repeat: no-repeat !important;
+        background-position: right 0.25rem center !important;
+        background-size: 11px 9px !important;
+    }
+    .preview-signatory-display-btn:not(.has-value):focus {
+        box-shadow: 0 0 0 0.15rem rgba(176, 42, 55, 0.22) !important;
+    }
+    #preview-signatory-menu-popup button {
+        display: block;
+        width: 100%;
+        padding-left: 0.8rem;
+        text-align: left;
+    }
+    .preview-signatory-edit-btn {
+        border: none;
+        background: transparent;
+        padding: 0;
+        color: #6c757d;
+        line-height: 1;
+    }
+    .preview-signatory-edit-btn:hover,
+    .preview-signatory-edit-btn:focus {
+        color: #0d6efd;
+        outline: none;
+    }
+    .preview-signatory-manage-list .list-group-item.active {
+        background-color: rgba(13, 110, 253, 0.15);
+        border-color: #dee2e6;
+        color: #212529;
+    }
+    /* Make manage list rows more compact (height + font size) */
+    .preview-signatory-manage-list .list-group-item {
+        padding-top: 0.32rem;
+        padding-bottom: 0.32rem;
+        padding-left: 0.5rem;
+        padding-right: 0.5rem;
+        line-height: 1.2;
+        font-size: 0.85rem;
+        min-height: 0;
+    }
+    .preview-signatory-manage-list .list-group-item span {
+        font-size: 0.85rem;
+    }
+    .preview-signatory-manage-list .list-group-item.active:focus,
+    .preview-signatory-manage-list .list-group-item.active:focus-visible {
+        outline: none !important;
+        box-shadow: none !important;
+    }
+    .preview-signatory-row-actions {
+        display: none;
+        gap: 0.25rem;
+    }
+    .preview-signatory-manage-list .list-group-item.active .preview-signatory-row-actions {
+        display: inline-flex;
+    }
+    .preview-signatory-row-action-btn {
+        border: none;
+        background: transparent;
+        padding: 0.08rem;
+        color: #0d6efd;
+        line-height: 1;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 0.25rem;
+    }
+    .preview-signatory-row-action-btn svg {
+        width: 14px !important;
+        height: 14px !important;
+    }
+    .preview-signatory-row-action-btn:hover,
+    .preview-signatory-row-action-btn:focus {
+        color: #0a58ca;
+        background: rgba(13, 110, 253, 0.1);
+        outline: none;
+    }
+
+    /* Preview modals: force immediate show/hide and keep backdrop behind dialogs */
+    #preview-signatory-admin-password-modal,
+    #preview-signatory-manage-modal,
+    #preview-signatory-delete-confirm-modal,
+    #preview-signatory-add-edit-modal {
+        z-index: 1070 !important;
+        transition: none !important;
+    }
+    #preview-signatory-admin-password-modal .modal-dialog,
+    #preview-signatory-manage-modal .modal-dialog,
+    #preview-signatory-delete-confirm-modal .modal-dialog,
+    #preview-signatory-add-edit-modal .modal-dialog {
+        transition: none !important;
+    }
+    /* Preview edit feedback at top of screen */
+    #preview-edit-success-toast {
+        position: fixed;
+        top: 0.8rem;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 2200;
+        display: none;
+        background: #198754;
+        color: #fff;
+        border-radius: 0.45rem;
+        padding: 0.5rem 0.8rem;
+        font-size: 0.82rem;
+        box-shadow: 0 0.5rem 1.2rem rgba(0, 0, 0, 0.22);
+    }
+    #preview-edit-success-toast.is-open {
+        display: block;
+    }
+    body > .modal-backdrop {
+        z-index: 1060 !important;
+        transition: none !important;
+        animation: none !important;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="mb-3 d-flex justify-content-between align-items-start preview-page-header">
+    <div>
+        <h1 class="h5 mb-1">Preview Program of Study</h1>
+        <p class="text-muted mb-0">
+            Read-only view of the generated Program of Study for the selected term.
+        </p>
+    </div>
+    <div class="text-end preview-academic-term">
+        <div class="small text-muted text-uppercase">Academic Term</div>
+        <div class="fw-semibold">{{ session_academic_year|default:"—" }}{% if session_semester %} · {{ session_semester }}{% endif %}</div>
+    </div>
+</div>
+
+<div class="pos-card p-4 mb-4 pos-student-profile-card-bg">
+    <div class="pos-student-profile-inner">
+    <div class="d-flex justify-content-between align-items-start mb-3">
+        <div>
+            <div class="pos-section-title mb-1">Student Profile</div>
+        </div>
+        <div class="fw-semibold text-muted">{% now "F d, Y" %}</div>
+    </div>
+
+    <div class="d-flex align-items-start gap-3 pos-student-profile-row">
+        <div class="preview-photo-box flex-shrink-0">
+            {% if student.profile_photo %}
+            <img src="{{ student.profile_photo.url }}" alt="Student photo">
+            {% else %}
+            <span class="photo-placeholder">Photo</span>
+            {% endif %}
+        </div>
+        <div class="pos-student-profile-scroll flex-grow-1">
+        <div class="row small pos-student-profile-details">
+            <div class="col-4 mb-2">
+                <div class="mb-1">
+                    <div class="text-muted text-uppercase">Student Name</div>
+                    <div class="fw-semibold">{{ student.full_name|default:"—"|upper }}</div>
+                </div>
+                <div>
+                    <div class="text-muted text-uppercase">SR-Code</div>
+                    <div class="fw-semibold">{{ student.sr_code|default:"—" }}</div>
+                </div>
+            </div>
+            <div class="col-4 mb-2">
+                <div class="mb-1">
+                    <div class="text-muted text-uppercase">Year Level</div>
+                    <div class="fw-semibold">{{ student.year_level|default:"—" }}</div>
+                </div>
+                <div>
+                    <div class="text-muted text-uppercase">Program</div>
+                    <div class="fw-semibold">BS Computer Engineering</div>
+                </div>
+            </div>
+            <div class="col-4 mb-2">
+                <div class="mb-1">
+                    <div class="text-muted text-uppercase">Curriculum</div>
+                    <div class="fw-semibold text-nowrap">BSCpE Curriculum 2025-2026</div>
+                </div>
+                <div>
+                    <div class="text-muted text-uppercase">Campus</div>
+                    <div class="fw-semibold">Alangilan Campus</div>
+                </div>
+            </div>
+        </div>
+        </div>
+    </div>
+    </div>
+</div>
+
+{% if has_generated_preview %}
+<div class="pos-card p-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div class="pos-section-title mb-0">Program of Study Summary</div>
+    </div>
+
+    <div id="pos-option-toggle" class="mb-3" style="display:none;">
+        <div class="d-flex justify-content-between align-items-start gap-2 mb-2 flex-wrap">
+            <div class="pos-section-title mb-0">Solver Output Options</div>
+            <div class="small text-muted text-end" id="pos-option-reason"></div>
+        </div>
+        <div class="d-flex gap-3 flex-wrap align-items-center">
+            <div class="form-check">
+                <input class="form-check-input" type="radio" name="petitionMode" id="petition-mode-no" value="no_petition">
+                <label class="form-check-label" for="petition-mode-no">No Petition</label>
+            </div>
+            <div class="form-check">
+                <input class="form-check-input" type="radio" name="petitionMode" id="petition-mode-yes" value="with_petition">
+                <label class="form-check-label" for="petition-mode-yes">With Petition</label>
+            </div>
+        </div>
+    </div>
+
+    <div id="pos-validation-alert" class="alert alert-danger mb-3" style="display:none;"></div>
+    <div id="preview-edit-success-toast" role="status" aria-live="polite">Changes applied successfully.</div>
+
+    <div id="pos-preview-server">
+    {% for section in preview_sections %}
+    <div class="mb-4">
+        <h6 class="fw-bold mb-2">{{ section.label }}</h6>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle table-bordered mb-0">
+                <colgroup>
+                    <col style="width:8%;">   <!-- Code -->
+                    <col style="width:32%;">  <!-- Title -->
+                    <col style="width:4%;">   <!-- Units -->
+                    <col style="width:3%;">   <!-- Lec -->
+                    <col style="width:3%;">   <!-- Lab -->
+                    <col style="width:12%;">  <!-- Pre-req -->
+                    <col style="width:12%;">  <!-- Co-req -->
+                    <col style="width:8%;">   <!-- Final Grade -->
+                    <col style="width:8%;">   <!-- Remarks -->
+                </colgroup>
+                <thead class="table-light">
+                    <tr class="text-center">
+                        <th rowspan="2" style="width: 8%;">Course Code</th>
+                        <th rowspan="2" style="width: 28%;">Course Title</th>
+                        <th rowspan="2" style="width: 4%;">Units</th>
+                        <th colspan="2" class="hours-header" style="width: 6%;">No. of hour/s</th>
+                        <th rowspan="2" style="width: 12%;">Pre-requisite(s)</th>
+                        <th rowspan="2" style="width: 12%;">Co-requisite(s)</th>
+                        <th rowspan="2" style="width: 9%;">Grade</th>
+                        <th rowspan="2" style="width: 9%;">Remarks</th>
+                    </tr>
+                    <tr class="text-center">
+                        <th style="width: 4%;">Lec</th>
+                        <th style="width: 4%;">Lab</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in section.rows %}
+                    <tr>
+                        <td class="{% if row.display_code|default:row.code != row.code %}elective-course-cell text-start{% else %}text-center{% endif %}">{{ row.display_code|default:row.code }}</td>
+                        <td class="course-title-cell">{{ row.title }}</td>
+                        <td class="text-center">{{ row.units }}</td>
+                        <td class="text-center">{{ row.lec }}</td>
+                        <td class="text-center">{{ row.lab }}</td>
+                        <td class="small text-muted text-center">{{ row.prereq }}</td>
+                        <td class="small text-muted text-center">{{ row.coreq }}</td>
+                        <td class="text-center grade-display {% if row.grade == '5.00' %}text-danger{% endif %}" data-course-code="{{ row.code }}">{% if row.grade %}{{ row.grade }}{% endif %}</td>
+                        <td class="text-center remarks-display {% if row.remark == 'Passed' %}text-success{% elif row.remark == 'Failed' %}text-danger{% endif %}" data-course-code="{{ row.code }}">{% if row.remark %}{{ row.remark }}{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <th colspan="2" class="text-end">Total Units</th>
+                        <th class="text-center">{{ section.total_units }}</th>
+                        <th colspan="6"></th>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+    {% endfor %}
+    </div>
+    <div id="pos-preview-dynamic" style="display:none;"></div>
+
+        <div id="preview-signatory-section" class="mt-4 preview-signatory-row">
+            <div class="row g-2">
+                <div class="col-12 col-md-4">
+                    <label for="preview-adviser-select" class="form-label small text-uppercase text-muted mb-1 d-flex align-items-center gap-2">
+                        <span>ADVISER</span>
+                        <button type="button" class="preview-signatory-edit-btn" data-signatory-role="adviser" title="Edit Adviser list" aria-label="Edit Adviser list">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+                        </button>
+                    </label>
+                    <div class="preview-signatory-select-wrap">
+                        <select id="preview-adviser-select" class="form-select form-select-sm">
+                            <option value="" {% if not selected_signatories.adviser %}selected{% endif %}>-- Select Adviser --</option>
+                            {% for item in signatory_options.adviser %}
+                            <option value="{{ item.name }}" {% if selected_signatories.adviser == item.name %}selected{% endif %}>{{ item.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="col-12 col-md-4">
+                    <label for="preview-program-chair-select" class="form-label small text-uppercase text-muted mb-1 d-flex align-items-center gap-2">
+                        <span>PROGRAM CHAIR</span>
+                        <button type="button" class="preview-signatory-edit-btn" data-signatory-role="program_chair" title="Edit Program Chair list" aria-label="Edit Program Chair list">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+                        </button>
+                    </label>
+                    <div class="preview-signatory-select-wrap">
+                        <select id="preview-program-chair-select" class="form-select form-select-sm" disabled>
+                            {% for item in signatory_options.program_chair %}
+                            <option value="{{ item.name }}" {% if selected_signatories.program_chair == item.name or not selected_signatories.program_chair and forloop.first %}selected{% endif %}>{{ item.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="col-12 col-md-4">
+                    <label for="preview-department-chair-select" class="form-label small text-uppercase text-muted mb-1 d-flex align-items-center gap-2">
+                        <span>DEPARTMENT CHAIR</span>
+                        <button type="button" class="preview-signatory-edit-btn" data-signatory-role="department_chair" title="Edit Department Chair list" aria-label="Edit Department Chair list">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+                        </button>
+                    </label>
+                    <div class="preview-signatory-select-wrap">
+                        <select id="preview-department-chair-select" class="form-select form-select-sm" disabled>
+                            {% for item in signatory_options.department_chair %}
+                            <option value="{{ item.name }}" {% if selected_signatories.department_chair == item.name or not selected_signatories.department_chair and forloop.first %}selected{% endif %}>{{ item.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal" id="preview-signatory-admin-password-modal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered modal-sm">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h6 class="modal-title mb-0">Admin Password Required</h6>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <input type="password" class="form-control form-control-sm" id="preview-signatory-admin-password-input" placeholder="Enter Admin Password">
+                        <div class="small text-danger mt-2" id="preview-signatory-admin-password-error" style="display:none;">Incorrect password.</div>
+                    </div>
+                    <div class="modal-footer justify-content-end">
+                        <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                        <button type="button" class="btn btn-primary btn-sm" id="preview-signatory-admin-password-confirm-btn">Continue</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal" id="preview-signatory-manage-modal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="preview-signatory-manage-title">Edit Signatory List</h5>
+                        <!-- top-right close removed; use footer Close button only -->
+                    </div>
+                    <div class="modal-body">
+                        <div class="small text-muted mb-2 d-flex align-items-center justify-content-between">
+                            <span>Select a name to edit or delete.</span>
+                            <button type="button" class="btn btn-outline-primary btn-sm d-inline-flex align-items-center justify-content-center"
+                                    id="preview-signatory-open-add-modal-btn" title="Add adviser" aria-label="Add adviser"
+                                    data-bs-toggle="tooltip" data-bs-placement="top" data-bs-title="Add"
+                                    style="width: 1.7rem; height: 1.7rem; padding: 0;">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M19 11H13V5h-2v6H5v2h6v6h2v-6h6z"/></svg>
+                            </button>
+                        </div>
+                        <div class="list-group preview-signatory-manage-list" id="preview-signatory-manage-list"></div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal" id="preview-signatory-delete-confirm-modal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered modal-sm">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h6 class="modal-title mb-0">Confirm Delete</h6>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        Are you sure you want to delete this professor?
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                        <button type="button" class="btn btn-danger btn-sm" id="preview-signatory-delete-confirm-btn">Delete</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal" id="preview-signatory-add-edit-modal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered modal-sm">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h6 class="modal-title mb-0" id="preview-signatory-add-edit-title">Add Adviser</h6>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <input type="text" class="form-control form-control-sm" id="preview-signatory-add-edit-input" placeholder="Enter full name">
+                    </div>
+                    <div class="modal-footer justify-content-end">
+                        <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                        <button type="button" class="btn btn-primary btn-sm" id="preview-signatory-add-edit-confirm-btn">Add</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="mt-3 d-flex justify-content-between align-items-center preview-bottom-actions">
+            <div class="d-flex align-items-center preview-bottom-left">
+                <button id="pos-edit-toggle" type="button" class="btn btn-outline-secondary btn-sm d-inline-flex align-items-center justify-content-center px-2" style="min-width: 96px;" title="Edit and drag ungraded courses">
+                    <span id="pos-edit-toggle-icon" class="me-1" aria-hidden="true">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+                        </svg>
+                    </span>
+                    <span id="pos-edit-toggle-label">Edit</span>
+                </button>
+                <div class="ms-3 preview-feasible-wrap">
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" role="switch" id="pos-feasible-move-toggle" aria-label="Show feasible move targets">
+                        <div class="form-check-label small text-muted preview-label-with-info">
+                            <span>Show feasible move targets</span>
+                            <button
+                                type="button"
+                                class="btn preview-info-btn"
+                                data-preview-info="popover"
+                                data-bs-toggle="popover"
+                                data-bs-trigger="click"
+                                data-bs-placement="right"
+                                data-bs-html="false"
+                                data-bs-custom-class="preview-info-popover"
+                                data-bs-content="Highlights semesters where a selected course can be moved while keeping prerequisite and sequence rules valid (may be slow)."
+                                aria-label="Show feasible move targets info"
+                            >i</button>
+                        </div>
+                        <span id="pos-feasible-move-spinner"
+                              class="ms-2 align-middle text-primary"
+                              role="status"
+                              aria-hidden="true"
+                              style="display:none;">
+                            <svg width="20" height="20" viewBox="0 0 44 44">
+                                <circle cx="22" cy="22" r="18" stroke="currentColor" stroke-width="4" fill="none" opacity="0.18"></circle>
+                                <circle id="pos-feasible-move-spinner-ring"
+                                        cx="22" cy="22" r="18"
+                                        stroke="currentColor" stroke-width="4" fill="none"
+                                        stroke-linecap="round"
+                                        stroke-dasharray="113.097"
+                                        stroke-dashoffset="113.097"
+                                        transform="rotate(-90 22 22)"></circle>
+                            </svg>
+                        </span>
+                    </div>
+                </div>
+            </div>
+            <div class="d-flex align-items-center gap-2 preview-bottom-right">
+                <button type="button" id="preview-save-history-btn" class="btn btn-outline-primary btn-sm">
+                    Save
+                </button>
+                <button type="button" id="preview-download-pdf-btn" class="btn btn-outline-danger btn-sm">
+                    Download PDF
+                </button>
+            </div>
+        </div>
+</div>
+{% else %}
+<div class="pos-card p-4">
+    <div class="alert alert-secondary mb-0 text-center" role="alert">
+        You have not generated any POS yet. Please generate a POS first to see its preview.
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_scripts %}
+{% if has_generated_preview %}
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+{{ course_lookup|json_script:"course-lookup" }}
+{{ signatory_options|json_script:"signatory-options" }}
+<script>
+    (function() {
+        function showPreviewPageError(title, message, onHidden) {
+            var t = title || 'Error';
+            var m = message != null ? String(message) : '';
+            if (typeof window.showAppSystemErrorModal === 'function') {
+                var opts = {};
+                if (typeof onHidden === 'function') opts.onHidden = onHidden;
+                window.showAppSystemErrorModal(t, m, opts);
+            } else {
+                window.alert(m || t);
+                if (typeof onHidden === 'function') onHidden();
+            }
+        }
+
+        var previewSignatoryMenuPopup = null;
+        var previewSignatoryBackdrop = null;
+        var previewCurrentSignatorySelect = null;
+        var previewSignatorySelectIds = [
+            'preview-adviser-select',
+            'preview-department-chair-select',
+            'preview-program-chair-select'
+        ];
+        var signatoryRoleToSelectId = {
+            adviser: 'preview-adviser-select',
+            department_chair: 'preview-department-chair-select',
+            program_chair: 'preview-program-chair-select'
+        };
+        var signatoryRoleToLabel = {
+            adviser: 'Adviser',
+            department_chair: 'Department Chair',
+            program_chair: 'Program Chair'
+        };
+        var signatoryOptionsEl = document.getElementById('signatory-options');
+        var signatoryOptionsMap = {};
+        try {
+            signatoryOptionsMap = (signatoryOptionsEl && signatoryOptionsEl.textContent) ? JSON.parse(signatoryOptionsEl.textContent) : {};
+        } catch (e) {
+            signatoryOptionsMap = {};
+        }
+        var signatoryManageModal = null;
+        var signatoryDeleteConfirmModal = null;
+        var signatoryAddEditModal = null;
+        var signatoryErrorModal = null;
+        var signatoryAdminPasswordModal = null;
+        var previewTooltipInstances = [];
+        var activeManageRole = null;
+        var activeManageSelectedOptionId = null;
+        var addEditMode = 'add';
+        var pendingManageRole = null;
+        var pendingDeleteRole = null;
+        var pendingDeleteOptionId = null;
+        var currentAdminPassword = '';
+        var reopenManageAfterAddEdit = false;
+
+        function disposePreviewTooltips() {
+            if (!previewTooltipInstances || !previewTooltipInstances.length) return;
+            previewTooltipInstances.forEach(function(t) {
+                try { t.dispose(); } catch (e) {}
+            });
+            previewTooltipInstances = [];
+        }
+
+        function initPreviewTooltips(scope) {
+            if (!(window.bootstrap && window.bootstrap.Tooltip)) return;
+            disposePreviewTooltips();
+            var root = scope || document;
+            root.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(el) {
+                try {
+                    previewTooltipInstances.push(new bootstrap.Tooltip(el));
+                } catch (e) {}
+            });
+        }
+
+        function initPreviewInfoPopovers(scope) {
+            if (!(window.bootstrap && window.bootstrap.Popover)) return;
+            var root = scope || document;
+            root.querySelectorAll('[data-preview-info="popover"]').forEach(function(el) {
+                try { new bootstrap.Popover(el, { container: 'body' }); } catch (e) {}
+            });
+            if (initPreviewInfoPopovers._boundDocClick) return;
+            initPreviewInfoPopovers._boundDocClick = true;
+            document.addEventListener('click', function(e) {
+                var trigger = e.target.closest('[data-preview-info="popover"]');
+                var insidePopover = e.target.closest('.popover');
+                if (trigger || insidePopover) return;
+                document.querySelectorAll('[data-preview-info="popover"]').forEach(function(el) {
+                    var pop = bootstrap.Popover.getInstance(el);
+                    if (pop) pop.hide();
+                });
+            });
+        }
+
+        function ensureSignatoryManageModals() {
+            if (!signatoryManageModal) {
+                var modalEl = document.getElementById('preview-signatory-manage-modal');
+                if (modalEl && window.bootstrap && window.bootstrap.Modal) {
+                    signatoryManageModal = new bootstrap.Modal(modalEl, { backdrop: 'static', keyboard: false });
+                }
+            }
+            if (!signatoryDeleteConfirmModal) {
+                var confirmEl = document.getElementById('preview-signatory-delete-confirm-modal');
+                if (confirmEl && window.bootstrap && window.bootstrap.Modal) {
+                    signatoryDeleteConfirmModal = new bootstrap.Modal(confirmEl);
+                }
+            }
+            if (!signatoryAddEditModal) {
+                var addEditEl = document.getElementById('preview-signatory-add-edit-modal');
+                if (addEditEl && window.bootstrap && window.bootstrap.Modal) {
+                    signatoryAddEditModal = new bootstrap.Modal(addEditEl);
+                }
+            }
+            if (!signatoryErrorModal) {
+                signatoryErrorModal = { _custom: true };
+            }
+            if (!signatoryAdminPasswordModal) {
+                var adminPasswordEl = document.getElementById('preview-signatory-admin-password-modal');
+                if (adminPasswordEl && window.bootstrap && window.bootstrap.Modal) {
+                    signatoryAdminPasswordModal = new bootstrap.Modal(adminPasswordEl);
+                }
+            }
+        }
+
+        function ensurePreviewSignatoryMenuElements() {
+            if (!previewSignatoryMenuPopup) {
+                previewSignatoryMenuPopup = document.createElement('div');
+                previewSignatoryMenuPopup.id = 'preview-signatory-menu-popup';
+                previewSignatoryMenuPopup.className = 'position-absolute bg-white border rounded shadow-sm';
+                previewSignatoryMenuPopup.style.zIndex = '1055';
+                previewSignatoryMenuPopup.style.minWidth = '12rem';
+                previewSignatoryMenuPopup.style.maxHeight = '240px';
+                previewSignatoryMenuPopup.style.overflowY = 'auto';
+                previewSignatoryMenuPopup.style.display = 'none';
+                previewSignatoryMenuPopup.style.padding = '0.25rem 0';
+                document.body.appendChild(previewSignatoryMenuPopup);
+            }
+            if (!previewSignatoryBackdrop) {
+                previewSignatoryBackdrop = document.createElement('div');
+                previewSignatoryBackdrop.style.position = 'fixed';
+                previewSignatoryBackdrop.style.inset = '0';
+                previewSignatoryBackdrop.style.background = 'transparent';
+                previewSignatoryBackdrop.style.zIndex = '1054';
+                previewSignatoryBackdrop.style.display = 'none';
+                previewSignatoryBackdrop.addEventListener('click', function() {
+                    closePreviewSignatoryMenu();
+                });
+                document.body.appendChild(previewSignatoryBackdrop);
+            }
+        }
+
+        function closePreviewSignatoryMenu() {
+            if (previewSignatoryMenuPopup) previewSignatoryMenuPopup.style.display = 'none';
+            if (previewSignatoryBackdrop) previewSignatoryBackdrop.style.display = 'none';
+            previewCurrentSignatorySelect = null;
+        }
+
+        function positionPreviewSignatoryMenu(anchorButton) {
+            if (!previewSignatoryMenuPopup || !anchorButton) return;
+            var rect = anchorButton.getBoundingClientRect();
+
+            // Measure popup naturally before final placement.
+            previewSignatoryMenuPopup.style.visibility = 'hidden';
+            previewSignatoryMenuPopup.style.display = 'block';
+            var popupWidth = Math.max(previewSignatoryMenuPopup.offsetWidth || 0, rect.width);
+            var naturalHeight = previewSignatoryMenuPopup.offsetHeight || 0;
+
+            var viewportW = window.innerWidth || document.documentElement.clientWidth || 0;
+            var viewportH = window.innerHeight || document.documentElement.clientHeight || 0;
+            var gap = 4;
+            var edgePad = 8;
+            var spaceBelow = Math.max(0, viewportH - rect.bottom - edgePad);
+            var spaceAbove = Math.max(0, rect.top - edgePad);
+            var opensUp = naturalHeight > spaceBelow && spaceAbove > spaceBelow;
+            var availableHeight = opensUp ? spaceAbove : spaceBelow;
+            var maxHeight = Math.max(120, availableHeight);
+
+            var left = rect.left + window.scrollX;
+            var minLeft = window.scrollX + edgePad;
+            var maxLeft = window.scrollX + viewportW - popupWidth - edgePad;
+            if (left < minLeft) left = minLeft;
+            if (left > maxLeft) left = Math.max(minLeft, maxLeft);
+
+            var top;
+            if (opensUp) {
+                var popupHeight = Math.min(naturalHeight, maxHeight);
+                top = rect.top + window.scrollY - popupHeight - gap;
+            } else {
+                top = rect.bottom + window.scrollY + gap;
+            }
+
+            previewSignatoryMenuPopup.style.minWidth = popupWidth + 'px';
+            previewSignatoryMenuPopup.style.maxHeight = maxHeight + 'px';
+            previewSignatoryMenuPopup.style.top = top + 'px';
+            previewSignatoryMenuPopup.style.left = left + 'px';
+            previewSignatoryMenuPopup.style.visibility = 'visible';
+        }
+
+        function openPreviewSignatoryMenu(selectEl, anchorButton) {
+            if (!selectEl || !anchorButton) return;
+            ensurePreviewSignatoryMenuElements();
+            previewCurrentSignatorySelect = selectEl;
+            previewSignatoryMenuPopup.innerHTML = '';
+
+            for (var i = 0; i < selectEl.options.length; i++) {
+                (function(opt) {
+                    var btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.className = 'dropdown-item small';
+                    btn.textContent = opt.textContent;
+                    if (opt.selected) btn.classList.add('fw-semibold');
+                    btn.addEventListener('click', function() {
+                        if (!previewCurrentSignatorySelect) return;
+                        previewCurrentSignatorySelect.value = opt.value;
+                        previewCurrentSignatorySelect.dispatchEvent(new Event('change', { bubbles: true }));
+                        var wrap = previewCurrentSignatorySelect.closest('.preview-signatory-select-wrap');
+                        if (wrap) {
+                            var displayBtn = wrap.querySelector('.preview-signatory-display-btn');
+                            if (displayBtn) {
+                                var txt = opt.textContent.trim();
+                                displayBtn.textContent = txt;
+                                displayBtn.classList.toggle('has-value', !!opt.value);
+                            }
+                        }
+                        closePreviewSignatoryMenu();
+                    });
+                    previewSignatoryMenuPopup.appendChild(btn);
+                })(selectEl.options[i]);
+            }
+
+            positionPreviewSignatoryMenu(anchorButton);
+            previewSignatoryBackdrop.style.display = 'block';
+            previewSignatoryMenuPopup.style.display = 'block';
+        }
+
+        function initPreviewSignatorySelectVisual(selectEl) {
+            if (!selectEl) return;
+            if (selectEl.closest('.preview-signatory-select-wrap') && selectEl.closest('.preview-signatory-select-wrap').querySelector('.preview-signatory-display-btn')) {
+                return;
+            }
+            var wrapper = selectEl.closest('.preview-signatory-select-wrap');
+            if (!wrapper) return;
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'btn btn-sm btn-outline-secondary preview-signatory-display-btn';
+            var selectedOption = selectEl.options[selectEl.selectedIndex];
+            var text = (selectedOption && selectedOption.textContent) ? selectedOption.textContent.trim() : '';
+            btn.textContent = text || '';
+            btn.classList.toggle('has-value', !!(selectedOption && selectedOption.value));
+            btn.addEventListener('click', function() {
+                if (selectEl.disabled) return;
+                openPreviewSignatoryMenu(selectEl, btn);
+            });
+            wrapper.insertBefore(btn, selectEl);
+        }
+
+        function loadPreviewSignatorySelections() {
+            // Per-account values are loaded from server-rendered selections.
+        }
+
+        function savePreviewSignatorySelections() {
+            // Adviser persistence is handled server-side per user account.
+        }
+
+        function getPreviewSignatoryParams() {
+            var adviser = document.getElementById('preview-adviser-select');
+            var departmentChair = document.getElementById('preview-department-chair-select');
+            var programChair = document.getElementById('preview-program-chair-select');
+            return {
+                adviser: adviser ? (adviser.value || '') : '',
+                department_chair: departmentChair ? (departmentChair.value || '') : '',
+                program_chair: programChair ? (programChair.value || '') : ''
+            };
+        }
+
+        function refreshSignatoryDisplayButton(selectEl) {
+            if (!selectEl) return;
+            var wrap = selectEl.closest('.preview-signatory-select-wrap');
+            if (!wrap) return;
+            var btn = wrap.querySelector('.preview-signatory-display-btn');
+            if (!btn) return;
+            var selectedOption = selectEl.options[selectEl.selectedIndex];
+            var text = (selectedOption && selectedOption.textContent) ? selectedOption.textContent.trim() : '';
+            btn.textContent = text || '';
+            btn.classList.toggle('has-value', !!(selectedOption && selectedOption.value));
+        }
+
+        function repopulateSignatorySelect(role, keepValue) {
+            var selectId = signatoryRoleToSelectId[role];
+            var selectEl = selectId ? document.getElementById(selectId) : null;
+            if (!selectEl) return;
+            var items = Array.isArray(signatoryOptionsMap[role]) ? signatoryOptionsMap[role] : [];
+            var nextValue = (keepValue || '').trim();
+            selectEl.innerHTML = '';
+            if (role === 'adviser') {
+                var placeholder = document.createElement('option');
+                placeholder.value = '';
+                placeholder.textContent = '-- Select Adviser --';
+                selectEl.appendChild(placeholder);
+            }
+            items.forEach(function(item, idx) {
+                var opt = document.createElement('option');
+                opt.value = item.name;
+                opt.textContent = item.name;
+                if (!nextValue && role !== 'adviser' && idx === 0) {
+                    opt.selected = true;
+                    nextValue = item.name;
+                }
+                selectEl.appendChild(opt);
+            });
+            if (nextValue) selectEl.value = nextValue;
+            refreshSignatoryDisplayButton(selectEl);
+            savePreviewSignatorySelections();
+        }
+
+        function repopulateAllSignatorySelects(keepValues) {
+            keepValues = keepValues || getPreviewSignatoryParams();
+            repopulateSignatorySelect('adviser', keepValues.adviser || '');
+            repopulateSignatorySelect('department_chair', keepValues.department_chair || '');
+            repopulateSignatorySelect('program_chair', keepValues.program_chair || '');
+        }
+
+        function renderSignatoryManageList() {
+            var listEl = document.getElementById('preview-signatory-manage-list');
+            if (!listEl) return;
+            listEl.innerHTML = '';
+            activeManageSelectedOptionId = null;
+
+            var items = Array.isArray(signatoryOptionsMap[activeManageRole]) ? signatoryOptionsMap[activeManageRole] : [];
+            items.forEach(function(item) {
+                var row = document.createElement('button');
+                row.type = 'button';
+                row.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-center';
+                row.dataset.optionId = String(item.id);
+                row.innerHTML = '<span class="text-start flex-grow-1">' + item.name + '</span>' +
+                    '<span class="preview-signatory-row-actions">' +
+                    '<button type="button" class="preview-signatory-row-action-btn" data-action="edit" title="Edit" aria-label="Edit" data-bs-toggle="tooltip" data-bs-placement="top" data-bs-title="Edit">' +
+                    '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>' +
+                    '</button>' +
+                    '<button type="button" class="preview-signatory-row-action-btn" data-action="delete" title="Delete" aria-label="Delete" data-bs-toggle="tooltip" data-bs-placement="top" data-bs-title="Delete">' +
+                    '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M6 7h12l-1 14H7L6 7zm3-3h6l1 2h4v2H4V6h4l1-2z"/></svg>' +
+                    '</button>' +
+                    '</span>';
+                row.addEventListener('click', function() {
+                    var alreadySelected = row.classList.contains('active');
+                    listEl.querySelectorAll('.list-group-item').forEach(function(el) { el.classList.remove('active'); });
+                    if (alreadySelected) {
+                        activeManageSelectedOptionId = null;
+                        return;
+                    }
+                    row.classList.add('active');
+                    activeManageSelectedOptionId = item.id;
+                });
+                var editBtn = row.querySelector('[data-action="edit"]');
+                var deleteBtn = row.querySelector('[data-action="delete"]');
+                if (editBtn) {
+                    editBtn.addEventListener('click', function(evt) {
+                        evt.preventDefault();
+                        evt.stopPropagation();
+                        listEl.querySelectorAll('.list-group-item').forEach(function(el) { el.classList.remove('active'); });
+                        row.classList.add('active');
+                        activeManageSelectedOptionId = item.id;
+                        openSignatoryAddEditModal('edit', item.id, item.name);
+                    });
+                }
+                if (deleteBtn) {
+                    deleteBtn.addEventListener('click', function(evt) {
+                        evt.preventDefault();
+                        evt.stopPropagation();
+                        listEl.querySelectorAll('.list-group-item').forEach(function(el) { el.classList.remove('active'); });
+                        row.classList.add('active');
+                        activeManageSelectedOptionId = item.id;
+                        pendingDeleteRole = activeManageRole;
+                        pendingDeleteOptionId = item.id;
+                        if (signatoryDeleteConfirmModal) signatoryDeleteConfirmModal.show();
+                    });
+                }
+                listEl.appendChild(row);
+            });
+            initPreviewTooltips(listEl);
+        }
+
+        function openSignatoryManageModal(role) {
+            ensureSignatoryManageModals();
+            activeManageRole = role;
+            activeManageSelectedOptionId = null;
+            var titleEl = document.getElementById('preview-signatory-manage-title');
+            if (titleEl) titleEl.textContent = 'Edit ' + (signatoryRoleToLabel[role] || 'Signatory') + ' List';
+            var inputEl = document.getElementById('preview-signatory-new-name');
+            if (inputEl) inputEl.value = '';
+            // Always fetch latest options so changes by other users are reflected.
+            var fetchUrl = "{% url 'get_signatory_options' %}";
+            fetch(fetchUrl, { method: "GET" })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (data && data.ok && data.options) {
+                        signatoryOptionsMap = data.options;
+                    }
+                    renderSignatoryManageList();
+                    if (signatoryManageModal) signatoryManageModal.show();
+                })
+                .catch(function() {
+                    // Fallback to whatever we have loaded originally.
+                    renderSignatoryManageList();
+                    if (signatoryManageModal) signatoryManageModal.show();
+                });
+        }
+
+        function openSignatoryAddEditModal(mode, optionId, currentName) {
+            ensureSignatoryManageModals();
+            addEditMode = mode === 'edit' ? 'edit' : 'add';
+            activeManageSelectedOptionId = optionId || null;
+            var manageEl = document.getElementById('preview-signatory-manage-modal');
+            reopenManageAfterAddEdit = !!(manageEl && manageEl.classList.contains('show'));
+            if (reopenManageAfterAddEdit && signatoryManageModal) {
+                signatoryManageModal.hide();
+            }
+            var titleEl = document.getElementById('preview-signatory-add-edit-title');
+            var inputEl = document.getElementById('preview-signatory-add-edit-input');
+            var confirmBtn = document.getElementById('preview-signatory-add-edit-confirm-btn');
+            if (titleEl) titleEl.textContent = addEditMode === 'edit' ? 'Edit Adviser' : 'Add Adviser';
+            if (confirmBtn) confirmBtn.textContent = addEditMode === 'edit' ? 'Save' : 'Add';
+            if (inputEl) {
+                inputEl.value = currentName || '';
+                window.setTimeout(function() { try { inputEl.focus(); } catch (e) {} }, 100);
+            }
+            if (signatoryAddEditModal) signatoryAddEditModal.show();
+        }
+
+        function getPreviewSignatoryMissingPhrases() {
+            var signatories = getPreviewSignatoryParams();
+            var missing = [];
+            if (!signatories.adviser) missing.push('an Adviser');
+            if (!signatories.program_chair) missing.push('a Program Chair');
+            if (!signatories.department_chair) missing.push('a Department Chair');
+            return missing;
+        }
+
+        function formatPreviewSignatoryRequiredMessage(missing) {
+            if (!missing || !missing.length) return '';
+            if (missing.length === 1) {
+                return 'Please choose ' + missing[0] + ' before saving.';
+            }
+            if (missing.length === 2) {
+                return 'Please choose ' + missing[0] + ' and ' + missing[1] + ' before saving.';
+            }
+            return 'Please choose ' + missing[0] + ', ' + missing[1] + ', and ' + missing[2] + ' before saving.';
+        }
+
+        function scrollPreviewSignatoriesIntoViewAndFocus() {
+            var section = document.getElementById('preview-signatory-section');
+            var params = getPreviewSignatoryParams();
+            var firstSelect = null;
+            if (!params.adviser) firstSelect = document.getElementById('preview-adviser-select');
+            else if (!params.program_chair) firstSelect = document.getElementById('preview-program-chair-select');
+            else if (!params.department_chair) firstSelect = document.getElementById('preview-department-chair-select');
+
+            var scrollTarget = section || (firstSelect ? firstSelect.closest('.preview-signatory-row') : null);
+            if (scrollTarget) {
+                scrollTarget.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+            window.setTimeout(function() {
+                if (!firstSelect) return;
+                var wrap = firstSelect.closest('.preview-signatory-select-wrap');
+                var btn = wrap ? wrap.querySelector('.preview-signatory-display-btn') : null;
+                try {
+                    if (btn) btn.focus();
+                    else firstSelect.focus();
+                } catch (e) {}
+            }, 400);
+        }
+
+        function validatePreviewSignatories() {
+            ensureSignatoryManageModals();
+            var missing = getPreviewSignatoryMissingPhrases();
+            if (!missing.length) return true;
+            showPreviewPageError('Required Field', formatPreviewSignatoryRequiredMessage(missing));
+            return false;
+        }
+
+        function initPreviewSignatoryDropdowns() {
+            ensurePreviewSignatoryMenuElements();
+            loadPreviewSignatorySelections();
+            repopulateAllSignatorySelects(getPreviewSignatoryParams());
+            previewSignatorySelectIds.forEach(function(id) {
+                var selectEl = document.getElementById(id);
+                if (!selectEl) return;
+                initPreviewSignatorySelectVisual(selectEl);
+                selectEl.addEventListener('change', function() {
+                    savePreviewSignatorySelections();
+                });
+            });
+            savePreviewSignatorySelections();
+        }
+
+        function bindSignatoryEditActions() {
+            ensureSignatoryManageModals();
+            var addEditModalEl = document.getElementById('preview-signatory-add-edit-modal');
+            if (addEditModalEl) {
+                addEditModalEl.addEventListener('hidden.bs.modal', function() {
+                    if (reopenManageAfterAddEdit) {
+                        reopenManageAfterAddEdit = false;
+                        if (activeManageRole) openSignatoryManageModal(activeManageRole);
+                    }
+                });
+            }
+
+            document.querySelectorAll('.preview-signatory-edit-btn[data-signatory-role]').forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    var role = btn.getAttribute('data-signatory-role');
+                    if (!role) return;
+                    pendingManageRole = role;
+                    var inputEl = document.getElementById('preview-signatory-admin-password-input');
+                    var errEl = document.getElementById('preview-signatory-admin-password-error');
+                    if (inputEl) inputEl.value = '';
+                    if (errEl) errEl.style.display = 'none';
+                    if (signatoryAdminPasswordModal) signatoryAdminPasswordModal.show();
+                });
+            });
+            var adminConfirmBtn = document.getElementById('preview-signatory-admin-password-confirm-btn');
+            if (adminConfirmBtn) {
+                adminConfirmBtn.addEventListener('click', function() {
+                    var inputEl = document.getElementById('preview-signatory-admin-password-input');
+                    var errEl = document.getElementById('preview-signatory-admin-password-error');
+                    var pwd = inputEl ? (inputEl.value || '') : '';
+                    if (pwd !== 'Admin123') {
+                        if (errEl) errEl.style.display = '';
+                        return;
+                    }
+                    currentAdminPassword = pwd;
+                    if (errEl) errEl.style.display = 'none';
+                    if (signatoryAdminPasswordModal) signatoryAdminPasswordModal.hide();
+                    if (pendingManageRole) {
+                        openSignatoryManageModal(pendingManageRole);
+                        pendingManageRole = null;
+                    }
+                });
+            }
+            var adminInputEl = document.getElementById('preview-signatory-admin-password-input');
+            if (adminInputEl) {
+                adminInputEl.addEventListener('keydown', function(evt) {
+                    if (evt.key === 'Enter') {
+                        evt.preventDefault();
+                        if (adminConfirmBtn) adminConfirmBtn.click();
+                    }
+                });
+            }
+            var openAddBtn = document.getElementById('preview-signatory-open-add-modal-btn');
+            if (openAddBtn) {
+                openAddBtn.addEventListener('click', function() {
+                    if (!activeManageRole) return;
+                    openSignatoryAddEditModal('add', null, '');
+                });
+            }
+
+            var addEditConfirmBtn = document.getElementById('preview-signatory-add-edit-confirm-btn');
+            var addEditInputEl = document.getElementById('preview-signatory-add-edit-input');
+            if (addEditConfirmBtn && addEditInputEl) {
+                addEditConfirmBtn.addEventListener('click', function() {
+                    var name = (addEditInputEl.value || '').trim();
+                    if (!activeManageRole || !name) return;
+                    var currentValues = getPreviewSignatoryParams();
+                    if (addEditMode === 'edit') {
+                        if (!activeManageSelectedOptionId) return;
+                        fetch("{% url 'update_signatory_option' %}", {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ role: activeManageRole, id: activeManageSelectedOptionId, name: name, admin_password: currentAdminPassword })
+                        }).then(function(r) { return r.json(); })
+                          .then(function(data) {
+                              if (!data || !data.ok) {
+                                  showPreviewPageError('Signatory list', (data && data.error) ? data.error : 'Unable to update name.');
+                                  return;
+                              }
+                              signatoryOptionsMap = data.options || signatoryOptionsMap;
+                              if (activeManageRole === 'adviser') currentValues.adviser = name;
+                              repopulateAllSignatorySelects(currentValues);
+                              renderSignatoryManageList();
+                              if (signatoryAddEditModal) signatoryAddEditModal.hide();
+                          }).catch(function() {
+                              showPreviewPageError('Signatory list', 'Unable to update name right now.');
+                          });
+                        return;
+                    }
+                    fetch("{% url 'add_signatory_option' %}", {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ role: activeManageRole, name: name, admin_password: currentAdminPassword })
+                    }).then(function(r) { return r.json(); })
+                      .then(function(data) {
+                          if (!data || !data.ok) {
+                              showPreviewPageError('Signatory list', (data && data.error) ? data.error : 'Unable to add name.');
+                              return;
+                          }
+                          signatoryOptionsMap = data.options || signatoryOptionsMap;
+                          if (activeManageRole === 'adviser') currentValues.adviser = name;
+                          repopulateAllSignatorySelects(currentValues);
+                          renderSignatoryManageList();
+                          if (signatoryAddEditModal) signatoryAddEditModal.hide();
+                      }).catch(function() {
+                          showPreviewPageError('Signatory list', 'Unable to add name right now.');
+                      });
+                });
+                addEditInputEl.addEventListener('keydown', function(evt) {
+                    if (evt.key === 'Enter') {
+                        evt.preventDefault();
+                        addEditConfirmBtn.click();
+                    }
+                });
+            }
+            var confirmDeleteBtn = document.getElementById('preview-signatory-delete-confirm-btn');
+            var deleteConfirmModalEl = document.getElementById('preview-signatory-delete-confirm-modal');
+            if (deleteConfirmModalEl) {
+                deleteConfirmModalEl.addEventListener('hidden.bs.modal', function() {
+                    pendingDeleteRole = null;
+                    pendingDeleteOptionId = null;
+                });
+            }
+            if (confirmDeleteBtn) {
+                confirmDeleteBtn.addEventListener('click', function() {
+                    var roleToDelete = pendingDeleteRole || activeManageRole;
+                    var idToDelete = pendingDeleteOptionId || activeManageSelectedOptionId;
+                    if (!roleToDelete || !idToDelete) return;
+                    var currentValues = getPreviewSignatoryParams();
+                    fetch("{% url 'delete_signatory_option' %}", {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ role: roleToDelete, id: idToDelete, admin_password: currentAdminPassword })
+                    }).then(function(r) { return r.json(); })
+                      .then(function(data) {
+                          if (!data || !data.ok) {
+                              showPreviewPageError('Signatory list', (data && data.error) ? data.error : 'Unable to delete name.');
+                              return;
+                          }
+                          signatoryOptionsMap = data.options || signatoryOptionsMap;
+                          repopulateAllSignatorySelects(currentValues);
+                          renderSignatoryManageList();
+                          pendingDeleteRole = null;
+                          pendingDeleteOptionId = null;
+                          if (signatoryDeleteConfirmModal) signatoryDeleteConfirmModal.hide();
+                      }).catch(function() {
+                          showPreviewPageError('Signatory list', 'Unable to delete name right now.');
+                      });
+                });
+            }
+        }
+
+        initPreviewSignatoryDropdowns();
+        bindSignatoryEditActions();
+        initPreviewTooltips(document);
+        initPreviewInfoPopovers(document);
+
+        var previewDlBtn = document.getElementById('preview-download-pdf-btn');
+        if (previewDlBtn) {
+            previewDlBtn.addEventListener('click', function() {
+                if (!validatePreviewSignatories()) return;
+                function executePreviewPdfDownload() {
+                    var mode = getSelectedPetitionMode();
+                    var signatories = getPreviewSignatoryParams();
+                    var currentSemRaw = localStorage.getItem('posCurrentSemIndex');
+                    var currentUiIndex = currentSemRaw !== null && currentSemRaw !== '' ? parseInt(currentSemRaw, 10) : null;
+                    var boundaryParam = currentUiIndex !== null && !isNaN(currentUiIndex) ? '&boundary_ui_index=' + encodeURIComponent(currentUiIndex) : '';
+                    var signatoryParams =
+                        '&adviser=' + encodeURIComponent(signatories.adviser) +
+                        '&department_chair=' + encodeURIComponent(signatories.department_chair) +
+                        '&program_chair=' + encodeURIComponent(signatories.program_chair);
+                    window.location.href = "{% url 'download_pos_pdf' %}?petition_mode=" + encodeURIComponent(mode) + boundaryParam + signatoryParams;
+                }
+                executePreviewPdfDownload();
+            });
+        }
+
+        // Save tuned/edited Preview POS into POS History.
+        var previewSaveBtn = document.getElementById('preview-save-history-btn');
+        /** Needs history save / edit guard until saved again */
+        var previewHistoryUnsaved = true;
+        var previewExitProceed = null;
+        /** Assigned in wirePreviewLeaveGuard (global confirm modal). */
+        var openPreviewLeaveConfirm = function() {};
+
+        function setPreviewSaveState(state) {
+            if (!previewSaveBtn) return;
+            if (state === 'saved') {
+                previewSaveBtn.disabled = true;
+                previewSaveBtn.classList.remove('btn-outline-primary');
+                previewSaveBtn.classList.add('btn-primary');
+                previewSaveBtn.textContent = 'Saved';
+            } else {
+                previewSaveBtn.disabled = false;
+                previewSaveBtn.classList.remove('btn-primary');
+                previewSaveBtn.classList.add('btn-outline-primary');
+                previewSaveBtn.textContent = 'Save';
+            }
+        }
+
+        function enablePreviewSave() {
+            markPreviewHistoryNeedsSave();
+        }
+
+        if (previewSaveBtn) {
+            try {
+                if (sessionStorage.getItem('posPreviewHistorySaved') === '1') {
+                    previewHistoryUnsaved = false;
+                    setPreviewSaveState('saved');
+                } else {
+                    setPreviewSaveState('ready');
+                }
+            } catch (e) {
+                setPreviewSaveState('ready');
+            }
+
+            previewSaveBtn.addEventListener('click', function() {
+                if (previewSaveBtn.disabled) return;
+                if (!validatePreviewSignatories()) return;
+
+                previewSaveBtn.disabled = true;
+                previewSaveBtn.textContent = 'Saving...';
+
+                requestPreviewHistorySave().then(function(data) {
+                    if (data && data.ok) {
+                        markPreviewHistorySavedInSession();
+                        showPreviewEditSuccessToast('POS Saved Successfuly!');
+                    } else {
+                        enablePreviewSave();
+                        showPreviewPageError('Save failed', 'Save failed. Please try again.');
+                    }
+                }).catch(function() {
+                    enablePreviewSave();
+                    showPreviewPageError('Save failed', 'Save request failed. Please try again.');
+                });
+            });
+        }
+
+        // If user switches petition mode, allow saving again (separate schedule).
+        var noRadio = document.getElementById('petition-mode-no');
+        var yesRadio = document.getElementById('petition-mode-yes');
+        if (noRadio) noRadio.addEventListener('change', function() { enablePreviewSave(); });
+        if (yesRadio) yesRadio.addEventListener('change', function() { enablePreviewSave(); });
+
+        // Canonical Preview semester labels from solver semester_index (1-based).
+        // Always use long form (e.g. "Sixth Year - First Semester"), never short "1st Sem".
+        var YEAR_ORDINAL_WORDS = {
+            1: "First",
+            2: "Second",
+            3: "Third",
+            4: "Fourth",
+            5: "Fifth",
+            6: "Sixth",
+            7: "Seventh",
+            8: "Eighth",
+            9: "Ninth",
+            10: "Tenth",
+            11: "Eleventh",
+            12: "Twelfth"
+        };
+        function yearOrdinalWord(yearNum) {
+            if (YEAR_ORDINAL_WORDS[yearNum]) return YEAR_ORDINAL_WORDS[yearNum];
+            var n = Number(yearNum) || 0;
+            var mod100 = n % 100;
+            var suffix = 'th';
+            if (mod100 < 11 || mod100 > 13) {
+                var mod10 = n % 10;
+                if (mod10 === 1) suffix = 'st';
+                else if (mod10 === 2) suffix = 'nd';
+                else if (mod10 === 3) suffix = 'rd';
+            }
+            return String(n) + suffix;
+        }
+        function termLabelFromSolverIndex(solverIndex) {
+            var si = parseInt(solverIndex, 10);
+            if (isNaN(si) || si <= 0) return '';
+            var termSlot = (si - 1) % 3;
+            if (termSlot === 0) return 'First Semester';
+            if (termSlot === 1) return 'Second Semester';
+            return 'Midterm';
+        }
+        function semLabelFromSolverIndex(solverIndex) {
+            var si = parseInt(solverIndex, 10);
+            if (isNaN(si) || si <= 0) return '';
+            var yearNum = Math.floor((si - 1) / 3) + 1;
+            return yearOrdinalWord(yearNum) + ' Year - ' + termLabelFromSolverIndex(si);
+        }
+        var SEM_LABELS = [];
+        for (var _si = 1; _si <= 60; _si++) {
+            SEM_LABELS.push(semLabelFromSolverIndex(_si));
+        }
+
+        var _semLabelToUiIndex = null;
+        function normalizeSemLabel(s) {
+            return String(s || '')
+                .toLowerCase()
+                .replace(/\s+/g, ' ')
+                .trim();
+        }
+        function getUiIndexFromSemLabel(label) {
+            if (!label) return null;
+            if (_semLabelToUiIndex === null) {
+                _semLabelToUiIndex = {};
+                SEM_LABELS.forEach(function(lab, i) {
+                    _semLabelToUiIndex[normalizeSemLabel(lab)] = i; // uiIndex = i (0-based)
+                });
+            }
+            var raw = String(label || '').trim();
+            var v = _semLabelToUiIndex[normalizeSemLabel(raw)];
+            if (v === undefined) {
+                // Accept legacy short labels like "6th Year 1st Sem" / "6th Year - 2nd Sem".
+                var m = raw.match(/^\s*(\d+)(?:st|nd|rd|th)?\s*year\s*-?\s*(1st|2nd|first|second|midterm|summer)\s*(?:sem(?:ester)?)?\s*$/i);
+                if (m) {
+                    var y = parseInt(m[1], 10);
+                    var t = String(m[2] || '').toLowerCase();
+                    var offset = (t === '1st' || t === 'first') ? 0 : ((t === '2nd' || t === 'second') ? 1 : 2);
+                    var idx = (y - 1) * 3 + offset;
+                    if (!isNaN(idx) && idx >= 0) return idx;
+                }
+            }
+            return (v === undefined ? null : v);
+        }
+
+        function collectPreviewUiSections() {
+            var out = {};
+
+            function upsertCoursesForUi(uiIndex, courses) {
+                if (uiIndex === null || uiIndex === undefined) return;
+                if (!Array.isArray(courses) || courses.length === 0) return;
+                var key = String(uiIndex);
+                if (!out[key]) out[key] = [];
+                // De-duplicate by course code.
+                var seen = {};
+                out[key].forEach(function(c) {
+                    if (c && c.code) seen[String(c.code).trim()] = true;
+                });
+                courses.forEach(function(c) {
+                    if (!c || !c.code) return;
+                    var code = String(c.code).trim();
+                    if (!code || seen[code]) return;
+                    seen[code] = true;
+                    out[key].push(c);
+                });
+            }
+
+            // 1) Dynamic semesters (solver output rendered with pos-dnd-semester containers).
+            var dyn = document.getElementById('pos-preview-dynamic');
+            if (dyn) {
+                dyn.querySelectorAll('.pos-dnd-semester[data-semester-index]').forEach(function(semEl) {
+                    var solverIndexRaw = semEl.getAttribute('data-semester-index');
+                    var solverIndex = parseInt(solverIndexRaw, 10);
+                    if (isNaN(solverIndex)) return;
+                    var uiIndex = solverIndex - 1;
+
+                    var courseNodes = semEl.querySelectorAll('tr.pos-course-row[data-course-code]');
+                    var courses = [];
+                    courseNodes.forEach(function(tr) {
+                        var code = (tr.getAttribute('data-course-code') || '').trim();
+                        if (!code) return;
+
+                        var info = (typeof courseLookup !== 'undefined' && courseLookup && courseLookup[code]) ? courseLookup[code] : null;
+
+                        // Dynamic table columns order:
+                        // 0 Code, 1 Title, 2 Units, 3 Lec, 4 Lab, 5 Prereq, 6 Coreq
+                        var title = '';
+                        var units = '';
+                        var lec = '';
+                        var lab = '';
+                        var prereq = '';
+                        var coreq = '';
+                        if (tr.children && tr.children.length >= 7) {
+                            title = (tr.children[1] && tr.children[1].textContent) ? tr.children[1].textContent.trim() : '';
+                            units = (tr.children[2] && tr.children[2].textContent) ? tr.children[2].textContent.trim() : '';
+                            lec = (tr.children[3] && tr.children[3].textContent) ? tr.children[3].textContent.trim() : '';
+                            lab = (tr.children[4] && tr.children[4].textContent) ? tr.children[4].textContent.trim() : '';
+                            prereq = (tr.children[5] && tr.children[5].textContent) ? tr.children[5].textContent.trim() : '';
+                            coreq = (tr.children[6] && tr.children[6].textContent) ? tr.children[6].textContent.trim() : '';
+                        }
+
+                        if (info) {
+                            title = info.title || title;
+                            units = (info.units !== undefined && info.units !== null) ? String(info.units) : units;
+                            lec = info.lec || lec;
+                            lab = info.lab || lab;
+                            prereq = info.prereq || prereq;
+                            coreq = info.coreq || coreq;
+                        }
+
+                        courses.push({
+                            code: code,
+                            title: title,
+                            units: units,
+                            lec: lec,
+                            lab: lab,
+                            prereq: prereq,
+                            coreq: coreq
+                        });
+                    });
+
+                    upsertCoursesForUi(uiIndex, courses);
+                });
+            }
+
+            // 2) Server-rendered semesters (graded rows inside #pos-preview-server).
+            var server = document.getElementById('pos-preview-server');
+            if (server) {
+                server.querySelectorAll('#pos-preview-server > div.mb-4').forEach(function(block) {
+                    var h6 = block.querySelector('h6');
+                    var label = h6 ? h6.textContent.trim() : '';
+                    var uiIndex = getUiIndexFromSemLabel(label);
+                    if (uiIndex === null) return;
+
+                    var courses = [];
+                    block.querySelectorAll('tbody tr').forEach(function(tr) {
+                        var gradeTd = tr.querySelector('td.grade-display[data-course-code]');
+                        var code = gradeTd ? (gradeTd.getAttribute('data-course-code') || '').trim() : '';
+                        if (!code) return;
+
+                        var info = (typeof courseLookup !== 'undefined' && courseLookup && courseLookup[code]) ? courseLookup[code] : null;
+
+                        // Server table columns order:
+                        // 0 Code, 1 Title, 2 Units, 3 Lec, 4 Lab, 5 Prereq, 6 Coreq
+                        var title = '';
+                        var units = '';
+                        var lec = '';
+                        var lab = '';
+                        var prereq = '';
+                        var coreq = '';
+                        if (tr.children && tr.children.length >= 7) {
+                            title = (tr.children[1] && tr.children[1].textContent) ? tr.children[1].textContent.trim() : '';
+                            units = (tr.children[2] && tr.children[2].textContent) ? tr.children[2].textContent.trim() : '';
+                            lec = (tr.children[3] && tr.children[3].textContent) ? tr.children[3].textContent.trim() : '';
+                            lab = (tr.children[4] && tr.children[4].textContent) ? tr.children[4].textContent.trim() : '';
+                            prereq = (tr.children[5] && tr.children[5].textContent) ? tr.children[5].textContent.trim() : '';
+                            coreq = (tr.children[6] && tr.children[6].textContent) ? tr.children[6].textContent.trim() : '';
+                        }
+
+                        if (info) {
+                            title = info.title || title;
+                            units = (info.units !== undefined && info.units !== null) ? String(info.units) : units;
+                            lec = info.lec || lec;
+                            lab = info.lab || lab;
+                            prereq = info.prereq || prereq;
+                            coreq = info.coreq || coreq;
+                        }
+
+                        courses.push({
+                            code: code,
+                            title: title,
+                            units: units,
+                            lec: lec,
+                            lab: lab,
+                            prereq: prereq,
+                            coreq: coreq
+                        });
+                    });
+
+                    upsertCoursesForUi(uiIndex, courses);
+                });
+            }
+
+            return out;
+        }
+
+        function safeJsonParse(s) {
+            try { return JSON.parse(s); } catch (e) { return null; }
+        }
+        function _dbg41755c(hypothesisId, location, message, data, runId) {
+            fetch('http://127.0.0.1:7483/ingest/d414c525-2e22-4463-916c-e9850a26a984', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '41755c' },
+                body: JSON.stringify({
+                    sessionId: '41755c',
+                    runId: runId || 'run1',
+                    hypothesisId: hypothesisId,
+                    location: location,
+                    message: message,
+                    data: data || {},
+                    timestamp: Date.now()
+                })
+            }).catch(function() {});
+        }
+        function escapeHtml(s) {
+            if (s === null || s === undefined) return '';
+            return String(s)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+        function displayPosCourseCode(code) {
+            return code || '';
+        }
+        function isFailedGrade(grade) {
+            if (!grade) return false;
+            var s = String(grade).trim();
+            return (s === '5' || s === '5.0' || s === '5.00');
+        }
+        function isPassingGrade(grade) {
+            if (!grade) return false;
+            var s = String(grade).trim();
+            if (!s) return false;
+            return !isFailedGrade(s);
+        }
+        function getGradesBySection() {
+            var raw = localStorage.getItem('posGrades');
+            return raw ? safeJsonParse(raw) : null;
+        }
+
+        var courseLookupEl = document.getElementById('course-lookup');
+        var courseLookup = null;
+        try {
+            if (courseLookupEl && courseLookupEl.textContent) {
+                courseLookup = safeJsonParse(courseLookupEl.textContent);
+            }
+        } catch (e) {}
+
+        function getGradeFor(semesterIndex, code, gradesBySection) {
+            if (!gradesBySection) return '';
+            var sec = gradesBySection[String(semesterIndex)] || gradesBySection[semesterIndex];
+            if (!sec) return '';
+            return sec[code] || '';
+        }
+
+        // ===== POS Manual Fine-Tuning (Edit mode + SortableJS) =====
+        var posEditState = {
+            editing: false,
+            saving: false,
+            validating: false,
+            feasibleComputing: false,
+            dragFeasibleTargetsRequestId: 0,
+            dragCourseCode: null,
+            lastValidDomHtml: '',
+            sortablesBySem: {} // solver_semester_index (string) -> Sortable instance
+        };
+
+        function getSelectedPetitionMode() {
+            var noRadio = document.getElementById('petition-mode-no');
+            var yesRadio = document.getElementById('petition-mode-yes');
+            if (noRadio && noRadio.checked) return 'no_petition';
+            if (yesRadio && yesRadio.checked) return 'with_petition';
+            return sessionStorage.getItem('posSelectedOptionMode') || 'no_petition';
+        }
+
+        function markPreviewHistoryNeedsSave() {
+            try { sessionStorage.removeItem('posPreviewHistorySaved'); } catch (e) {}
+            previewHistoryUnsaved = true;
+            setPreviewSaveState('ready');
+        }
+
+        function markPreviewHistorySavedInSession() {
+            try { sessionStorage.setItem('posPreviewHistorySaved', '1'); } catch (e) {}
+            previewHistoryUnsaved = false;
+            setPreviewSaveState('saved');
+        }
+
+        function requestPreviewHistorySave() {
+            var mode = getSelectedPetitionMode();
+            var signatories = getPreviewSignatoryParams();
+            var boundaryUiIndex = localStorage.getItem('posCurrentSemIndex');
+            if (boundaryUiIndex === null || boundaryUiIndex === '') boundaryUiIndex = '';
+            var saveUrl = "{% url 'save_preview_pos_to_history' %}?petition_mode=" + encodeURIComponent(mode) +
+                "&boundary_ui_index=" + encodeURIComponent(boundaryUiIndex) +
+                "&adviser=" + encodeURIComponent(signatories.adviser) +
+                "&department_chair=" + encodeURIComponent(signatories.department_chair) +
+                "&program_chair=" + encodeURIComponent(signatories.program_chair);
+            var previewUiSections = collectPreviewUiSections();
+            return fetch(saveUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    preview_ui_sections: previewUiSections,
+                    signatories: signatories
+                })
+            }).then(function(r) { return r.json(); });
+        }
+
+        function previewShouldBlockLeave() {
+            if (previewHistoryUnsaved) return true;
+            if (posEditState && posEditState.editing) return true;
+            return false;
+        }
+
+        function wirePreviewLeaveGuard() {
+            if (!window.bootstrap || !bootstrap.Modal) return;
+
+            function executeExitProceed(proc) {
+                if (proc && proc.type === 'url') {
+                    if (proc.needsSignOutConfirm) {
+                        if (typeof window.showAppSignOutConfirmModal === 'function') {
+                            window.showAppSignOutConfirmModal(proc.href);
+                        } else {
+                            window.location.href = proc.href;
+                        }
+                        return;
+                    }
+                    window.location.href = proc.href;
+                } else if (proc && proc.type === 'fn') {
+                    setTimeout(function() {
+                        try { proc.fn(); } catch (err) {}
+                    }, 0);
+                }
+            }
+
+            /** Leave guard and sign-out both use #app-system-confirm-modal; wait until hide finishes before opening the next dialog or navigating. */
+            function afterAppSystemConfirmModalFullyHidden(closeFn, thenFn) {
+                var el = document.getElementById('app-system-confirm-modal');
+                var ran = false;
+                function proceed() {
+                    if (ran) return;
+                    ran = true;
+                    thenFn();
+                }
+                if (el) {
+                    el.addEventListener('hidden.bs.modal', proceed, { once: true });
+                }
+                closeFn();
+                setTimeout(function() {
+                    if (!ran) proceed();
+                }, el ? 500 : 0);
+            }
+
+            function afterLeaveConfirmCloses(closeFn, proc) {
+                afterAppSystemConfirmModalFullyHidden(closeFn, function() {
+                    executeExitProceed(proc);
+                });
+            }
+
+            openPreviewLeaveConfirm = function() {
+                if (typeof window.showAppSystemConfirmModal !== 'function') return;
+                window.showAppSystemConfirmModal({
+                    title: 'Leave Preview',
+                    message: 'Are you sure you want to exit without saving your Program of Study?',
+                    primaryText: 'Save & Continue',
+                    secondaryText: 'Continue without Saving',
+                    onPrimary: function(close) {
+                        var missing = getPreviewSignatoryMissingPhrases();
+                        if (missing.length) {
+                            /* Drop pending sign-out / external URL until user tries again — do not chain to sign-out confirm after OK on this error. */
+                            previewExitProceed = null;
+                            var msg = formatPreviewSignatoryRequiredMessage(missing);
+                            afterAppSystemConfirmModalFullyHidden(close, function() {
+                                showPreviewPageError('Required Field', msg, function() {
+                                    scrollPreviewSignatoriesIntoViewAndFocus();
+                                });
+                            });
+                            return;
+                        }
+                        var proc = previewExitProceed;
+                        window.setAppSystemConfirmBusy(true, 'Saving...');
+                        requestPreviewHistorySave().then(function(data) {
+                            window.setAppSystemConfirmBusy(false);
+                            if (data && data.ok) {
+                                previewExitProceed = null;
+                                markPreviewHistorySavedInSession();
+                                showPreviewEditSuccessToast('POS Saved Successfuly!');
+                                afterLeaveConfirmCloses(close, proc);
+                            } else {
+                                enablePreviewSave();
+                                showPreviewPageError('Save failed', 'Save failed. Please try again.');
+                            }
+                        }).catch(function() {
+                            window.setAppSystemConfirmBusy(false);
+                            enablePreviewSave();
+                            showPreviewPageError('Save failed', 'Save request failed. Please try again.');
+                        });
+                    },
+                    onSecondary: function(close) {
+                        var proc = previewExitProceed;
+                        previewExitProceed = null;
+                        previewHistoryUnsaved = false;
+                        if (posEditState) posEditState.editing = false;
+                        afterLeaveConfirmCloses(close, proc);
+                    }
+                });
+            };
+
+            /** Only block off-site navigation and Sign out — not other in-app pages (Home, Generate, History, etc.). */
+            function previewLeaveGuardAppliesToLink(anchor) {
+                if (!anchor || anchor.tagName !== 'A') return false;
+                var href = anchor.getAttribute('href');
+                if (href == null || href === '' || href === '#' || href.trim() === '') return false;
+                if (/^javascript:/i.test(href)) return false;
+                if (anchor.hasAttribute('download')) return false;
+                if (anchor.getAttribute('target') === '_blank') return false;
+                if (anchor.classList.contains('pos-app-sign-out-link')) return true;
+                try {
+                    var next = new URL(anchor.href, window.location.href);
+                    var cur = new URL(window.location.href);
+                    return next.origin !== cur.origin;
+                } catch (e) {
+                    return true;
+                }
+            }
+
+            document.addEventListener('click', function(e) {
+                if (!previewShouldBlockLeave()) return;
+                var anchor = e.target.closest('a');
+                if (!anchor || !previewLeaveGuardAppliesToLink(anchor)) return;
+                if (anchor.closest('#app-system-confirm-modal')) return;
+                e.preventDefault();
+                e.stopPropagation();
+                previewExitProceed = {
+                    type: 'url',
+                    href: anchor.href,
+                    needsSignOutConfirm: anchor.classList.contains('pos-app-sign-out-link')
+                };
+                openPreviewLeaveConfirm();
+            }, true);
+
+            var confirmModalEl = document.getElementById('app-system-confirm-modal');
+            if (confirmModalEl) {
+                confirmModalEl.addEventListener('hidden.bs.modal', function() {
+                    previewExitProceed = null;
+                    if (typeof window.setAppSystemConfirmBusy === 'function') {
+                        window.setAppSystemConfirmBusy(false);
+                    }
+                });
+            }
+        }
+
+        wirePreviewLeaveGuard();
+
+        function destroyPosSortables() {
+            Object.keys(posEditState.sortablesBySem).forEach(function(key) {
+                var sortable = posEditState.sortablesBySem[key];
+                try {
+                    if (sortable && typeof sortable.destroy === 'function') {
+                        sortable.destroy();
+                    }
+                } catch (e) {}
+            });
+            posEditState.sortablesBySem = {};
+
+            // Remove any UI highlight classes when leaving edit mode.
+            try {
+                var dyn = document.getElementById('pos-preview-dynamic');
+                if (dyn) {
+                    dyn.querySelectorAll('tr.pos-course-row.pos-dnd-draggable').forEach(function(tr) {
+                        tr.classList.remove('pos-dnd-draggable');
+                    });
+                    dyn.querySelectorAll('tr.pos-course-row.pos-feasible-move').forEach(function(tr) {
+                        tr.classList.remove('pos-feasible-move');
+                    });
+                    dyn.querySelectorAll('.pos-dnd-semester.pos-dnd-locked').forEach(function(el) {
+                        el.classList.remove('pos-dnd-locked');
+                    });
+                }
+            } catch (e) {}
+        }
+
+        function recomputeSemesterTotalUnits(semesterEl) {
+            if (!semesterEl) return;
+            var totalCell = semesterEl.querySelector('[data-total-units-cell]');
+            if (!totalCell) return;
+            var sumUnits = 0;
+            var rows = semesterEl.querySelectorAll('tr.pos-course-row[data-course-code]');
+            rows.forEach(function(tr) {
+                var code = String(tr.getAttribute('data-course-code') || '').trim();
+                if (!code) return;
+                var info = (courseLookup && code) ? courseLookup[code] : null;
+                var units = info && info.units !== undefined && info.units !== null ? Number(info.units) : NaN;
+                if (!isNaN(units)) sumUnits += units;
+            });
+            totalCell.textContent = String(sumUnits);
+        }
+
+        function initPosSortables() {
+            if (typeof Sortable === 'undefined') return;
+            destroyPosSortables();
+
+            var dyn = document.getElementById('pos-preview-dynamic');
+            if (!dyn) return;
+
+            /* Mobile: bubbleScroll lets touch drags scroll the page — fights drag. Desktop: keep it for scroll-while-dragging. */
+            var mobilePreviewDnd = false;
+            try {
+                mobilePreviewDnd = window.matchMedia('(max-width: 767.98px)').matches;
+            } catch (e) {}
+
+            // Mobile: use Sortable’s built-in autoscroll only (no custom scrollFn). A custom scrollFn + Sortable’s
+            // _onTouchMove replay each tick caused tiny up/down jitter. Tighter edge band + higher speed = faster, stable scroll.
+            var dndScrollSensitivity = mobilePreviewDnd ? 64 : 120;
+            var dndScrollSpeed = mobilePreviewDnd ? 52 : 32;
+
+            var semEls = dyn.querySelectorAll('.pos-dnd-semester[data-semester-index]');
+            semEls.forEach(function(semEl) {
+                var semIndex = String(semEl.getAttribute('data-semester-index') || '').trim();
+                if (!semIndex) return;
+
+                var tbody = semEl.querySelector('tbody.pos-dnd-tbody');
+                if (!tbody) return;
+
+                // Lock semesters where any grade is already present.
+                var gradeCells = semEl.querySelectorAll('td.grade-display');
+                var hasAnyGrade = Array.prototype.some.call(gradeCells, function(td) {
+                    var t = td && td.textContent ? String(td.textContent).trim() : '';
+                    return t !== '';
+                });
+
+                if (hasAnyGrade) {
+                    semEl.classList.add('pos-dnd-locked');
+                    // Ensure locked semester rows are not highlighted as draggable.
+                    semEl.querySelectorAll('tr.pos-course-row.pos-dnd-draggable').forEach(function(tr) {
+                        tr.classList.remove('pos-dnd-draggable');
+                    });
+                    return;
+                }
+
+                // Enable cross-semester drag only for ungraded semesters.
+                // Highlight draggable rows in edit mode.
+                tbody.querySelectorAll('tr.pos-course-row').forEach(function(tr) {
+                    tr.classList.add('pos-dnd-draggable');
+                });
+                var sortableOpts = {
+                    group: { name: 'pos-semester-group', pull: true, put: true },
+                    animation: 150,
+                    forceFallback: true,
+                    fallbackOnBody: true,
+                    fallbackTolerance: mobilePreviewDnd ? 5 : 2,
+                    scroll: true,
+                    scrollSensitivity: dndScrollSensitivity,
+                    scrollSpeed: dndScrollSpeed,
+                    bubbleScroll: !mobilePreviewDnd,
+                    ghostClass: 'pos-dnd-ghost',
+                    chosenClass: 'pos-dnd-chosen',
+                    onStart: function(evt) {
+                        if (!posEditState.editing) return;
+                        if (!isFeasibleMoveToggleEnabled()) return;
+                        if (!evt || !evt.item || typeof evt.item.getAttribute !== 'function') return;
+                        var code = String(evt.item.getAttribute('data-course-code') || '').trim();
+                        if (!code) return;
+                        computeFeasibleTargetSemestersForCourse(code);
+                    },
+                    onEnd: function(evt) {
+                        if (!evt || !evt.from || !evt.to) return;
+                        clearFeasibleTargetSemesterHighlights();
+                        posEditState.dragCourseCode = null;
+                        posEditState.dragFeasibleTargetsRequestId += 1;
+                        var fromSem = evt.from.closest('.pos-dnd-semester');
+                        var toSem = evt.to.closest('.pos-dnd-semester');
+                        var latestMovedCode = null;
+                        try {
+                            if (evt.item && typeof evt.item.getAttribute === 'function') {
+                                latestMovedCode = evt.item.getAttribute('data-course-code');
+                            }
+                        } catch (e) {}
+                        window.requestAnimationFrame(function() {
+                            recomputeSemesterTotalUnits(fromSem);
+                            if (toSem && toSem !== fromSem) {
+                                recomputeSemesterTotalUnits(toSem);
+                                if (posEditState.editing && !posEditState.saving && !posEditState.validating) {
+                                    var latestMovedCodes = latestMovedCode
+                                        ? new Set([String(latestMovedCode).trim()])
+                                        : null;
+                                    validateCurrentTunedPosAndRevert(latestMovedCodes);
+                                }
+                            }
+                        });
+                    }
+                };
+                if (mobilePreviewDnd) {
+                    sortableOpts.touchStartThreshold = 10;
+                }
+                var sortable = new Sortable(tbody, sortableOpts);
+
+                posEditState.sortablesBySem[semIndex] = sortable;
+            });
+        }
+
+        function collectPosOverridesFromDOM() {
+            var overrides = {};
+            var dyn = document.getElementById('pos-preview-dynamic');
+            if (!dyn) return overrides;
+
+            var semEls = dyn.querySelectorAll('.pos-dnd-semester[data-semester-index]');
+            semEls.forEach(function(semEl) {
+                var semIndex = String(semEl.getAttribute('data-semester-index') || '').trim();
+                if (!semIndex) return;
+
+                // Only collect semesters we actually allow dragging in this edit session.
+                if (!posEditState.sortablesBySem[semIndex]) return;
+
+                var codes = [];
+                var rows = semEl.querySelectorAll('tbody.pos-dnd-tbody tr.pos-course-row[data-course-code]');
+                rows.forEach(function(tr) {
+                    var code = String(tr.getAttribute('data-course-code') || '').trim();
+                    if (code) codes.push(code);
+                });
+                overrides[semIndex] = codes;
+            });
+
+            return overrides;
+        }
+
+        function setSortablesDisabled(disabled) {
+            Object.keys(posEditState.sortablesBySem).forEach(function(key) {
+                var sortable = posEditState.sortablesBySem[key];
+                try {
+                    if (sortable && typeof sortable.option === 'function') {
+                        sortable.option('disabled', !!disabled);
+                    }
+                } catch (e) {}
+            });
+        }
+
+        function clearFeasibleMoveHighlights() {
+            var dyn = document.getElementById('pos-preview-dynamic');
+            if (!dyn) return;
+            dyn.querySelectorAll('tr.pos-course-row.pos-feasible-move').forEach(function(tr) {
+                tr.classList.remove('pos-feasible-move');
+            });
+        }
+
+        function clearFeasibleTargetSemesterHighlights() {
+            var dyn = document.getElementById('pos-preview-dynamic');
+            if (!dyn) return;
+            dyn.querySelectorAll('.pos-dnd-semester.pos-feasible-target-sem').forEach(function(semEl) {
+                semEl.classList.remove('pos-feasible-target-sem');
+            });
+        }
+
+        function applyFeasibleTargetSemesterHighlights(feasibleTargetIndices) {
+            var dyn = document.getElementById('pos-preview-dynamic');
+            if (!dyn) return;
+            // Only show destination highlights while a course is actively being dragged.
+            if (!posEditState.dragCourseCode) return;
+            var targetSet = new Set(Array.isArray(feasibleTargetIndices) ? feasibleTargetIndices.map(function(x) { return Number(x); }) : []);
+            dyn.querySelectorAll('.pos-dnd-semester[data-semester-index]').forEach(function(semEl) {
+                var idxRaw = semEl.getAttribute('data-semester-index');
+                var idx = Number(idxRaw);
+                if (!isNaN(idx) && targetSet.has(idx)) {
+                    semEl.classList.add('pos-feasible-target-sem');
+                }
+            });
+        }
+
+        function isFeasibleMoveToggleEnabled() {
+            var toggle = document.getElementById('pos-feasible-move-toggle');
+            return !!(toggle && toggle.checked);
+        }
+
+        function applyFeasibleMoveHighlights(feasibleCourses) {
+            var dyn = document.getElementById('pos-preview-dynamic');
+            if (!dyn) return;
+            var feasibleSet = new Set(Array.isArray(feasibleCourses) ? feasibleCourses : []);
+
+            dyn.querySelectorAll('tr.pos-course-row[data-course-code]').forEach(function(tr) {
+                var code = String(tr.getAttribute('data-course-code') || '').trim();
+                if (!code) return;
+                if (feasibleSet.has(code)) {
+                    tr.classList.add('pos-feasible-move');
+                }
+            });
+        }
+
+        function computeFeasibleTargetSemestersForCourse(courseCodeUi) {
+            if (!feasibleMoveMarksUrl) return;
+            if (!posEditState.editing) return;
+            if (!isFeasibleMoveToggleEnabled()) {
+                clearFeasibleTargetSemesterHighlights();
+                return;
+            }
+            if (!courseCodeUi) {
+                clearFeasibleTargetSemesterHighlights();
+                return;
+            }
+
+            clearFeasibleTargetSemesterHighlights();
+
+            posEditState.dragCourseCode = courseCodeUi;
+            posEditState.dragFeasibleTargetsRequestId += 1;
+            var requestId = posEditState.dragFeasibleTargetsRequestId;
+
+            var dyn = document.getElementById('pos-preview-dynamic');
+            if (!dyn) return;
+
+            var overrides = collectPosOverridesFromDOM();
+            var mode = getSelectedPetitionMode();
+
+            // #region agent log
+            _dbg41755c(
+                'H3',
+                'preview_pos.html:computeFeasibleTargetSemestersForCourse:beforeFetch',
+                'sending target-semesters request',
+                {
+                    courseCodeUi: courseCodeUi,
+                    requestId: requestId,
+                    editing: !!posEditState.editing,
+                    toggleEnabled: isFeasibleMoveToggleEnabled(),
+                    overrideSemesterCount: Object.keys(overrides || {}).length
+                },
+                'run1'
+            );
+            // #endregion
+
+            fetch(feasibleMoveMarksUrl, {
+                method: 'POST',
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ mode: mode, pos_overrides: overrides, course_code: courseCodeUi })
+            }).then(function(r) { return r.json(); })
+              .then(function(data) {
+                  // #region agent log
+                  _dbg41755c(
+                      'H3',
+                      'preview_pos.html:computeFeasibleTargetSemestersForCourse:response',
+                      'received target-semesters response',
+                      {
+                          requestId: requestId,
+                          dataOk: !!(data && data.ok),
+                          hasFeasibleTargetsArray: !!(data && Array.isArray(data.feasible_targets)),
+                          feasibleTargetsCount: (data && Array.isArray(data.feasible_targets)) ? data.feasible_targets.length : -1
+                      },
+                      'run1'
+                  );
+                  // #endregion
+                  // Ignore stale responses.
+                  if (requestId !== posEditState.dragFeasibleTargetsRequestId) return;
+                  if (!posEditState.editing) return;
+                  if (!isFeasibleMoveToggleEnabled()) return;
+
+                  if (data && data.ok && Array.isArray(data.feasible_targets)) {
+                      applyFeasibleTargetSemesterHighlights(data.feasible_targets);
+                      return;
+                  }
+
+                  // Safety fallback: remove highlights when we can't compute.
+                  clearFeasibleTargetSemesterHighlights();
+              }).catch(function() {
+                  if (requestId !== posEditState.dragFeasibleTargetsRequestId) return;
+                  clearFeasibleTargetSemesterHighlights();
+              });
+        }
+
+        function markFeasibleMovesFromDOM() {
+            if (!feasibleMoveMarksUrl) return;
+            if (!posEditState.editing) return;
+            if (posEditState.feasibleComputing) return;
+            if (!isFeasibleMoveToggleEnabled()) {
+                clearFeasibleMoveHighlights();
+                return;
+            }
+
+            var dyn = document.getElementById('pos-preview-dynamic');
+            if (!dyn) return;
+
+            clearFeasibleMoveHighlights();
+            posEditState.feasibleComputing = true;
+
+            function _setFeasibleMoveSpinnerProgress(p01) {
+                var ring = document.getElementById('pos-feasible-move-spinner-ring');
+                if (!ring) return;
+                var p = Math.max(0, Math.min(1, p01));
+                // circumference for r=18 (2*pi*18) ~ 113.097
+                var circumference = 113.097;
+                ring.style.strokeDashoffset = String(circumference * (1 - p));
+            }
+
+            function _startFeasibleMoveSpinnerProgress() {
+                var spinEl = document.getElementById('pos-feasible-move-spinner');
+                if (!spinEl) return;
+                var start = performance.now();
+                var durationMs = 10000; // visual only; max progress capped until response returns
+                _setFeasibleMoveSpinnerProgress(0);
+                spinEl.style.display = '';
+                function tick() {
+                    // If request finished, markFeasibleMovesFromDOM finally() will hide the spinner.
+                    if (spinEl.style.display === 'none') return;
+                    var elapsed = performance.now() - start;
+                    var p = Math.min(0.85, (elapsed / durationMs) * 0.85);
+                    _setFeasibleMoveSpinnerProgress(p);
+                    requestAnimationFrame(tick);
+                }
+                requestAnimationFrame(tick);
+            }
+
+            function _stopFeasibleMoveSpinnerProgress() {
+                var spinEl = document.getElementById('pos-feasible-move-spinner');
+                if (!spinEl) return;
+                _setFeasibleMoveSpinnerProgress(1);
+                spinEl.style.display = 'none';
+            }
+
+            // Buffer UX: show a loading spinner while computing row-level feasible-move highlights.
+            var feasibleToggleEl = document.getElementById('pos-feasible-move-toggle');
+            if (feasibleToggleEl) feasibleToggleEl.disabled = true;
+            var spinEl = document.getElementById('pos-feasible-move-spinner');
+            _startFeasibleMoveSpinnerProgress();
+            // #region agent log
+            _dbg41755c(
+                'H1',
+                'preview_pos.html:markFeasibleMovesFromDOM:spinnerShown',
+                'spinner show attempt',
+                {
+                    spinElFound: !!spinEl,
+                    spinDisplayAfterSet: spinEl ? String(spinEl.style.display || '') : null,
+                    toggleFound: !!feasibleToggleEl,
+                    toggleDisabledAfterSet: feasibleToggleEl ? !!feasibleToggleEl.disabled : null,
+                    feasibleComputing: !!posEditState.feasibleComputing
+                },
+                'run1'
+            );
+            // #endregion
+
+            var overrides = collectPosOverridesFromDOM();
+            var mode = getSelectedPetitionMode();
+
+            var wasEnabledAtRequestStart = isFeasibleMoveToggleEnabled();
+            // #region agent log
+            _dbg41755c(
+                'H2',
+                'preview_pos.html:markFeasibleMovesFromDOM:beforeFetch',
+                'sending feasible-courses request',
+                {
+                    wasEnabledAtRequestStart: !!wasEnabledAtRequestStart,
+                    overrideSemesterCount: Object.keys(overrides || {}).length
+                },
+                'run1'
+            );
+            // #endregion
+
+            fetch(feasibleMoveMarksUrl, {
+                method: 'POST',
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ mode: mode, pos_overrides: overrides })
+            }).then(function(r) { return r.json(); })
+              .then(function(data) {
+                  // #region agent log
+                  _dbg41755c(
+                      'H2',
+                      'preview_pos.html:markFeasibleMovesFromDOM:response',
+                      'received feasible-courses response',
+                      {
+                          dataOk: !!(data && data.ok),
+                          hasFeasibleCoursesArray: !!(data && Array.isArray(data.feasible_courses)),
+                          feasibleCoursesCount: (data && Array.isArray(data.feasible_courses)) ? data.feasible_courses.length : -1
+                      },
+                      'run1'
+                  );
+                  // #endregion
+                  if (!wasEnabledAtRequestStart || !isFeasibleMoveToggleEnabled()) {
+                      // User turned the toggle off while request was in-flight.
+                      return;
+                  }
+
+                  if (data && data.ok && Array.isArray(data.feasible_courses)) {
+                      applyFeasibleMoveHighlights(data.feasible_courses);
+                      return;
+                  }
+
+                  // Solver-backed hints failed; for correctness, clear highlights.
+                  clearFeasibleMoveHighlights();
+              }).catch(function() {
+                  // Network/parse errors: for correctness, clear highlights.
+                  clearFeasibleMoveHighlights();
+              }).finally(function() {
+                  posEditState.feasibleComputing = false;
+
+                var feasibleToggleEl2 = document.getElementById('pos-feasible-move-toggle');
+                if (feasibleToggleEl2) feasibleToggleEl2.disabled = false;
+                var spinEl2 = document.getElementById('pos-feasible-move-spinner');
+                _stopFeasibleMoveSpinnerProgress();
+                // #region agent log
+                _dbg41755c(
+                    'H1',
+                    'preview_pos.html:markFeasibleMovesFromDOM:finally',
+                    'spinner hide attempt',
+                    {
+                        spinElFound: !!spinEl2,
+                        spinDisplayAfterSet: spinEl2 ? String(spinEl2.style.display || '') : null,
+                        toggleFound: !!feasibleToggleEl2,
+                        toggleDisabledAfterSet: feasibleToggleEl2 ? !!feasibleToggleEl2.disabled : null,
+                        feasibleComputing: !!posEditState.feasibleComputing
+                    },
+                    'run1'
+                );
+                // #endregion
+              });
+        }
+
+        function validateCurrentTunedPosAndRevert(latestMovedCodes) {
+            if (!validateTunedPosUrl) return;
+            if (posEditState.validating) return;
+
+            var dyn = document.getElementById('pos-preview-dynamic');
+            if (!dyn) return;
+
+            var alertEl = document.getElementById('pos-validation-alert');
+            if (alertEl) {
+                alertEl.style.display = 'none';
+                alertEl.innerHTML = '';
+            }
+
+            posEditState.validating = true;
+            setSortablesDisabled(true);
+
+            var overrides = collectPosOverridesFromDOM();
+            var mode = getSelectedPetitionMode();
+
+            fetch(validateTunedPosUrl, {
+                method: 'POST',
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ mode: mode, pos_overrides: overrides })
+            }).then(function(r) { return r.json(); })
+              .then(function(data) {
+                  if (data && data.ok) {
+                      posEditState.lastValidDomHtml = dyn.innerHTML;
+                      if (alertEl) {
+                          alertEl.style.display = 'none';
+                          alertEl.innerHTML = '';
+                      }
+                      var movedSuccessMsg = buildMovedCourseSuccessMessage(latestMovedCodes);
+                      if (movedSuccessMsg) {
+                          showPreviewEditSuccessToast(movedSuccessMsg);
+                      }
+                      markFeasibleMovesFromDOM();
+                      return;
+                  }
+
+                  showPreviewEditErrorPopup('One or more moved courses are invalid. Please review the errors and try again.');
+
+                  if (alertEl) {
+                      // data.message may contain very long solver logs; we keep the UI focused on the moved-course violations instead.
+                      var msg = (data && data.message) ? data.message : 'Invalid POS schedule.';
+                      var moved = (data && data.moved_courses && Array.isArray(data.moved_courses))
+                          ? data.moved_courses
+                          : [];
+                      var movedAll = moved.slice();
+                      if (latestMovedCodes && latestMovedCodes.size) {
+                          moved = moved.filter(function(mc) {
+                              var code = mc && mc.code ? String(mc.code).trim() : '';
+                              return code && latestMovedCodes.has(code);
+                          });
+                          // If filtering removes everything, fall back to the full list.
+                          if (!moved.length) moved = movedAll;
+                      }
+
+                      var movedLis = moved.map(function(mc) {
+                          if (!mc) return '';
+                          var code = escapeHtml(mc.code || '');
+                          var rawCode = mc.code || '';
+                          var fromSi = mc.from_semester_index;
+                          var toSi = mc.to_semester_index;
+                          var toSiNum = parseInt(toSi, 10);
+                          var semLabel = '';
+                          if (!isNaN(toSiNum) && toSiNum > 0) {
+                              semLabel = semLabelFromSolverIndex(toSiNum) || ('Semester ' + toSiNum);
+                          } else {
+                              semLabel = 'Semester ' + String(toSi || '');
+                          }
+                          var subtitle = code + ' (' + escapeHtml(String(fromSi || '')) + ' → ' + escapeHtml(String(toSi || '')) + ')';
+                          var violationsArr = (mc.violations && Array.isArray(mc.violations)) ? mc.violations : [];
+                          var primaryType = mc.primary_violation_type || '';
+
+                          function violationTermTypeLabel(t) {
+                              // term types: 1=1st semester, 2=2nd semester, 0=midterm/summer
+                              if (t === 0 || t === '0') return 'Midterm/Summer';
+                              if (t === 1 || t === '1') return '1st Semester';
+                              if (t === 2 || t === '2') return '2nd Semester';
+                              return 'Term ' + String(t);
+                          }
+
+                          function formatViolation(v) {
+                              if (!v) return '';
+                              var vtype = v.type || '';
+                              var ev = v.evidence || {};
+                              if (vtype === 'unit_cap') {
+                                  var cap = ev.cap;
+                                  var total = ev.total_units;
+                                  var si = ev.semester_index || toSiNum;
+                                  return 'Unit cap exceeded: semester ' + String(si) + ' total ' + String(total) + ' > cap ' + String(cap);
+                              }
+                              if (vtype === 'unknown') {
+                                  var detail = ev.reason_detail || '';
+                                  if (detail) {
+                                      return 'Constraint conflict: ' + escapeHtml(detail);
+                                  }
+                                  return 'Constraint conflict';
+                              }
+                              if (vtype === 'offering_window') {
+                                  var cat = ev.course_category || '';
+                                  var origSem = ev.orig_semester_index || '';
+                                  var origType = ev.orig_term_type;
+                                  var destType = ev.destination_term_type;
+                                  var withPet = ev.with_petition ? 'with' : 'no';
+                                  return 'Offering window mismatch: ' + String(cat) + ' course (orig sem ' + String(origSem) + ') placed in ' + violationTermTypeLabel(destType) + ' (original term-type ' + violationTermTypeLabel(origType) + '; petition: ' + withPet + ')';
+                              }
+                              if (vtype === 'prereq') {
+                                  var pre = ev.prereq_course || '';
+                                  return 'Prerequisite ordering: ' + String(pre) + ' must be before ' + String(rawCode);
+                              }
+                              if (vtype === 'co_req') {
+                                  var co = ev.coreq_course || '';
+                                  return 'Co-requisite ordering: ' + String(co) + ' must be same/earlier than ' + String(rawCode);
+                              }
+                              if (vtype === 'year_standing') {
+                                  var schedBefore = ev.scheduled_before_units;
+                                  var remaining = ev.remaining_needed_units;
+                                  return 'Year standing: 90% prefix-units not satisfied (scheduled ' + String(schedBefore) + ' < remaining ' + String(remaining) + ')';
+                              }
+                              return v.label || 'Constraint conflict';
+                          }
+
+                          if (!violationsArr.length) {
+                              return '<li><b>' + subtitle + '</b>: ' + escapeHtml(semLabel) + '</li>';
+                          }
+
+                          var primary = violationsArr.find(function(v) { return v.type === primaryType; }) || violationsArr[0];
+                          var primaryTxt = formatViolation(primary);
+                          var others = violationsArr.filter(function(v) { return v !== primary; });
+                          var otherTxt = others.map(function(v) { return formatViolation(v); }).filter(Boolean);
+
+                          var outTxt = escapeHtml(semLabel) + ': ' + escapeHtml(primaryTxt);
+                          if (otherTxt.length) {
+                              outTxt += ' (Also: ' + escapeHtml(otherTxt.join(' · ')) + ')';
+                          }
+
+                          return '<li><b>' + subtitle + '</b>: ' + outTxt + '</li>';
+                      }).filter(function(s) { return s; }).join('');
+
+                      var movedUl = movedLis ? ('<ul class=\"mb-0 mt-2\">' + movedLis + '</ul>') : '';
+                      if (movedUl) {
+                          // Show only the moved-course violations (remove the long general solver message).
+                          alertEl.innerHTML = movedUl;
+                          showPreviewEditErrorPopup(movedUl, true);
+                      } else {
+                          // Fallback: if we couldn't compute moved courses, show a short generic message.
+                          alertEl.innerHTML = '<strong>Invalid POS schedule.</strong>';
+                          showPreviewEditErrorPopup('<strong>Invalid POS schedule.</strong>', true);
+                      }
+                      alertEl.style.display = '';
+                  }
+
+                  // Infeasible: revert to the last known-good arrangement.
+                  dyn.innerHTML = posEditState.lastValidDomHtml || '';
+                  initPosSortables();
+                  markFeasibleMovesFromDOM();
+                  setSortablesDisabled(true);
+              }).catch(function() {
+                  showPreviewEditErrorPopup('Validation error. Could not validate the moved course arrangement.');
+                  if (alertEl) {
+                      alertEl.innerHTML = '<strong>Validation error.</strong> Could not validate the tuned POS.';
+                      alertEl.style.display = '';
+                  }
+                  dyn.innerHTML = posEditState.lastValidDomHtml || '';
+                  initPosSortables();
+                  markFeasibleMovesFromDOM();
+                  setSortablesDisabled(true);
+              }).finally(function() {
+                  posEditState.validating = false;
+                  setSortablesDisabled(false);
+              });
+        }
+
+        var POS_PENCIL_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>';
+        var POS_CHECK_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>';
+        var previewEditSuccessTimer = null;
+
+        function showPreviewEditSuccessToast(message) {
+            var toast = document.getElementById('preview-edit-success-toast');
+            if (!toast) return;
+            if (message) toast.textContent = message;
+            toast.classList.add('is-open');
+            if (previewEditSuccessTimer) clearTimeout(previewEditSuccessTimer);
+            previewEditSuccessTimer = setTimeout(function() {
+                toast.classList.remove('is-open');
+            }, 1500);
+        }
+
+        function showPreviewEditErrorPopup(message, allowHtml) {
+            var body = message || 'One or more moved courses are invalid.';
+            var opts = allowHtml ? { html: true } : {};
+            if (typeof window.showAppSystemErrorModal === 'function') {
+                window.showAppSystemErrorModal('Invalid Course Move', body, opts);
+            } else {
+                window.alert(typeof body === 'string' ? body.replace(/<[^>]+>/g, '') : 'One or more moved courses are invalid.');
+            }
+        }
+
+        function buildMovedCourseSuccessMessage(latestMovedCodes) {
+            var dyn = document.getElementById('pos-preview-dynamic');
+            if (!dyn || !latestMovedCodes || !latestMovedCodes.size) return '';
+            var movedCode = '';
+            latestMovedCodes.forEach(function(code) {
+                if (!movedCode) movedCode = String(code || '').trim();
+            });
+            if (!movedCode) return '';
+            var row = dyn.querySelector('tr.pos-course-row[data-course-code="' + movedCode + '"]');
+            if (!row) return '';
+            var titleCell = row.querySelector('td.course-title-cell');
+            var courseTitle = titleCell ? String(titleCell.textContent || '').trim() : '';
+            var semEl = row.closest('.pos-dnd-semester');
+            var semIndex = semEl ? parseInt(semEl.getAttribute('data-semester-index') || '', 10) : NaN;
+            var semLabel = (!isNaN(semIndex) && semIndex > 0) ? (semLabelFromSolverIndex(semIndex) || ('Semester ' + semIndex)) : 'selected semester';
+            if (courseTitle) {
+                return 'Successfully moved ' + movedCode + ' - ' + courseTitle + ' to ' + semLabel + '.';
+            }
+            return 'Successfully moved ' + movedCode + ' to ' + semLabel + '.';
+        }
+
+        function setPosEditMode(enabled) {
+            var wasEditing = posEditState.editing;
+            posEditState.editing = enabled;
+            var btn = document.getElementById('pos-edit-toggle');
+            if (btn) {
+                var label = document.getElementById('pos-edit-toggle-label');
+                if (label) label.textContent = enabled ? 'Apply' : 'Edit';
+                var iconEl = document.getElementById('pos-edit-toggle-icon');
+                if (iconEl) iconEl.innerHTML = enabled ? POS_CHECK_SVG : POS_PENCIL_SVG;
+                btn.title = enabled ? 'Apply Changes' : 'Edit and drag ungraded courses';
+                btn.disabled = !!posEditState.saving || !!posEditState.validating;
+            }
+            document.body.classList.toggle('pos-editing', enabled);
+
+            // Disable petition toggle while editing to keep UI consistent.
+            var noRadio = document.getElementById('petition-mode-no');
+            var yesRadio = document.getElementById('petition-mode-yes');
+            if (noRadio) noRadio.disabled = enabled || !!posEditState.saving || !!posEditState.validating;
+            if (yesRadio) yesRadio.disabled = enabled || !!posEditState.saving || !!posEditState.validating;
+
+            // During edit mode, saving to history should only be allowed after the user clicks Apply.
+            var saveBtn = document.getElementById('preview-save-history-btn');
+            if (saveBtn) {
+                if (enabled) saveBtn.disabled = true;
+            }
+            var previewRightActions = document.querySelector('.preview-bottom-right');
+            if (previewRightActions) {
+                previewRightActions.style.display = enabled ? 'none' : '';
+            }
+
+            if (enabled) {
+                if (!wasEditing) {
+                    posEditState.validating = false;
+                    var dyn = document.getElementById('pos-preview-dynamic');
+                    if (dyn) posEditState.lastValidDomHtml = dyn.innerHTML;
+                    initPosSortables();
+                    // Compute feasible-move highlights for all movable courses.
+                    markFeasibleMovesFromDOM();
+                }
+            } else {
+                destroyPosSortables();
+                posEditState.validating = false;
+                var feasibleToggle = document.getElementById('pos-feasible-move-toggle');
+                if (feasibleToggle) feasibleToggle.checked = false;
+                clearFeasibleMoveHighlights();
+                clearFeasibleTargetSemesterHighlights();
+                posEditState.dragCourseCode = null;
+                posEditState.dragFeasibleTargetsRequestId += 1;
+                var spinEl = document.getElementById('pos-feasible-move-spinner');
+                if (spinEl) spinEl.style.display = 'none';
+                var ringEl = document.getElementById('pos-feasible-move-spinner-ring');
+                if (ringEl) ringEl.style.strokeDashoffset = '113.097';
+            }
+        }
+
+        var validateTunedPosUrl = "{% url 'validate_tuned_pos' %}";
+        var feasibleMoveMarksUrl = "{% url 'feasible_move_marks' %}";
+        var saveTunedPosUrl = "{% url 'save_tuned_pos' %}";
+        var editBtn = document.getElementById('pos-edit-toggle');
+
+        // Feasible-move toggle (may be slow): only compute highlights when enabled.
+        var feasibleToggleEl = document.getElementById('pos-feasible-move-toggle');
+        if (feasibleToggleEl) {
+            feasibleToggleEl.addEventListener('change', function() {
+                if (!posEditState.editing) {
+                    clearFeasibleMoveHighlights();
+                    clearFeasibleTargetSemesterHighlights();
+                    var spinEl0 = document.getElementById('pos-feasible-move-spinner');
+                    if (spinEl0) spinEl0.style.display = 'none';
+                    return;
+                }
+                if (feasibleToggleEl.checked) {
+                    markFeasibleMovesFromDOM();
+                } else {
+                    clearFeasibleMoveHighlights();
+                    clearFeasibleTargetSemesterHighlights();
+                    posEditState.dragCourseCode = null;
+                    posEditState.dragFeasibleTargetsRequestId += 1; // invalidate in-flight responses
+                    var spinEl1 = document.getElementById('pos-feasible-move-spinner');
+                    if (spinEl1) spinEl1.style.display = 'none';
+                    var ringEl1 = document.getElementById('pos-feasible-move-spinner-ring');
+                    if (ringEl1) ringEl1.style.strokeDashoffset = '113.097';
+                }
+            });
+        }
+        if (editBtn) {
+            editBtn.addEventListener('click', function() {
+                if (!posEditState.editing) {
+                    setPosEditMode(true);
+                    return;
+                }
+
+                if (posEditState.saving) return;
+                posEditState.saving = true;
+                setSortablesDisabled(true);
+                setPosEditMode(true); // refresh disabled states (won't re-init if already editing)
+
+                var overrides = collectPosOverridesFromDOM();
+                var mode = getSelectedPetitionMode();
+                // Apply should persist tuned schedule and reflect in PDF.
+                fetch(saveTunedPosUrl, {
+                    method: 'POST',
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ mode: mode, pos_overrides: overrides })
+                }).then(function(r) { return r.json(); })
+                  .then(function(data) {
+                      if (data && data.ok) {
+                          try {
+                              // Keep refreshed Preview in sync with the applied tuned schedule.
+                              // Store as legacy/simple shape so renderDynamicPOS uses res.pos directly.
+                              sessionStorage.setItem('posGeneratedResponse', JSON.stringify({ pos: data.pos || [] }));
+                          } catch (e) {}
+                          setPosEditMode(false);
+                          enablePreviewSave();
+                          showPreviewEditSuccessToast('Changes applied successfully.');
+                      } else {
+                          // If save fails, keep edit mode so user can try again.
+                          console.error('Save tuned POS failed:', data);
+                          showPreviewEditErrorPopup((data && data.error) ? data.error : 'Unable to apply changes. Please try again.');
+                      }
+                  }).catch(function(err) {
+                      console.error('Save tuned POS error:', err);
+                      showPreviewEditErrorPopup('Unable to apply changes right now. Please try again.');
+                  }).finally(function() {
+                      posEditState.saving = false;
+                      setSortablesDisabled(false);
+                      setPosEditMode(posEditState.editing);
+                  });
+            });
+        }
+
+        function renderDynamicPOS(res, forcedMode) {
+            var dyn = document.getElementById('pos-preview-dynamic');
+            var srv = document.getElementById('pos-preview-server');
+            if (!dyn || !srv) return;
+            if (!res) return;
+
+            var gradesBySection = getGradesBySection() || {};
+
+            // UI section index (0-based) stored from Generate POS
+            var currentSemRaw = localStorage.getItem('posCurrentSemIndex');
+            var currentUiIndex = currentSemRaw !== null && currentSemRaw !== '' ? parseInt(currentSemRaw, 10) : null;
+            if (currentUiIndex === null || isNaN(currentUiIndex)) {
+                return;
+            }
+            // Solver is 1-based; everything after currentSemSolver is "future"
+            var currentSemSolver = currentUiIndex + 2;
+
+            function renderSolverPos(posList) {
+                dyn.innerHTML = '';
+
+                if (!Array.isArray(posList) || !posList.length) {
+                    dyn.style.display = '';
+                    return;
+                }
+
+                // Only render solver semesters up to the last semester that actually has courses.
+                // Solver output may include trailing semesters with blank/empty course lists; we don't want
+                // those tables to appear on Preview/PDF.
+                var maxSolverIndexWithCourses = currentSemSolver;
+                posList.forEach(function(sem) {
+                    var solverIndex = sem.semester_index || 0;
+                    if (!solverIndex) return;
+                    var hasCourses = Array.isArray(sem.courses) && sem.courses.some(function(c) {
+                        var code = c && (c.code || '');
+                        return String(code).trim() !== '';
+                    });
+                    if (hasCourses && solverIndex > maxSolverIndexWithCourses) {
+                        maxSolverIndexWithCourses = solverIndex;
+                    }
+                });
+
+                // The feasible-move horizon should match the "generated POS" horizon:
+                // i.e., the latest solver semester that actually has courses.
+                // (Earlier we experimented with a fixed cap, but that can under/over-highlight
+                // depending on the student's graduation length.)
+
+                var html = "";
+                posList.forEach(function(sem) {
+                    var solverIndex = sem.semester_index || 0;
+                    if (!solverIndex) return;
+
+                    // The server-rendered part only includes semesters where there are
+                    // saved grades. If the user didn't enter grades for a "past" semester,
+                    // that section can disappear on Preview, and we should let the solver
+                    // overlay fill it in (metadata + blank grade/remark).
+                    //
+                    // Skip solver semesters <= boundary ONLY if that UI section already has
+                    // at least one non-empty grade saved.
+                    var uiIndexForServer = solverIndex - 1; // solverIndex=1 -> uiIndex=0
+                    var serverSectionGrades = (gradesBySection && (gradesBySection[String(uiIndexForServer)] || gradesBySection[uiIndexForServer])) ? (gradesBySection[String(uiIndexForServer)] || gradesBySection[uiIndexForServer]) : null;
+                    var serverHasAnyGrade = false;
+                    if (serverSectionGrades) {
+                        Object.keys(serverSectionGrades).some(function(code) {
+                            if (serverSectionGrades[code]) { serverHasAnyGrade = true; return true; }
+                            return false;
+                        });
+                    }
+
+                    if (solverIndex <= currentSemSolver && serverHasAnyGrade) {
+                        return;
+                    }
+                    if (solverIndex > maxSolverIndexWithCourses) {
+                        return;
+                    }
+
+                    var label = semLabelFromSolverIndex(solverIndex) || sem.label || ("Semester " + solverIndex);
+                    var totalUnits = (sem.total_units !== undefined && sem.total_units !== null) ? sem.total_units : '—';
+
+                    html += '<div class="mb-4 pos-dnd-semester" data-semester-index="' + String(solverIndex) + '">';
+                    html +=   '<h6 class="fw-bold mb-2">' + String(label) + '</h6>';
+                    html +=   '<div class="table-responsive">';
+                    html +=     '<table class="table table-sm align-middle table-bordered mb-0">';
+                    html +=       '<colgroup>';
+                    html +=         '<col style="width:8%;">';
+                    html +=         '<col style="width:32%;">';
+                    html +=         '<col style="width:4%;">';
+                    html +=         '<col style="width:3%;">';
+                    html +=         '<col style="width:3%;">';
+                    html +=         '<col style="width:12%;">';
+                    html +=         '<col style="width:12%;">';
+                    html +=         '<col style="width:8%;">';
+                    html +=         '<col style="width:8%;">';
+                    html +=       '</colgroup>';
+                    html +=       '<thead class="table-light">';
+                    html +=         '<tr class="text-center">';
+                    html +=           '<th rowspan="2" style="width: 8%;">Course Code</th>';
+                    html +=           '<th rowspan="2" style="width: 28%;">Course Title</th>';
+                    html +=           '<th rowspan="2" style="width: 4%;">Units</th>';
+                    html +=           '<th colspan="2" class="hours-header" style="width: 6%;">No. of hour/s</th>';
+                    html +=           '<th rowspan="2" style="width: 12%;">Pre-requisite(s)</th>';
+                    html +=           '<th rowspan="2" style="width: 12%;">Co-requisite(s)</th>';
+                    html +=           '<th rowspan="2" style="width: 9%;">Grade</th>';
+                    html +=           '<th rowspan="2" style="width: 9%;">Remarks</th>';
+                    html +=         '</tr>';
+                    html +=         '<tr class="text-center">';
+                    html +=           '<th style="width: 4%;">Lec</th>';
+                    html +=           '<th style="width: 4%;">Lab</th>';
+                    html +=         '</tr>';
+                    html +=       '</thead>';
+                    html +=       '<tbody class="pos-dnd-tbody">';
+
+                    (sem.courses || []).forEach(function(c) {
+                        var code = c.code || '';
+                        var info = (courseLookup && code) ? courseLookup[code] : null;
+                        var title = (info && info.title) ? info.title : (c.title || '');
+                        var units = (info && info.units !== undefined && info.units !== null) ? info.units : ((c.units !== undefined && c.units !== null) ? c.units : '');
+                        var lec = (info && info.lec !== undefined && info.lec !== null) ? info.lec : '';
+                        var lab = (info && info.lab !== undefined && info.lab !== null) ? info.lab : '';
+                        var prereq = (info && info.prereq) ? info.prereq : '';
+                        var coreq = (info && info.coreq) ? info.coreq : '';
+
+                        var grade = getGradeFor(solverIndex - 1, code, gradesBySection);
+                        var remark = grade ? (isPassingGrade(grade) ? 'Passed' : (isFailedGrade(grade) ? 'Failed' : '')) : '';
+                        var gradeClass = (grade && isFailedGrade(grade)) ? 'text-danger' : '';
+                        var remarkClass = (remark === 'Passed') ? 'text-success' : ((remark === 'Failed') ? 'text-danger' : '');
+
+                        html += '<tr class="pos-course-row" data-course-code="' + String(code || '').trim() + '">';
+                        html +=   '<td class="text-center">' + String(displayPosCourseCode(code)) + '</td>';
+                        html +=   '<td class="course-title-cell">' + String(title) + '</td>';
+                        html +=   '<td class="text-center">' + String(units) + '</td>';
+                        html +=   '<td class="text-center">' + (lec !== '' ? String(lec) : '') + '</td>';
+                        html +=   '<td class="text-center">' + (lab !== '' ? String(lab) : '') + '</td>';
+                        html +=   '<td class="small text-muted text-center">' + (prereq !== '' ? String(prereq) : '') + '</td>';
+                        html +=   '<td class="small text-muted text-center">' + (coreq !== '' ? String(coreq) : '') + '</td>';
+                        html +=   '<td class="text-center grade-display ' + gradeClass + '">' + (grade ? String(grade) : '') + '</td>';
+                        html +=   '<td class="text-center remarks-display ' + remarkClass + '">' + (remark ? String(remark) : '') + '</td>';
+                        html += '</tr>';
+                    });
+
+                    html +=       '</tbody>';
+                    html +=       '<tfoot><tr>';
+                    html +=         '<th colspan="2" class="text-end">Total Units</th>';
+                    html +=         '<th class="text-center pos-total-units" data-total-units-cell="' + String(solverIndex) + '">' + String(totalUnits) + '</th>';
+                    html +=         '<th colspan="6"></th>';
+                    html +=       '</tr></tfoot>';
+                    html +=     '</table>';
+                    html +=   '</div>';
+                    html += '</div>';
+                });
+
+                    if (html) {
+                        dyn.innerHTML = html;
+                        dyn.style.display = '';
+                        if (posEditState && posEditState.editing) {
+                            initPosSortables();
+                        }
+                    }
+            }
+
+            // Backward compatibility: if solver response is old-format, render res.pos.
+            if (!res.pos_options || typeof res.pos_options !== 'object') {
+                renderSolverPos(res.pos || []);
+                return;
+            }
+
+            var posOptions = res.pos_options || {};
+            var reason = res.default_reason || '';
+
+            var defaultMode = forcedMode
+                || res.default_petition_mode
+                || sessionStorage.getItem('posSelectedOptionMode')
+                || 'no_petition';
+
+            function pickFeasibleMode(preferMode) {
+                var a = posOptions.no_petition;
+                var b = posOptions.with_petition;
+                if (preferMode === 'no_petition' && a && a.status === 'ok') return 'no_petition';
+                if (preferMode === 'with_petition' && b && b.status === 'ok') return 'with_petition';
+                if (a && a.status === 'ok') return 'no_petition';
+                if (b && b.status === 'ok') return 'with_petition';
+                return preferMode;
+            }
+
+            var selectedMode = pickFeasibleMode(defaultMode);
+            var selectedOpt = posOptions[selectedMode] || {};
+
+            // Setup UI toggle
+            var toggleEl = document.getElementById('pos-option-toggle');
+            var reasonEl = document.getElementById('pos-option-reason');
+            var noRadio = document.getElementById('petition-mode-no');
+            var yesRadio = document.getElementById('petition-mode-yes');
+
+            if (toggleEl && reasonEl && noRadio && yesRadio) {
+                toggleEl.style.display = '';
+                // Keep reason available for debugging/code output, but hide it from UI.
+                reasonEl.dataset.reason = reason || '';
+                reasonEl.textContent = '';
+                reasonEl.style.display = 'none';
+                if (reason) {
+                    try { console.info('[Preview POS] option default reason:', reason); } catch (e) {}
+                }
+
+                var noEnabled = posOptions.no_petition && posOptions.no_petition.status === 'ok';
+                var yesEnabled = posOptions.with_petition && posOptions.with_petition.status === 'ok';
+
+                noRadio.disabled = !noEnabled;
+                yesRadio.disabled = !yesEnabled;
+
+                noRadio.checked = selectedMode === 'no_petition';
+                yesRadio.checked = selectedMode === 'with_petition';
+
+                if (!renderDynamicPOS._toggleBound) {
+                    renderDynamicPOS._toggleBound = true;
+                    var setModeUrl = "{% url 'set_generated_pos_option' %}";
+                    function onModeChange(e) {
+                        var mode = e && e.target ? e.target.value : null;
+                        if (!mode) return;
+                        sessionStorage.setItem('posSelectedOptionMode', mode);
+                        fetch(setModeUrl, {
+                            method: 'POST',
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ mode: mode })
+                        }).then(function(r) { return r.json(); })
+                          .then(function(data) {
+                              if (!data || !data.ok) return;
+                              renderSolverPos(data.pos || []);
+                          }).catch(function() {});
+                    }
+                    noRadio.addEventListener('change', onModeChange);
+                    yesRadio.addEventListener('change', onModeChange);
+                }
+            }
+
+            renderSolverPos(selectedOpt.pos || []);
+        }
+
+        // Prefer fresh response passed from Generate POS
+        var ss = sessionStorage.getItem('posGeneratedResponse');
+        var ssObj = ss ? safeJsonParse(ss) : null;
+        if (ssObj && (ssObj.pos || ssObj.pos_options)) {
+            renderDynamicPOS(ssObj);
+            return;
+        }
+
+        // If POS data was deleted, don't attempt to render stale preview
+        try {
+            var deletedFlag = localStorage.getItem('posDeleted');
+            if (deletedFlag === '1') {
+                localStorage.removeItem('posDeleted');
+                sessionStorage.removeItem('posGeneratedResponse');
+                return;
+            }
+        } catch (e) {}
+
+        // Fallback: if user refreshed Preview, regenerate by calling API using stored grades + semester
+        var gradesBySection = getGradesBySection();
+        var currentSemRaw = localStorage.getItem('posCurrentSemIndex');
+        var currentUiIndex = currentSemRaw !== null && currentSemRaw !== '' ? parseInt(currentSemRaw, 10) : null;
+        if (!gradesBySection || currentUiIndex === null || isNaN(currentUiIndex)) return;
+
+        var passed = new Set();
+        var failed = new Set();
+        Object.keys(gradesBySection || {}).forEach(function(sectionIndex) {
+            var sec = gradesBySection[sectionIndex] || {};
+            Object.keys(sec).forEach(function(code) {
+                var g = sec[code];
+                if (isPassingGrade(g)) passed.add(code);
+                if (isFailedGrade(g)) failed.add(code);
+            });
+        });
+        passed.forEach(function(code) { if (failed.has(code)) failed.delete(code); });
+
+        fetch("{% url 'generate_pos_api' %}", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                // UI stores "last semester enrolled" as a 0-based index.
+                // Solver expects "current_sem" as the next semester (1-based).
+                current_sem: currentUiIndex + 2,
+                passed_courses: Array.from(passed),
+                failed_courses: Array.from(failed),
+                probation: false
+            })
+        }).then(function(r) { return r.json(); })
+          .then(function(res) {
+              try { sessionStorage.setItem('posGeneratedResponse', JSON.stringify(res)); } catch (e) {}
+              try { sessionStorage.removeItem('posPreviewHistorySaved'); } catch (e) {}
+              renderDynamicPOS(res);
+          })
+          .catch(function() {});
+
+    })();
+</script>
+{% endif %}
+{% endblock %}

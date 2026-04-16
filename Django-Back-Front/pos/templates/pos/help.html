@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Help | Program of Study Generation System{% endblock %}
+
+{% block nav_help_active %}active{% endblock %}
+
+{% block content %}
+<div class="position-relative">
+    <div class="pos-page-bsu-bg-fixed" aria-hidden="true"></div>
+    <div class="pos-content-above-bsu-bg">
+        <div class="row justify-content-center">
+            <div class="col-lg-9">
+                <div class="pos-card pos-card-translucent-bg contact-help-card p-4 mt-2">
+            <div class="mb-4">
+                <h1 class="fw-bold mb-2 text-center" style="font-size: clamp(1.05rem, 2.1vw, 1.35rem);">Help & Documentation</h1>
+                <p class="text-muted mb-0 text-start">
+                    Learn the current workflow of the Program of Study Generation System, from setup to generation, preview, and history management.
+                </p>
+            </div>
+
+            <section class="mb-4">
+                <h2 class="pos-section-title">Getting Started</h2>
+                <p class="mb-2">
+                    Follow these steps before generating your POS:
+                </p>
+                <ol class="mb-0">
+                    <li>Log in using your SR-CODE and password.</li>
+                    <li>On <strong>Home</strong>, upload your profile photo and select your Academic Year.</li>
+                    <li>Click <strong>Generate POS</strong>, then set your <strong>Last Semester Enrolled</strong>.</li>
+                    <li>Enter grades, generate, then review and download from <strong>Preview POS</strong>.</li>
+                </ol>
+            </section>
+
+            <section class="mb-4">
+                <h2 class="pos-section-title">Frequently Asked Questions</h2>
+                
+                <div class="mb-3">
+                    <h3 class="h6 mb-1"><strong>How do I generate my Program of Study?</strong></h3>
+                    <p class="mb-0 small">
+                        Open <strong>Generate POS</strong>, choose your <strong>Last Semester Enrolled</strong>, click <strong>OK</strong>, then fill in grades for all visible courses. Click <strong>Generate POS</strong> to produce your schedule.
+                    </p>
+                </div>
+
+                <div class="mb-3">
+                    <h3 class="h6 mb-1"><strong>Can I edit courses after generating?</strong></h3>
+                    <p class="mb-0 small">
+                        Yes. On <strong>Preview POS</strong>, use <strong>Edit</strong> to drag ungraded courses between future semesters, then click <strong>Apply</strong> to save changes.
+                    </p>
+                </div>
+
+                <div class="mb-3">
+                    <h3 class="h6 mb-1"><strong>How do I download my Program of Study?</strong></h3>
+                    <p class="mb-0 small">
+                        After generating, go to <strong>Preview POS</strong>, select the required signatories, then click <strong>Download PDF</strong>. Downloading also stores a record in <strong>History</strong>.
+                    </p>
+                </div>
+
+                <div class="mb-3">
+                    <h3 class="h6 mb-1"><strong>Why does generation fail sometimes?</strong></h3>
+                    <p class="mb-0 small">
+                        Common reasons are: missing grades in visible tables, missing semester selection, or failed-unit policy checks. The 50%/75% failed-unit block applies to semesters with at least 10 total units. For unresolved issues, contact support.
+                    </p>
+                </div>
+
+                <div class="mb-0">
+                    <h3 class="h6 mb-1"><strong>How does History loading work?</strong></h3>
+                    <p class="mb-0 small">
+                        Loading a History row restores that POS back into <strong>Generate POS</strong> so you can continue from the loaded setup. The semester dropdown can extend beyond 5th year only when the loaded POS includes those semesters.
+                    </p>
+                </div>
+            </section>
+
+            <section class="mb-4">
+                <h2 class="pos-section-title">System Features</h2>
+                <ul class="mb-0">
+                    <li><strong>Home:</strong> Manage student profile photo, view account info, and set Academic Year.</li>
+                    <li><strong>Generate POS:</strong> Configure regular/irregular flow, add courses for irregular semesters, validate, clear grades, delete current POS data, and generate schedule output.</li>
+                    <li><strong>Preview POS:</strong> Review generated tables, switch solver output mode (No Petition / With Petition), edit movable courses, manage signatories, and download PDF.</li>
+                    <li><strong>History:</strong> View saved POS records, load a previous record back to Generate, delete individual rows, or delete all history.</li>
+                </ul>
+            </section>
+
+            <section>
+                <h2 class="pos-section-title">Need More Help?</h2>
+                <p class="mb-0">
+                    For additional assistance, coordinate with your academic adviser, the program chair or visit the <a href="{% url 'contact_us' %}">Contact Us</a> page.
+                </p>
+            </section>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

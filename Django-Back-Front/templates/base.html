@@ -1,0 +1,1469 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{% block title %}Program of Study Generation System{% endblock %}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <link rel="icon" type="image/png" href="{% static 'img/BSU_Logo.png' %}">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        html, body {
+            overflow-x: hidden;
+        }
+        html {
+            /* Reserve scrollbar space to prevent horizontal page jump when modals open */
+            scrollbar-gutter: stable;
+        }
+
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+            background: url('{% static "img/BSU_Background.jpg" %}') no-repeat center center fixed;
+            background-size: cover;
+            color: #212529;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            overflow-y: auto;
+        }
+
+        .pos-header-bar {
+            background-color: #a0161c;
+            color: #ffffff;
+            padding-top: 0.5rem !important;
+            padding-bottom: 0.5rem !important;
+        }
+
+        .pos-header-logo {
+            width: 62px;
+            height: 62px;
+            object-fit: contain;
+        }
+
+        .pos-header-title {
+            font-size: 1rem;
+            font-weight: 600;
+            letter-spacing: 0.03em;
+        }
+        .pos-header-title .pos-header-title-full { display: inline; }
+        .pos-header-title .pos-header-title-mobile { display: none; }
+
+        .pos-header-subtitle {
+            font-size: 0.75rem;
+            opacity: 0.9;
+        }
+
+        .pos-navbar {
+            background-color: #ffffff;
+            background-image:
+                linear-gradient(rgba(255, 255, 255, 0.68), rgba(255, 255, 255, 0.68)),
+                url('{% static "img/BSU_Background.jpg" %}');
+            background-repeat: no-repeat;
+            background-position: left bottom;
+            background-size: 320% auto; /* zoomed/cropped; larger left focus */
+            border-bottom: 1px solid #dee2e6;
+            padding-top: 0.4rem !important;
+            padding-bottom: 0.4rem !important;
+        }
+        @media (max-width: 767.98px) {
+            .pos-navbar {
+                background-size: 390% auto; /* stronger crop on small screens */
+                background-position: left bottom;
+            }
+        }
+
+        .pos-navbar .nav-link {
+            font-size: 0.85rem;
+            font-weight: 500;
+            color: #333333;
+            padding: 0.4rem 0.85rem;
+            border-radius: 16px; /* slightly rounded, not full pill */
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.3rem;
+            margin-right: 0.3rem; /* space between nav buttons */
+        }
+
+        .pos-navbar .nav-link .bi {
+            font-size: 0.9rem;
+        }
+
+        .pos-navbar .nav-link:hover {
+            color: #de4b52d4;
+            background-color: rgba(0, 0, 0, 0.04);
+        }
+
+        .pos-navbar .nav-link:focus {
+            outline: none;
+            box-shadow: inset 0 0 0 0.15rem rgba(160, 22, 28, 0.28);
+        }
+
+        .pos-navbar .nav-link:active,
+        .pos-navbar .nav-link:focus:active {
+            box-shadow: inset 0 0 0 0.16rem rgba(160, 22, 28, 0.34);
+        }
+
+        .pos-navbar .nav-link.active {
+            color: #ffffff;
+            background-color: #a0161c;
+        }
+
+        /* Global modal behavior: instant open/close, backdrop always behind popup */
+        .modal {
+            z-index: 2000 !important;
+        }
+        .modal-backdrop {
+            z-index: 1990 !important;
+            background-color: rgba(45, 45, 52, 0.45) !important;
+        }
+        /* System error above confirm if both are visible briefly */
+        #app-system-error-modal.modal.show {
+            z-index: 2060 !important;
+        }
+        .modal.fade,
+        .modal.fade .modal-dialog,
+        .modal-backdrop.fade {
+            transition: none !important;
+        }
+        .modal .modal-header .btn-close {
+            display: none !important;
+        }
+        body.modal-open {
+            padding-right: 0 !important;
+            overflow-y: auto !important;
+        }
+
+        /* System-wide popup skin (error + confirm): light card, danger message panel, top-aligned, responsive width */
+        #app-system-error-modal .app-system-error-ok-btn,
+        #app-system-confirm-modal .app-system-confirm-footer-btn {
+            padding: 0.28rem 0.85rem;
+            font-size: 0.85rem;
+            line-height: 1.2;
+            min-width: 3.25rem;
+        }
+        #app-system-error-modal .modal-body,
+        #app-system-confirm-modal .modal-body {
+            padding-top: 0.75rem;
+            padding-bottom: 0.75rem;
+        }
+        #app-system-error-modal .modal-content,
+        #app-system-confirm-modal .modal-content {
+            background: #f1f3f5;
+            border-radius: 0.6rem;
+            border: 1px solid rgba(0, 0, 0, 0.08);
+            box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.14), 0 0 0 1px rgba(0, 0, 0, 0.04);
+        }
+        #app-system-error-modal .modal-header,
+        #app-system-confirm-modal .modal-header {
+            padding: 0.65rem 0.85rem;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+            background: transparent;
+        }
+        #app-system-error-modal .modal-title,
+        #app-system-confirm-modal .modal-title {
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: #212529;
+            margin: 0;
+        }
+        #app-system-error-modal .modal-footer,
+        #app-system-confirm-modal .modal-footer {
+            padding: 0.55rem 0.85rem;
+            border-top: 1px solid rgba(0, 0, 0, 0.08);
+        }
+        #app-system-error-modal #app-system-error-modal-message,
+        #app-system-confirm-modal #app-system-confirm-modal-message {
+            font-size: 0.9rem;
+            line-height: 1.45;
+            margin-bottom: 0;
+            padding: 0.65rem 0.85rem;
+            white-space: pre-line;
+            word-break: normal;
+            overflow-wrap: break-word;
+            hyphens: none;
+            -webkit-hyphens: none;
+            -ms-hyphens: none;
+            color: #721c24;
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            border-radius: 0.35rem;
+        }
+        #app-system-error-modal.app-system-error-modal-active.modal.show,
+        #app-system-confirm-modal.app-system-error-modal-active.modal.show {
+            display: flex !important;
+            align-items: flex-start;
+            justify-content: center;
+            padding-top: max(0.5rem, env(safe-area-inset-top, 0px));
+        }
+        #app-system-error-modal.app-system-error-modal-active .modal-dialog.app-system-error-dialog,
+        #app-system-confirm-modal.app-system-error-modal-active .modal-dialog.app-system-error-dialog {
+            margin-left: auto;
+            margin-right: auto;
+            margin-top: 0;
+            margin-bottom: 1.5rem;
+            width: auto;
+            max-width: calc(100vw - 1rem);
+        }
+        @media (min-width: 576px) {
+            #app-system-error-modal.app-system-error-modal-active .modal-dialog.app-system-error-dialog,
+            #app-system-confirm-modal.app-system-error-modal-active .modal-dialog.app-system-error-dialog {
+                max-width: min(36rem, calc(100vw - 2rem));
+            }
+        }
+        @media (min-width: 768px) {
+            #app-system-error-modal.app-system-error-modal-active .modal-dialog.app-system-error-dialog,
+            #app-system-confirm-modal.app-system-error-modal-active .modal-dialog.app-system-error-dialog {
+                max-width: min(42rem, calc(100vw - 3rem));
+            }
+        }
+        @media (min-width: 1200px) {
+            #app-system-error-modal.app-system-error-modal-active .modal-dialog.app-system-error-dialog,
+            #app-system-confirm-modal.app-system-error-modal-active .modal-dialog.app-system-error-dialog {
+                max-width: min(48rem, calc(100vw - 4rem));
+            }
+        }
+
+        /* Utility: justify text (Bootstrap 5 dropped .text-justify) */
+        .text-justify {
+            text-align: justify !important;
+        }
+
+        /* Responsive nav: single row, horizontal scroll on small screens (no wrap) */
+        .pos-navbar .navbar-collapse {
+            flex-basis: auto;
+            overflow-x: auto;
+            overflow-y: hidden;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: thin;
+        }
+        .pos-navbar .navbar-nav {
+            flex-wrap: nowrap;
+            gap: 0.25rem;
+        }
+        .pos-navbar .nav-item {
+            flex: 0 0 auto;
+        }
+        @media (max-width: 991.98px) {
+            .pos-navbar .nav-link {
+                font-size: 0.75rem;
+                padding: 0.35rem 0.5rem;
+                gap: 0.2rem;
+            }
+            .pos-navbar .nav-link .bi {
+                font-size: 0.8rem;
+            }
+        }
+        @media (max-width: 575.98px) {
+            .pos-navbar .nav-link {
+                font-size: 0.7rem;
+                padding: 0.4rem 0.5rem;
+                gap: 0;
+                margin-right: 0.15rem;
+            }
+            .pos-navbar .nav-link .nav-link-text {
+                display: none;
+            }
+            .pos-navbar .nav-link .bi {
+                font-size: 1.05rem;
+                margin: 0;
+                display: block;
+            }
+        }
+
+        .pos-main {
+            padding-top: 1.5rem;
+            padding-bottom: 2.5rem;
+            flex: 1;
+            overflow-x: hidden;
+        }
+
+        .pos-sticky-header-wrapper {
+            position: sticky;
+            top: 0;
+            z-index: 1030;
+        }
+
+        .pos-header-bar {
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .pos-navbar {
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+
+        body:not(.no-sticky-header) .pos-main {
+            padding-top: 1.5rem;
+        }
+        @media (max-width: 767.98px) {
+            /* Mobile only: nav bar is hidden, so reduce extra gap before page titles */
+            .pos-sticky-header-wrapper {
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                z-index: 1400;
+            }
+            .pos-main,
+            body:not(.no-sticky-header) .pos-main {
+                padding-top: 4.9rem;
+            }
+        }
+
+        .pos-card {
+            border-radius: 0.5rem;
+            border: 1px solid #dee2e6;
+            background-color: #ffffff;
+        }
+
+        .pos-student-profile-card-bg {
+            background: linear-gradient(rgba(255, 255, 255, 0.75), rgba(255, 255, 255, 0.75)), url('{% static "img/BSU_colored_bg.jpg" %}') no-repeat center 25%;
+            background-size: cover;
+            border-radius: 0.5rem;
+            border: 1px solid #dee2e6;
+        }
+
+        .pos-student-profile-inner {
+            background: rgba(255, 255, 255, 0.88);
+            border-radius: 0.5rem;
+            padding: 1rem 1.25rem;
+        }
+
+        .pos-section-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+        }
+
+        .pos-card-with-bsu-bg {
+            position: relative;
+        }
+        .pos-card-bsu-bg {
+            position: absolute;
+            left: 0;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            background: url('{% static "img/BSU_Logo.png" %}') center / 55% no-repeat;
+            opacity: 0.07;
+            z-index: 0;
+            pointer-events: none;
+        }
+        .pos-card-bsu-content {
+            position: relative;
+            z-index: 1;
+        }
+
+        .pos-page-bsu-bg-fixed {
+            position: fixed;
+            left: 0;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            background: url('{% static "img/BSU_Logo.png" %}') center 58% / 40% no-repeat;
+            opacity: 0.12;
+            z-index: 0;
+            pointer-events: none;
+        }
+        .pos-content-above-bsu-bg {
+            position: relative;
+            z-index: 1;
+        }
+        .pos-card-translucent-bg {
+            background-color: rgba(255, 255, 255, 0.65);
+        }
+        .contact-help-card {
+            font-size: 0.875rem;
+        }
+        .contact-help-card h1,
+        .contact-help-card .h5 {
+            font-size: 1rem;
+        }
+        .contact-help-card .pos-section-title,
+        .contact-help-card h2 {
+            font-size: 0.95rem;
+        }
+        .contact-help-card h3,
+        .contact-help-card h6 {
+            font-size: 0.85rem;
+        }
+        .contact-help-card p,
+        .contact-help-card li {
+            font-size: 0.875rem;
+        }
+        .contact-help-card .text-muted {
+            font-size: 0.8rem;
+        }
+
+        .pos-fixed-bottom-right-logo-link {
+            position: fixed;
+            bottom: 1rem;
+            right: 1rem;
+            z-index: 10;
+            line-height: 0;
+            display: inline-block;
+        }
+        .pos-fixed-bottom-right-logo-link .pos-fixed-bottom-right-logo {
+            width: 40px;
+            height: auto;
+            object-fit: contain;
+            display: block;
+        }
+
+        .pos-footer {
+            border-top: none;
+            background-color: #7b0f15; /* darker BSU red */
+            font-size: 0.7rem;         /* even smaller text */
+            color: #ffffff;
+            padding-top: 0.6rem !important;
+            padding-bottom: 0.6rem !important;
+        }
+        .pos-footer .container {
+            padding-right: 3rem;
+        }
+
+        .pos-footer a {
+            color: #ffffff;
+            text-decoration: none;
+        }
+
+        .pos-footer a:hover {
+            text-decoration: underline;
+        }
+
+        @media (min-width: 1200px) {
+            .pos-container-wide {
+                max-width: 1140px;
+            }
+        }
+
+        #privacyPolicyModal .modal-dialog {
+            max-width: 700px;
+        }
+        #privacyPolicyModal .modal-content {
+            border-radius: 12px;
+            border: 2px solid #dee2e6;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            background-color: rgba(255, 255, 255, 0.97);
+        }
+        #privacyPolicyModal .modal-header {
+            border-bottom: 1px solid #dee2e6;
+            padding: 0.5rem 1rem;
+            background-color: #7b0f15;
+            color: #ffffff;
+            border-radius: 12px 12px 0 0;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        #privacyPolicyModal .modal-header .modal-title {
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: #ffffff;
+            margin: 0;
+        }
+        #privacyPolicyModal .modal-header .privacy-modal-logo {
+            width: 28px;
+            height: 28px;
+            object-fit: contain;
+        }
+        #privacyPolicyModal .modal-body {
+            position: relative;
+            padding: 0;
+            overflow: hidden;
+        }
+        #privacyPolicyModal .modal-body-bg {
+            position: absolute;
+            left: 0;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            background: url('{% static "img/BSU_Logo.png" %}') center / 55% no-repeat;
+            opacity: 0.07;
+            z-index: 0;
+            pointer-events: none;
+        }
+        #privacyPolicyModal .modal-body-scroll {
+            position: relative;
+            z-index: 1;
+            padding: 1.25rem 1.5rem;
+            font-size: 0.9rem;
+            line-height: 1.6;
+            max-height: 70vh;
+            overflow-y: auto;
+        }
+        #privacyPolicyModal .modal-body-scroll h6 {
+            font-size: 0.95rem;
+            font-weight: 600;
+            margin-top: 1rem;
+            margin-bottom: 0.4rem;
+        }
+        #privacyPolicyModal .modal-body-scroll h6:first-child {
+            margin-top: 0;
+        }
+        #privacyPolicyModal .modal-footer {
+            border-top: 1px solid #dee2e6;
+            padding: 0.5rem 1rem;
+            background-color: #f8f9fa;
+            border-radius: 0 0 12px 12px;
+        }
+
+        /* ========== Responsive / Fluid / Mobile-friendly (RWD) ========== */
+        /* Fluid layout: relative units; adaptive breakpoints for container */
+        html { font-size: 16px; box-sizing: border-box; }
+        *, *::before, *::after { box-sizing: inherit; }
+
+        /* Adaptive container: fixed max-widths at breakpoints (Bootstrap-aligned) */
+        @media (min-width: 576px) {
+            .pos-container-wide { max-width: 540px; }
+        }
+        @media (min-width: 768px) {
+            .pos-container-wide { max-width: 720px; }
+        }
+        @media (min-width: 992px) {
+            .pos-container-wide { max-width: 960px; }
+        }
+        @media (min-width: 1200px) {
+            .pos-container-wide { max-width: 1140px; }
+        }
+
+        /* Header: single row, text can truncate on small screens */
+        .pos-header-brand { min-width: 0; }
+        .pos-header-brand > div { min-width: 0; }
+        @media (max-width: 575.98px) {
+            .pos-header-title { font-size: 0.82rem; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+            .pos-header-subtitle { font-size: 0.72rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+            .pos-header-logo { width: 46px; height: 46px; flex-shrink: 0; }
+            .pos-header-title .pos-header-title-full { display: none; }
+            .pos-header-title .pos-header-title-mobile { display: inline; }
+
+            /* Mobile: unify dropdown size (all selects) */
+            .pos-main select,
+            .pos-main .form-select {
+                font-size: 0.8rem;
+                padding: 0.25rem 1.75rem 0.25rem 0.5rem;
+                height: 2rem;
+                /* Keep default Bootstrap radius instead of fully curved pill */
+                border-radius: 0.375rem;
+            }
+        }
+
+        /*
+         * iOS Safari often paints <select> and unstyled <button> text as link-blue.
+         * Force body text color so Android/desktop stay unchanged but iOS matches.
+         */
+        .pos-main select,
+        .pos-main .form-select {
+            color: #212529;
+            -webkit-text-fill-color: #212529;
+        }
+
+        /* Global: allow long course titles to wrap in tables */
+        .table .course-title-cell,
+        .table .elective-course-cell {
+            white-space: normal;
+            word-break: break-word;
+            overflow-wrap: break-word;
+        }
+
+        /* Footer: keep single row (no wrap) */
+        .pos-footer .container {
+            flex-direction: row !important;
+            flex-wrap: nowrap !important;
+            justify-content: flex-start !important;
+            gap: 0.75rem;
+            padding-right: 0.75rem !important;
+            padding-left: 0.75rem;
+            overflow-x: auto;
+            overflow-y: hidden;
+            -webkit-overflow-scrolling: touch;
+        }
+        .pos-footer .footer-copyright,
+        .pos-footer .footer-right {
+            white-space: nowrap;
+        }
+        .pos-footer .footer-right {
+            margin-left: auto;
+        }
+        .pos-footer .footer-right a {
+            padding-right: 2rem;
+        }
+        @media (max-width: 575.98px) {
+            .pos-footer { font-size: 0.62rem; }
+            .pos-footer .container { gap: 0.5rem; }
+        }
+        .pos-footer { font-size: clamp(0.65rem, 2vw, 0.7rem); }
+
+        /* Mobile-friendly: touch targets min 44px where possible */
+        .pos-navbar .nav-link {
+            min-height: 2.5rem;
+            min-width: 2.5rem;
+        }
+        @media (max-width: 575.98px) {
+            .pos-navbar .nav-link { min-height: 2.75rem; min-width: 2.75rem; }
+        }
+
+        /* Fixed corner logo: smaller on mobile, avoid overlap */
+        .pos-fixed-bottom-right-logo-link {
+            bottom: clamp(0.5rem, 2vw, 1rem);
+            right: clamp(0.5rem, 2vw, 1rem);
+        }
+        .pos-fixed-bottom-right-logo-link .pos-fixed-bottom-right-logo {
+            width: clamp(32px, 8vw, 40px);
+            height: auto;
+        }
+
+        /* Modals: full width on mobile */
+        @media (max-width: 575.98px) {
+            #privacyPolicyModal .modal-dialog { max-width: 100%; margin: 0.5rem; }
+        }
+
+        /* Responsive text: scale down on mobile for better layout */
+        .pos-main {
+            font-size: clamp(0.875rem, 1.8vw, 1rem);
+        }
+        .pos-main h1, .pos-main .h1 { font-size: clamp(1.05rem, 2.8vw, 1.25rem); }
+        .pos-main h2, .pos-main .h2 { font-size: clamp(1rem, 2.2vw, 1.15rem); }
+        .pos-main h5, .pos-main .h5 { font-size: clamp(0.95rem, 2vw, 1rem); }
+        .pos-main .pos-section-title { font-size: clamp(0.95rem, 2vw, 1.1rem); }
+        .pos-main .text-muted { font-size: clamp(0.8rem, 1.8vw, 0.9rem); }
+        .pos-main p, .pos-main .form-text, .pos-main .form-label { font-size: clamp(0.8125rem, 1.7vw, 0.9rem); }
+        .pos-main .small { font-size: clamp(0.75rem, 1.5vw, 0.875rem) !important; }
+        .pos-main .alert { font-size: clamp(0.8125rem, 1.7vw, 0.9rem); }
+        @media (max-width: 767.98px) {
+            .pos-main .btn { font-size: 0.875rem; padding: 0.35rem 0.65rem; }
+            .pos-main .btn-sm { font-size: 0.8rem; padding: 0.25rem 0.5rem; }
+        }
+        @media (max-width: 575.98px) {
+            .pos-main .btn { font-size: 0.8125rem; padding: 0.4rem 0.6rem; }
+            .pos-main .btn-sm { font-size: 0.75rem; padding: 0.3rem 0.45rem; }
+        }
+
+        /* Sign Out in nav: right-anchored, same tab style; extra left margin to separate from main tabs */
+        .pos-nav-signout { margin-left: 0.5rem; }
+        @media (max-width: 575.98px) {
+            .pos-nav-signout { margin-left: 0.35rem; }
+        }
+
+        /* Mobile side navigation drawer (keeps desktop navbar unchanged) */
+        .pos-mobile-drawer,
+        .pos-mobile-drawer-overlay {
+            display: none;
+        }
+        .pos-header-logo-trigger {
+            border: 0;
+            background: transparent;
+            padding: 0;
+            margin: 0;
+            line-height: 1;
+            border-radius: 999px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex: 0 0 auto;
+        }
+        .pos-header-logo-trigger:focus-visible {
+            outline: 2px solid rgba(255, 255, 255, 0.75);
+            outline-offset: 2px;
+        }
+        .pos-header-menu-trigger {
+            display: none;
+            border: 0;
+            background: transparent;
+            color: #ffffff;
+            padding: 0.2rem;
+            margin-right: 0.6rem;
+            line-height: 1;
+            border-radius: 0.45rem;
+            font-size: 1.45rem;
+            flex: 0 0 auto;
+        }
+        .pos-header-menu-trigger:focus-visible {
+            outline: 2px solid rgba(255, 255, 255, 0.75);
+            outline-offset: 2px;
+        }
+        @media (max-width: 767.98px) {
+            .pos-header-menu-trigger {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+            }
+            .pos-header-brand {
+                margin-left: 0;
+                display: inline-flex !important;
+                align-items: center;
+                gap: 0.55rem;
+                flex: 1 1 auto;
+                min-width: 0;
+            }
+            .pos-header-brand .pos-header-logo-trigger {
+                order: 2;
+                margin: 0 0 0 auto !important;
+            }
+            .pos-header-brand > div {
+                order: 1;
+                flex: 1 1 auto;
+                min-width: 0;
+                text-align: left;
+            }
+            .pos-header-brand .pos-header-title,
+            .pos-header-brand .pos-header-subtitle {
+                text-align: left;
+            }
+            .pos-header-brand .pos-header-title {
+                white-space: normal;
+                text-overflow: clip;
+            }
+            .pos-header-logo-trigger {
+                pointer-events: none;
+            }
+            .pos-header-logo-trigger img {
+                display: block;
+            }
+
+            /* Hide existing top icon-strip nav on mobile; drawer replaces it */
+            .pos-navbar {
+                display: none;
+            }
+
+            .pos-mobile-drawer-overlay {
+                display: block;
+                position: fixed;
+                inset: 0;
+                background: rgba(214, 214, 214, 0.55);
+                opacity: 0;
+                pointer-events: none;
+                transition: opacity 0.22s ease;
+                z-index: 1450;
+            }
+            .pos-mobile-drawer {
+                display: block;
+                position: fixed;
+                top: 0;
+                left: 0;
+                bottom: 0;
+                width: min(76vw, 275px);
+                background-color: #fff;
+                background-image:
+                    linear-gradient(rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0.62)),
+                    url('{% static "img/BSU_Background.jpg" %}');
+                background-repeat: no-repeat;
+                /* Gradient full bleed; photo: stay left-aligned, shift down (no horizontal nudge). */
+                background-position: left top, left calc(100% + 48px);
+                background-size: 100% 100%, 400% auto;
+                box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22);
+                transform: translateX(-104%);
+                transition: transform 0.24s ease;
+                z-index: 1460;
+                overflow-y: auto;
+                -webkit-overflow-scrolling: touch;
+            }
+            .pos-mobile-drawer-header {
+                display: flex;
+                align-items: center;
+                gap: 0.55rem;
+                padding: 0.9rem 0.85rem;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.22);
+                background: linear-gradient(180deg, #b4151d 0%, #960f17 100%);
+                color: #fff;
+            }
+            .pos-mobile-drawer-header-logo {
+                width: 40px;
+                height: 40px;
+                object-fit: contain;
+                flex: 0 0 auto;
+                border-radius: 0;
+                background: transparent;
+            }
+            .pos-mobile-drawer-header-text {
+                font-size: 0.78rem;
+                font-weight: 700;
+                line-height: 1.2;
+                letter-spacing: 0.01em;
+            }
+            .pos-mobile-drawer-nav {
+                padding: 0.45rem 0.4rem 0.75rem;
+            }
+            .pos-mobile-drawer-link {
+                display: flex;
+                align-items: center;
+                gap: 0.72rem;
+                min-height: 2.8rem;
+                border-radius: 0.65rem;
+                padding: 0.55rem 0.72rem;
+                color: #2f2f2f;
+                text-decoration: none;
+                font-weight: 500;
+                font-size: 0.93rem;
+            }
+            .pos-mobile-drawer-link i {
+                width: 1.15rem;
+                text-align: center;
+                font-size: 1rem;
+                color: #6d6d6d;
+                flex: 0 0 auto;
+            }
+            .pos-mobile-drawer-link:hover,
+            .pos-mobile-drawer-link:focus-visible {
+                background: rgba(160, 22, 28, 0.08);
+                color: #111;
+                outline: none;
+            }
+            .pos-mobile-drawer-link.active {
+                background: rgba(160, 22, 28, 0.12);
+                color: #7e1217;
+                font-weight: 700;
+            }
+            .pos-mobile-drawer-link.active i {
+                color: #a0161c;
+            }
+
+            body.pos-mobile-drawer-open {
+                overflow: hidden;
+                touch-action: pan-y;
+            }
+            body.pos-mobile-drawer-open .pos-mobile-drawer-overlay {
+                opacity: 1;
+                pointer-events: auto;
+            }
+            body.pos-mobile-drawer-open .pos-mobile-drawer {
+                transform: translateX(0);
+            }
+        }
+    </style>
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    <div class="pos-sticky-header-wrapper">
+    {% block header %}
+    <header class="pos-header-bar">
+        <div class="container pos-container-wide d-flex align-items-center">
+            <button type="button" class="pos-header-menu-trigger" id="pos-mobile-menu-btn" aria-label="Open navigation menu">
+                <i class="bi bi-list" aria-hidden="true"></i>
+            </button>
+            <div class="d-flex align-items-center pos-header-brand">
+                <button type="button" class="pos-header-logo-trigger me-3" aria-label="Batangas State University Logo">
+                    <img src="{% static 'img/BSU_Logo.png' %}" alt="Batangas State University Logo" class="pos-header-logo">
+                </button>
+                <div>
+                    <div class="pos-header-title">
+                        <span class="pos-header-title-full">Batangas State University – The National Engineering University</span>
+                        <span class="pos-header-title-mobile">Batangas State University - TNEU</span>
+                    </div>
+                    <div class="pos-header-subtitle">
+                        Program of Study Generation System
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+    {% endblock header %}
+
+    {% block navbar %}
+    <nav class="navbar navbar-expand pos-navbar">
+        <div class="container pos-container-wide">
+            <div class="navbar-collapse d-flex align-items-center flex-nowrap" id="mainNavbar">
+                <ul class="navbar-nav me-auto mb-2 mb-lg-0 flex-nowrap">
+                    <li class="nav-item">
+                        <a class="nav-link {% block nav_home_active %}{% endblock %}" href="{% url 'pos_home' %}" title="Home"><i class="bi bi-house-door-fill"></i><span class="nav-link-text">Home</span></a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% block nav_generate_active %}{% endblock %}" href="{% if has_complete_info %}{% url 'pos_generate' %}{% else %}{% url 'pos_home' %}?required=1{% endif %}" title="Generate POS"><i class="bi bi-journal-plus"></i><span class="nav-link-text">Generate POS</span></a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% block nav_preview_active %}{% endblock %}" href="{% if has_complete_info %}{% url 'pos_preview' %}{% else %}{% url 'pos_home' %}?required=1{% endif %}" title="Preview POS"><i class="bi bi-eye-fill"></i><span class="nav-link-text">Preview POS</span></a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% block nav_history_active %}{% endblock %}" href="{% if has_complete_info %}{% url 'pos_history' %}{% else %}{% url 'pos_home' %}?required=1{% endif %}" title="History"><i class="bi bi-clock-history"></i><span class="nav-link-text">History</span></a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% block nav_contact_active %}{% endblock %}" href="{% url 'contact_us' %}" title="Contact Us"><i class="bi bi-envelope-fill"></i><span class="nav-link-text">Contact Us</span></a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% block nav_help_active %}{% endblock %}" href="{% url 'help' %}" title="Help"><i class="bi bi-question-circle-fill"></i><span class="nav-link-text">Help</span></a>
+                    </li>
+                </ul>
+                <ul class="navbar-nav mb-2 mb-lg-0 ms-auto flex-shrink-0">
+                    <li class="nav-item">
+                        <a class="nav-link pos-nav-signout pos-app-sign-out-link" href="{% url 'sign_out' %}" title="Sign Out"><i class="bi bi-box-arrow-right"></i><span class="nav-link-text">Sign Out</span></a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+    {% endblock navbar %}
+
+    <!-- Mobile side drawer navigation -->
+    <div class="pos-mobile-drawer-overlay" id="pos-mobile-drawer-overlay" aria-hidden="true"></div>
+    <aside class="pos-mobile-drawer" id="pos-mobile-drawer" aria-hidden="true">
+        <div class="pos-mobile-drawer-header">
+            <img src="{% static 'img/BSU_Logo.png' %}" alt="BSU Logo" class="pos-mobile-drawer-header-logo">
+            <span class="pos-mobile-drawer-header-text">POS Generation System</span>
+        </div>
+        <nav class="pos-mobile-drawer-nav" aria-label="Mobile navigation">
+            <a class="pos-mobile-drawer-link" href="{% url 'pos_home' %}" data-nav-key="home"><i class="bi bi-house-door-fill" aria-hidden="true"></i><span>Home</span></a>
+            <a class="pos-mobile-drawer-link" href="{% if has_complete_info %}{% url 'pos_generate' %}{% else %}{% url 'pos_home' %}?required=1{% endif %}" data-nav-key="generate"><i class="bi bi-journal-plus" aria-hidden="true"></i><span>Generate POS</span></a>
+            <a class="pos-mobile-drawer-link" href="{% if has_complete_info %}{% url 'pos_preview' %}{% else %}{% url 'pos_home' %}?required=1{% endif %}" data-nav-key="preview"><i class="bi bi-eye-fill" aria-hidden="true"></i><span>Preview POS</span></a>
+            <a class="pos-mobile-drawer-link" href="{% if has_complete_info %}{% url 'pos_history' %}{% else %}{% url 'pos_home' %}?required=1{% endif %}" data-nav-key="history"><i class="bi bi-clock-history" aria-hidden="true"></i><span>History</span></a>
+            <a class="pos-mobile-drawer-link" href="{% url 'contact_us' %}" data-nav-key="contact"><i class="bi bi-envelope-fill" aria-hidden="true"></i><span>Contact Us</span></a>
+            <a class="pos-mobile-drawer-link" href="{% url 'help' %}" data-nav-key="help"><i class="bi bi-question-circle-fill" aria-hidden="true"></i><span>Help</span></a>
+            <a class="pos-mobile-drawer-link pos-app-sign-out-link" href="{% url 'sign_out' %}" data-nav-key="signout"><i class="bi bi-box-arrow-right" aria-hidden="true"></i><span>Sign Out</span></a>
+        </nav>
+    </aside>
+    </div>
+
+    <main class="pos-main">
+        {% block content_container %}
+        <div class="container pos-container-wide">
+            {% block content %}
+            {% endblock %}
+        </div>
+        {% endblock content_container %}
+    </main>
+
+    <a href="https://batstateu.edu.ph/" target="_blank" rel="noopener noreferrer" class="pos-fixed-bottom-right-logo-link" title="Batangas State University">
+        <img src="{% static 'img/BSU_RedSpartan_Logo.png' %}" alt="Batangas State University" class="pos-fixed-bottom-right-logo" aria-hidden="true">
+    </a>
+
+    {% block footer %}
+    <footer class="pos-footer py-3 mt-auto">
+        <div class="container pos-container-wide d-flex justify-content-between align-items-center flex-nowrap">
+            <div class="footer-copyright">
+                <span class="d-none d-md-inline">© {% now "Y" %} <a href="https://batstateu.edu.ph/" target="_blank" rel="noopener noreferrer">Batangas State University – The National Engineering University</a>. All rights reserved.</span>
+                <span class="d-inline d-md-none">© {% now "Y" %} <a href="https://batstateu.edu.ph/" target="_blank" rel="noopener noreferrer">BSU – TNEU</a> · POS Generation System</span>
+            </div>
+            <div class="text-end footer-right">
+                <span class="me-3 d-none d-md-inline">Program of Study Generation System</span>
+                <a href="#" class="d-none d-md-inline" data-bs-toggle="modal" data-bs-target="#privacyPolicyModal">Privacy Policy</a>
+                <a href="#" class="d-inline d-md-none" data-bs-toggle="modal" data-bs-target="#privacyPolicyModal">Privacy</a>
+            </div>
+        </div>
+    </footer>
+    {% endblock footer %}
+
+    <div class="modal fade" id="app-system-error-modal" tabindex="-1" aria-labelledby="app-system-error-modal-label" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="app-system-error-modal-label">Error</h5>
+                </div>
+                <div class="modal-body">
+                    <div id="app-system-error-modal-message" class="alert alert-danger mb-0" role="alert"></div>
+                </div>
+                <div class="modal-footer justify-content-end">
+                    <button type="button" class="btn btn-primary btn-sm app-system-error-ok-btn" data-bs-dismiss="modal">OK</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="app-system-confirm-modal" tabindex="-1" aria-labelledby="app-system-confirm-modal-label" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="app-system-confirm-modal-label">Confirm</h5>
+                </div>
+                <div class="modal-body">
+                    <div id="app-system-confirm-modal-message" class="alert alert-danger mb-0" role="alert"></div>
+                </div>
+                <div class="modal-footer justify-content-end flex-wrap gap-2">
+                    <button type="button" class="btn btn-outline-secondary btn-sm app-system-confirm-footer-btn" id="app-system-confirm-secondary">Cancel</button>
+                    <button type="button" class="btn btn-primary btn-sm app-system-confirm-footer-btn" id="app-system-confirm-primary">OK</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="privacyPolicyModal" tabindex="-1" aria-labelledby="privacyPolicyModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <img src="{% static 'img/BSU_Logo.png' %}" alt="BSU" class="privacy-modal-logo">
+                    <h5 class="modal-title" id="privacyPolicyModalLabel">Privacy Policy</h5>
+                </div>
+                <div class="modal-body">
+                    <div class="modal-body-bg" aria-hidden="true"></div>
+                    <div class="modal-body-scroll">
+                    <p class="text-muted small mb-3">Batangas State University – The National Engineering University · Program of Study Generation System</p>
+
+                    <h6>Introduction</h6>
+                    <p>Batangas State University (BSU) is committed to protecting your privacy. This Privacy Policy explains how we collect, use, store, and safeguard your personal information when you use the Program of Study (POS) Generation System.</p>
+
+                    <h6>Information We Collect</h6>
+                    <p>We collect information you provide when registering and using the system, including your name, SR-Code, email address (e.g. @g.batstate-u.edu.ph), year level, and academic program. We also collect data related to your courses, grades, and generated Program of Study for academic and administrative purposes.</p>
+
+                    <h6>How We Use Your Information</h6>
+                    <p>Your information is used to generate and manage your Program of Study, communicate with you about your academic records, and improve our services. We do not sell or share your personal data with third parties for marketing purposes.</p>
+
+                    <h6>Data Security</h6>
+                    <p>We implement appropriate technical and organizational measures to protect your personal data against unauthorized access, alteration, disclosure, or destruction. Access to your data is restricted to authorized university personnel and systems necessary for academic and administrative functions.</p>
+
+                    <h6>Data Retention</h6>
+                    <p>We retain your data in accordance with university policies and applicable laws. Academic records may be kept as required for accreditation, auditing, and your continued use of the system.</p>
+
+                    <h6>Your Rights</h6>
+                    <p>You may request access to, correction of, or deletion of your personal data where permitted by university policy and law. For such requests, please contact the Registrar's Office or the system administrator.</p>
+
+                    <h6>Updates</h6>
+                    <p>We may update this Privacy Policy from time to time. Any changes will be posted on this page with an updated effective date. Continued use of the system after changes constitutes acceptance of the revised policy.</p>
+
+                    <h6>Contact</h6>
+                    <p class="mb-0">For questions about this Privacy Policy or the Program of Study Generation System, please contact Batangas State University at pos-support@g.batstate-u.edu.ph or visit the Contact Us page.</p>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        (function initAppSystemModals() {
+            function layoutAppSystemPopupModal(modalEl, dialogEl, active) {
+                if (!modalEl || !dialogEl) return;
+                if (active) {
+                    modalEl.classList.add("app-system-error-modal-active");
+                    dialogEl.classList.remove("modal-sm", "modal-md", "modal-dialog-centered");
+                    dialogEl.classList.add("modal-lg", "modal-dialog-scrollable", "app-system-error-dialog");
+                } else {
+                    modalEl.classList.remove("app-system-error-modal-active");
+                    dialogEl.classList.remove("modal-lg", "modal-dialog-scrollable", "app-system-error-dialog");
+                    dialogEl.classList.add("modal-dialog-centered");
+                }
+            }
+
+            window.showAppSystemErrorModal = function (title, message, options) {
+                options = options || {};
+                var modalEl = document.getElementById("app-system-error-modal");
+                if (!modalEl || typeof bootstrap === "undefined" || !bootstrap.Modal) {
+                    window.alert((message != null && String(message)) ? String(message) : (title || "An error occurred."));
+                    return;
+                }
+                var dialogEl = modalEl.querySelector(".modal-dialog");
+                var titleEl = document.getElementById("app-system-error-modal-label");
+                var msgEl = document.getElementById("app-system-error-modal-message");
+                if (titleEl) titleEl.textContent = title || "Error";
+                if (msgEl) {
+                    msgEl.classList.remove("d-none");
+                    if (options.html) {
+                        msgEl.innerHTML = message != null ? String(message) : "";
+                    } else {
+                        msgEl.textContent = message != null ? String(message) : "";
+                    }
+                }
+                layoutAppSystemPopupModal(modalEl, dialogEl, true);
+                try {
+                    var inst = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+                    if (typeof options.onHidden === "function") {
+                        var onHiddenOnce = function () {
+                            modalEl.removeEventListener("hidden.bs.modal", onHiddenOnce);
+                            try {
+                                options.onHidden();
+                            } catch (err) {}
+                        };
+                        modalEl.addEventListener("hidden.bs.modal", onHiddenOnce);
+                    }
+                    inst.show();
+                } catch (e) {
+                    window.alert(message != null ? String(message) : title);
+                }
+            };
+
+            window.closeAppSystemErrorModal = function () {
+                var modalEl = document.getElementById("app-system-error-modal");
+                if (!modalEl || typeof bootstrap === "undefined" || !bootstrap.Modal) return;
+                var inst = bootstrap.Modal.getInstance(modalEl);
+                if (inst) inst.hide();
+            };
+
+            var _confirmOnPrimary = null;
+            var _confirmOnSecondary = null;
+            var _confirmPrimaryLabel = "OK";
+            var _confirmSecondaryLabel = "Cancel";
+
+            function closeAppSystemConfirmModal() {
+                var modalEl = document.getElementById("app-system-confirm-modal");
+                if (!modalEl || typeof bootstrap === "undefined" || !bootstrap.Modal) return;
+                var inst = bootstrap.Modal.getInstance(modalEl);
+                if (inst) inst.hide();
+            }
+
+            window.closeAppSystemConfirmModal = closeAppSystemConfirmModal;
+
+            window.setAppSystemConfirmBusy = function (busy, primaryBusyLabel) {
+                var primaryBtn = document.getElementById("app-system-confirm-primary");
+                var secondaryBtn = document.getElementById("app-system-confirm-secondary");
+                if (primaryBtn) {
+                    primaryBtn.disabled = !!busy;
+                    primaryBtn.textContent = busy && primaryBusyLabel ? primaryBusyLabel : _confirmPrimaryLabel;
+                }
+                if (secondaryBtn) secondaryBtn.disabled = !!busy;
+            };
+
+            window.showAppSystemConfirmModal = function (opts) {
+                opts = opts || {};
+                var modalEl = document.getElementById("app-system-confirm-modal");
+                if (!modalEl || typeof bootstrap === "undefined" || !bootstrap.Modal) {
+                    if (typeof opts.onSecondary === "function") {
+                        opts.onSecondary(function () {});
+                    }
+                    return;
+                }
+                var dialogEl = modalEl.querySelector(".modal-dialog");
+                var titleEl = document.getElementById("app-system-confirm-modal-label");
+                var msgEl = document.getElementById("app-system-confirm-modal-message");
+                var primaryBtn = document.getElementById("app-system-confirm-primary");
+                var secondaryBtn = document.getElementById("app-system-confirm-secondary");
+                _confirmOnPrimary = typeof opts.onPrimary === "function" ? opts.onPrimary : null;
+                _confirmOnSecondary = typeof opts.onSecondary === "function" ? opts.onSecondary : null;
+                _confirmPrimaryLabel = opts.primaryText || "OK";
+                _confirmSecondaryLabel = opts.secondaryText || "Cancel";
+                if (titleEl) titleEl.textContent = opts.title || "Confirm";
+                if (msgEl) {
+                    msgEl.classList.remove("d-none");
+                    if (opts.html) {
+                        msgEl.innerHTML = opts.message != null ? String(opts.message) : "";
+                    } else {
+                        msgEl.textContent = opts.message != null ? String(opts.message) : "";
+                    }
+                }
+                if (primaryBtn) {
+                    primaryBtn.textContent = _confirmPrimaryLabel;
+                    primaryBtn.disabled = false;
+                    primaryBtn.classList.remove("btn-primary", "btn-danger");
+                    if (opts.primaryVariant === "danger") {
+                        primaryBtn.classList.add("btn-danger");
+                    } else {
+                        primaryBtn.classList.add("btn-primary");
+                    }
+                }
+                if (secondaryBtn) {
+                    secondaryBtn.textContent = _confirmSecondaryLabel;
+                    secondaryBtn.disabled = false;
+                }
+                layoutAppSystemPopupModal(modalEl, dialogEl, true);
+                try {
+                    var inst = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+                    inst.show();
+                } catch (e) {}
+            };
+
+            window.showAppSignOutConfirmModal = function (href) {
+                var dest = href != null ? String(href) : "";
+                if (!dest) return;
+                if (typeof window.showAppSystemConfirmModal !== "function") {
+                    window.location.href = dest;
+                    return;
+                }
+                window.showAppSystemConfirmModal({
+                    title: "Sign Out",
+                    message: "Are you sure you want to sign out?",
+                    primaryText: "Sign Out",
+                    secondaryText: "Cancel",
+                    primaryVariant: "danger",
+                    onPrimary: function (close) {
+                        close();
+                        window.location.href = dest;
+                    },
+                    onSecondary: function (close) {
+                        close();
+                    }
+                });
+            };
+
+            document.addEventListener("DOMContentLoaded", function () {
+                var errModalEl = document.getElementById("app-system-error-modal");
+                if (errModalEl) {
+                    var errDialogEl = errModalEl.querySelector(".modal-dialog");
+                    errModalEl.addEventListener("hidden.bs.modal", function () {
+                        layoutAppSystemPopupModal(errModalEl, errDialogEl, false);
+                        var msgEl = document.getElementById("app-system-error-modal-message");
+                        if (msgEl) {
+                            msgEl.innerHTML = "";
+                            msgEl.textContent = "";
+                        }
+                    });
+                }
+
+                var confirmModalEl = document.getElementById("app-system-confirm-modal");
+                if (confirmModalEl) {
+                    var confirmDialogEl = confirmModalEl.querySelector(".modal-dialog");
+                    var primaryBtn = document.getElementById("app-system-confirm-primary");
+                    var secondaryBtn = document.getElementById("app-system-confirm-secondary");
+
+                    function finishConfirm() {
+                        _confirmOnPrimary = null;
+                        _confirmOnSecondary = null;
+                    }
+
+                    function makeDone() {
+                        return function done() {
+                            finishConfirm();
+                            layoutAppSystemPopupModal(confirmModalEl, confirmDialogEl, false);
+                            var inst = bootstrap.Modal.getInstance(confirmModalEl);
+                            if (inst) inst.hide();
+                        };
+                    }
+
+                    if (primaryBtn) {
+                        primaryBtn.addEventListener("click", function (e) {
+                            e.preventDefault();
+                            var fn = _confirmOnPrimary;
+                            if (!fn) return;
+                            fn(makeDone());
+                        });
+                    }
+                    if (secondaryBtn) {
+                        secondaryBtn.addEventListener("click", function (e) {
+                            e.preventDefault();
+                            var fn = _confirmOnSecondary;
+                            if (!fn) return;
+                            fn(makeDone());
+                        });
+                    }
+
+                    confirmModalEl.addEventListener("hidden.bs.modal", function () {
+                        layoutAppSystemPopupModal(confirmModalEl, confirmDialogEl, false);
+                        finishConfirm();
+                        if (primaryBtn) {
+                            primaryBtn.disabled = false;
+                            primaryBtn.textContent = _confirmPrimaryLabel;
+                            primaryBtn.classList.remove("btn-danger");
+                            primaryBtn.classList.add("btn-primary");
+                        }
+                        if (secondaryBtn) {
+                            secondaryBtn.disabled = false;
+                            secondaryBtn.textContent = _confirmSecondaryLabel;
+                        }
+                        var msgEl = document.getElementById("app-system-confirm-modal-message");
+                        if (msgEl) {
+                            msgEl.innerHTML = "";
+                            msgEl.textContent = "";
+                        }
+                    });
+                }
+
+                document.addEventListener(
+                    "click",
+                    function (e) {
+                        var a = e.target.closest("a.pos-app-sign-out-link");
+                        if (!a || !a.getAttribute("href")) return;
+                        if (e.defaultPrevented) return;
+                        if (e.button !== 0) return;
+                        if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+                        e.preventDefault();
+                        e.stopPropagation();
+                        var href = a.href;
+                        if (typeof window.showAppSignOutConfirmModal === "function") {
+                            window.showAppSignOutConfirmModal(href);
+                        } else {
+                            window.location.href = href;
+                        }
+                    },
+                    true
+                );
+            });
+        })();
+    </script>
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            function stabilizeModalLayoutShift() {
+                // Neutralize Bootstrap scrollbar compensation that causes horizontal jump,
+                // especially when opening a second modal on top of another.
+                document.body.style.paddingRight = "0px";
+                document.body.style.marginRight = "0px";
+                var stickyWrap = document.querySelector(".pos-sticky-header-wrapper");
+                if (stickyWrap) {
+                    stickyWrap.style.paddingRight = "0px";
+                    stickyWrap.style.marginRight = "0px";
+                }
+                document.querySelectorAll(".fixed-top, .fixed-bottom, .sticky-top").forEach(function(el) {
+                    el.style.paddingRight = "0px";
+                    el.style.marginRight = "0px";
+                });
+            }
+
+            function normalizeModalBackdrops() {
+                var backdrops = Array.prototype.slice.call(document.querySelectorAll("body > .modal-backdrop"));
+                if (!backdrops.length) return;
+
+                // Keep only one backdrop to prevent stacked dark overlays.
+                for (var i = 0; i < backdrops.length - 1; i++) {
+                    backdrops[i].remove();
+                }
+
+                var topBackdrop = backdrops[backdrops.length - 1];
+                if (!topBackdrop) return;
+                topBackdrop.classList.remove("fade");
+                topBackdrop.style.transition = "none";
+                topBackdrop.style.animation = "none";
+            }
+
+            // Keep all modals at body level so Bootstrap backdrop layering is consistent.
+            document.querySelectorAll(".modal").forEach(function (modalEl) {
+                if (modalEl.parentNode !== document.body) {
+                    document.body.appendChild(modalEl);
+                }
+            });
+
+            document.addEventListener("show.bs.modal", function () {
+                // Wait one frame so Bootstrap inserts backdrop first.
+                requestAnimationFrame(function() {
+                    stabilizeModalLayoutShift();
+                    normalizeModalBackdrops();
+                });
+            });
+
+            document.addEventListener("shown.bs.modal", function() {
+                stabilizeModalLayoutShift();
+                normalizeModalBackdrops();
+            });
+
+            document.addEventListener("hidden.bs.modal", function () {
+                // Cleanup any leftover duplicated backdrops after close.
+                requestAnimationFrame(function() {
+                    stabilizeModalLayoutShift();
+                    normalizeModalBackdrops();
+                });
+            });
+        });
+    </script>
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            var mqMobile = window.matchMedia("(max-width: 767.98px)");
+            var body = document.body;
+            var drawer = document.getElementById("pos-mobile-drawer");
+            var overlay = document.getElementById("pos-mobile-drawer-overlay");
+            var menuBtn = document.getElementById("pos-mobile-menu-btn");
+            if (!drawer || !overlay || !menuBtn) return;
+
+            var drawerOpen = false;
+            var swipeState = null;
+            var SWIPE_MIN_DISTANCE = 48;
+            var EDGE_OPEN_ZONE_PX = 28;
+
+            function isMobile() {
+                return mqMobile.matches;
+            }
+
+            function openDrawer() {
+                if (!isMobile() || drawerOpen) return;
+                drawerOpen = true;
+                body.classList.add("pos-mobile-drawer-open");
+                drawer.setAttribute("aria-hidden", "false");
+                overlay.setAttribute("aria-hidden", "false");
+            }
+
+            function closeDrawer() {
+                if (!drawerOpen) return;
+                drawerOpen = false;
+                body.classList.remove("pos-mobile-drawer-open");
+                drawer.setAttribute("aria-hidden", "true");
+                overlay.setAttribute("aria-hidden", "true");
+            }
+
+            function syncDrawerActiveLink() {
+                var links = drawer.querySelectorAll(".pos-mobile-drawer-link");
+                if (!links.length) return;
+                var currentPath = (window.location.pathname || "").replace(/\/+$/, "") || "/";
+                links.forEach(function (link) {
+                    link.classList.remove("active");
+                    var href = link.getAttribute("href") || "";
+                    if (!href || href.charAt(0) === "#") return;
+                    var normalizedHref = href.split("#")[0].replace(/\/+$/, "") || "/";
+                    if (normalizedHref === currentPath) {
+                        link.classList.add("active");
+                    }
+                });
+            }
+
+            function hasHorizontalScrollConflict(target) {
+                var el = target;
+                while (el && el !== document.body) {
+                    try {
+                        var style = window.getComputedStyle(el);
+                        var overflowX = style ? style.overflowX : "";
+                        if ((overflowX === "auto" || overflowX === "scroll") && el.scrollWidth > el.clientWidth + 2) {
+                            return true;
+                        }
+                    } catch (e) {}
+                    el = el.parentElement;
+                }
+                return false;
+            }
+
+            function isInteractiveTarget(target) {
+                if (!target || !(target instanceof Element)) return false;
+                if (target.closest("a,button,input,select,textarea,label,[role='button'],[role='link'],[contenteditable='true'],.modal,.dropdown-menu,.table,.card")) {
+                    return true;
+                }
+                return hasHorizontalScrollConflict(target);
+            }
+
+            function handleTouchStart(e) {
+                if (!isMobile() || !e.touches || e.touches.length !== 1) {
+                    swipeState = null;
+                    return;
+                }
+                var t = e.touches[0];
+                var startX = t.clientX;
+                var startY = t.clientY;
+                var target = e.target;
+                var interactive = isInteractiveTarget(target);
+                var canOpenSwipe = !drawerOpen && startX <= EDGE_OPEN_ZONE_PX && !interactive;
+                var canCloseSwipe = drawerOpen && !interactive;
+                swipeState = {
+                    startX: startX,
+                    startY: startY,
+                    canOpenSwipe: canOpenSwipe,
+                    canCloseSwipe: canCloseSwipe
+                };
+            }
+
+            function handleTouchEnd(e) {
+                if (!swipeState || !e.changedTouches || !e.changedTouches.length) return;
+                var t = e.changedTouches[0];
+                var dx = t.clientX - swipeState.startX;
+                var dy = t.clientY - swipeState.startY;
+                var absDx = Math.abs(dx);
+                var absDy = Math.abs(dy);
+                if (absDx < SWIPE_MIN_DISTANCE || absDx < absDy) {
+                    swipeState = null;
+                    return;
+                }
+                if (swipeState.canOpenSwipe && dx > 0) {
+                    openDrawer();
+                } else if (swipeState.canCloseSwipe && dx < 0) {
+                    closeDrawer();
+                }
+                swipeState = null;
+            }
+
+            menuBtn.addEventListener("click", function () {
+                if (!isMobile()) return;
+                openDrawer();
+            });
+            overlay.addEventListener("click", closeDrawer);
+            document.addEventListener("keydown", function (e) {
+                if (e.key === "Escape") closeDrawer();
+            });
+            drawer.querySelectorAll(".pos-mobile-drawer-link").forEach(function (link) {
+                link.addEventListener("click", closeDrawer);
+            });
+            document.addEventListener("touchstart", handleTouchStart, { passive: true });
+            document.addEventListener("touchend", handleTouchEnd, { passive: true });
+            window.addEventListener("resize", function () {
+                if (!isMobile()) closeDrawer();
+            });
+
+            syncDrawerActiveLink();
+        });
+    </script>
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html>
+
+
