@@ -24,7 +24,7 @@ courses = {
     "CpE 101":  {"course_title": "Computer Programming", "units": 1, "pre-requisites": [], "co-requisites": [], "orig_sem": 1, "category": "Rigid", "year_level": 1},
     "GEd 105":  {"course_title": "Readings in Philippines History", "units": 3, "pre-requisites": [], "co-requisites": [], "orig_sem": 1, "category": "Rigid", "year_level": 1},
     "MATH 101": {"course_title": "Differential Calculus", "units": 4, "pre-requisites": [], "co-requisites": [], "orig_sem": 1, "category": "Bottleneck", "year_level": 1},
-    "CHEM 101": {"course_title": "Chemistry for Engineers", "units": 4, "pre-requisites": [], "co-requisites": [], "orig_sem": 1, "category": "Bottleneck", "year_level": 1},
+    "CHEM 101": {"course_title": "Chemistry for Engineers", "units": 4, "pre-requisites": [], "co-requisites": [], "orig_sem": 1, "category": "Rigid", "year_level": 1},
     "PATHFit 1": {"course_title": "Movement Competency Training", "units": 2, "pre-requisites": [], "co-requisites": [], "orig_sem": 1, "category": "Rigid", "year_level": 1},
     "NSTP 111": {"course_title": "National Service Training Program 1", "units": 3, "pre-requisites": [], "co-requisites": [], "orig_sem": 1, "category": "Rigid", "year_level": 1},
 
