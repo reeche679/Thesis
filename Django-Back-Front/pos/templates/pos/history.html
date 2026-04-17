@@ -23,6 +23,10 @@
         overscroll-behavior-x: contain;
     }
     .history-page .table { min-width: 520px; }
+    .history-page .table thead th {
+        vertical-align: middle !important;
+        text-align: center;
+    }
     @media (max-width: 575.98px) {
         .history-page .d-flex.justify-content-between.align-items-center { flex-direction: column; align-items: flex-start; text-align: left; }
     }
@@ -45,22 +49,22 @@
         <table class="table table-sm align-middle table-bordered mb-0">
             <thead class="table-light">
                 <tr class="text-center">
-                    <th style="width: 20%;">Date Generated</th>
-                    <th style="width: 18%;">Academic Year</th>
-                    <th style="width: 15%;">Semester</th>
-                    <th style="width: 17%;">Year Level</th>
-                    <th style="width: 15%;">Status</th>
-                    <th style="width: 22%;">Action</th>
+                    <th style="width: 23%;">POS File Name</th>
+                    <th style="width: 18%;">Date Generated</th>
+                    <th style="width: 16%;">Academic Year</th>
+                    <th style="width: 17%;">Semester</th>
+                    <th style="width: 12%;">Year Level</th>
+                    <th style="width: 14%;">Action</th>
                 </tr>
             </thead>
             <tbody>
                 {% for record in pos_records %}
                 <tr>
+                    <td class="text-center">{{ record.preview_snapshot.pos_file_name|default:"—" }}</td>
                     <td class="text-center">{{ record.generated_at|date:"F d, Y" }}</td>
                     <td class="text-center">{{ record.academic_year|default:"—" }}</td>
                     <td class="text-center">{{ record.semester|default:"—" }}</td>
                     <td class="text-center">{{ record.year_level|default:"—" }}</td>
-                    <td class="text-center {% if forloop.first %}text-success{% else %}text-muted{% endif %}">{% if forloop.first %}Active{% else %}Archived{% endif %}</td>
                     <td class="text-center">
                         <div class="d-flex gap-2 justify-content-center align-items-center">
                             <a href="{% url 'load_pos_record' record_id=record.pk %}" class="btn btn-outline-primary btn-sm history-action-btn" title="Load full POS on Generate POS" aria-label="Load to Generate POS">

@@ -194,6 +194,16 @@
         border-top: 1px solid rgba(0, 0, 0, 0.08);
         row-gap: 0.8rem;
     }
+    .home-profile-extra-column {
+        display: flex;
+        flex-direction: column;
+        gap: 0.90rem;
+    }
+    .home-profile-extra-item {
+        display: flex;
+        flex-direction: column;
+        gap: 0.05rem;
+    }
     .home-profile-extra-label {
         font-size: 1rem;
         text-transform: uppercase;
@@ -286,9 +296,6 @@
             text-align: left;
             line-height: 1.3;
             font-weight: 600;
-        }
-        .home-profile-extra-year {
-            display: none;
         }
         /* Mobile: make the faint BSU logo bigger */
         .home-term-bsu-logo {
@@ -417,21 +424,19 @@
                 </div>
             </div>
             <div class="row home-profile-extra-grid">
-                <div class="col-12 col-md-6 home-profile-extra-year">
-                    <div class="home-profile-extra-label">year level</div>
-                    <div class="home-profile-extra-value">1st Year</div>
-                </div>
-                <div class="col-12 col-md-6">
-                    <div class="home-profile-extra-label">program</div>
-                    <div class="home-profile-extra-value">BS Computer Engineering</div>
+                <div class="col-12 col-md-6 home-profile-extra-column">
+                    <div class="home-profile-extra-item">
+                        <div class="home-profile-extra-label">program</div>
+                        <div class="home-profile-extra-value">BS Computer Engineering</div>
+                    </div>
+                    <div class="home-profile-extra-item">
+                        <div class="home-profile-extra-label">campus</div>
+                        <div class="home-profile-extra-value">Alangilan Campus</div>
+                    </div>
                 </div>
                 <div class="col-12 col-md-6">
                     <div class="home-profile-extra-label">curriculum</div>
                     <div class="home-profile-extra-value">BSCpE Curriculum 2025-2026</div>
-                </div>
-                <div class="col-12 col-md-6">
-                    <div class="home-profile-extra-label">campus</div>
-                    <div class="home-profile-extra-value">Alangilan Campus</div>
                 </div>
             </div>
         </div>

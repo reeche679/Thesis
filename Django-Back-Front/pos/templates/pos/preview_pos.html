@@ -855,6 +855,25 @@
     </div>
 </div>
 {% endif %}
+
+<div class="modal fade" id="preview-pos-filename-modal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h6 class="modal-title mb-0">Enter POS File Name</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <input type="text" class="form-control form-control-sm" id="preview-pos-filename-input" placeholder="Enter File Name" maxlength="120">
+                <div class="form-text text-danger mt-2 d-none" id="preview-pos-filename-error"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary btn-sm" id="preview-pos-filename-primary-btn">Save</button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_scripts %}
@@ -1527,7 +1546,13 @@
                         '&adviser=' + encodeURIComponent(signatories.adviser) +
                         '&department_chair=' + encodeURIComponent(signatories.department_chair) +
                         '&program_chair=' + encodeURIComponent(signatories.program_chair);
-                    window.location.href = "{% url 'download_pos_pdf' %}?petition_mode=" + encodeURIComponent(mode) + boundaryParam + signatoryParams;
+                    openPosFileNameModal(function(fileName) {
+                        if (previewPosFilenameModal) previewPosFilenameModal.hide();
+                        window.location.href = "{% url 'download_pos_pdf' %}?petition_mode=" + encodeURIComponent(mode) + boundaryParam + signatoryParams + '&pos_file_name=' + encodeURIComponent(fileName);
+                    }, {
+                        primaryText: 'Download PDF',
+                        primaryClass: 'btn-outline-danger'
+                    });
                 }
                 executePreviewPdfDownload();
             });
@@ -1535,6 +1560,12 @@
 
         // Save tuned/edited Preview POS into POS History.
         var previewSaveBtn = document.getElementById('preview-save-history-btn');
+        var previewPosFilenameModalEl = document.getElementById('preview-pos-filename-modal');
+        var previewPosFilenameInputEl = document.getElementById('preview-pos-filename-input');
+        var previewPosFilenameErrorEl = document.getElementById('preview-pos-filename-error');
+        var previewPosFilenamePrimaryBtn = document.getElementById('preview-pos-filename-primary-btn');
+        var previewPosFilenameModal = null;
+        var previewPosFilenameOnConfirm = null;
         /** Needs history save / edit guard until saved again */
         var previewHistoryUnsaved = true;
         var previewExitProceed = null;
@@ -1575,21 +1606,26 @@
             previewSaveBtn.addEventListener('click', function() {
                 if (previewSaveBtn.disabled) return;
                 if (!validatePreviewSignatories()) return;
+                openPosFileNameModal(function(fileName) {
+                    previewSaveBtn.disabled = true;
+                    previewSaveBtn.textContent = 'Saving...';
+                    if (previewPosFilenameModal) previewPosFilenameModal.hide();
 
-                previewSaveBtn.disabled = true;
-                previewSaveBtn.textContent = 'Saving...';
-
-                requestPreviewHistorySave().then(function(data) {
-                    if (data && data.ok) {
-                        markPreviewHistorySavedInSession();
-                        showPreviewEditSuccessToast('POS Saved Successfuly!');
-                    } else {
+                    requestPreviewHistorySave(fileName).then(function(data) {
+                        if (data && data.ok) {
+                            markPreviewHistorySavedInSession();
+                            showPreviewEditSuccessToast('POS Saved Successfuly!');
+                        } else {
+                            enablePreviewSave();
+                            showPreviewPageError('Save failed', (data && data.error) ? data.error : 'Save failed. Please try again.');
+                        }
+                    }).catch(function() {
                         enablePreviewSave();
-                        showPreviewPageError('Save failed', 'Save failed. Please try again.');
-                    }
-                }).catch(function() {
-                    enablePreviewSave();
-                    showPreviewPageError('Save failed', 'Save request failed. Please try again.');
+                        showPreviewPageError('Save failed', 'Save request failed. Please try again.');
+                    });
+                }, {
+                    primaryText: 'Save',
+                    primaryClass: 'btn-outline-primary'
                 });
             });
         }
@@ -1913,7 +1949,7 @@
             setPreviewSaveState('saved');
         }
 
-        function requestPreviewHistorySave() {
+        function requestPreviewHistorySave(posFileName) {
             var mode = getSelectedPetitionMode();
             var signatories = getPreviewSignatoryParams();
             var boundaryUiIndex = localStorage.getItem('posCurrentSemIndex');
@@ -1929,9 +1965,88 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     preview_ui_sections: previewUiSections,
-                    signatories: signatories
+                    signatories: signatories,
+                    pos_file_name: posFileName
                 })
             }).then(function(r) { return r.json(); });
+        }
+
+        function setPosFileNameError(msg) {
+            if (!previewPosFilenameErrorEl) return;
+            if (msg) {
+                previewPosFilenameErrorEl.textContent = msg;
+                previewPosFilenameErrorEl.classList.remove('d-none');
+            } else {
+                previewPosFilenameErrorEl.textContent = '';
+                previewPosFilenameErrorEl.classList.add('d-none');
+            }
+        }
+
+        function getSuggestedPosFileName() {
+            var mode = getSelectedPetitionMode();
+            var label = mode === 'with_petition' ? 'With Petition' : 'No Petition';
+            var now = new Date();
+            var y = now.getFullYear();
+            var m = String(now.getMonth() + 1).padStart(2, '0');
+            var d = String(now.getDate()).padStart(2, '0');
+            return 'POS ' + label + ' ' + m + '-' + d + '-' + y;
+        }
+
+        function ensurePosFileNameModalReady() {
+            if (!previewPosFilenameModalEl || !window.bootstrap || !window.bootstrap.Modal) return false;
+            if (!previewPosFilenameModal) {
+                previewPosFilenameModal = new bootstrap.Modal(previewPosFilenameModalEl, { backdrop: 'static', keyboard: false });
+                previewPosFilenameModalEl.addEventListener('hidden.bs.modal', function() {
+                    setPosFileNameError('');
+                    previewPosFilenameOnConfirm = null;
+                });
+                if (previewPosFilenamePrimaryBtn) {
+                    previewPosFilenamePrimaryBtn.addEventListener('click', function() {
+                        var entered = previewPosFilenameInputEl ? (previewPosFilenameInputEl.value || '').trim() : '';
+                        if (!entered) {
+                            setPosFileNameError('POS file name is required.');
+                            if (previewPosFilenameInputEl) previewPosFilenameInputEl.focus();
+                            return;
+                        }
+                        setPosFileNameError('');
+                        var onConfirm = previewPosFilenameOnConfirm;
+                        if (typeof onConfirm === 'function') onConfirm(entered);
+                    });
+                }
+                if (previewPosFilenameInputEl) {
+                    previewPosFilenameInputEl.addEventListener('keydown', function(e) {
+                        if (e.key === 'Enter') {
+                            e.preventDefault();
+                            if (previewPosFilenamePrimaryBtn) previewPosFilenamePrimaryBtn.click();
+                        }
+                    });
+                }
+            }
+            return true;
+        }
+
+        function openPosFileNameModal(onConfirm, options) {
+            if (!ensurePosFileNameModalReady()) {
+                showPreviewPageError('Save failed', 'File name dialog is not available right now.');
+                return;
+            }
+            var opts = options || {};
+            previewPosFilenameOnConfirm = onConfirm;
+            if (previewPosFilenameInputEl) {
+                var nextValue = (opts.initialValue || '').trim();
+                previewPosFilenameInputEl.value = nextValue || getSuggestedPosFileName();
+            }
+            if (previewPosFilenamePrimaryBtn) {
+                previewPosFilenamePrimaryBtn.textContent = opts.primaryText || 'Save';
+                previewPosFilenamePrimaryBtn.className = 'btn btn-sm ' + (opts.primaryClass || 'btn-outline-primary');
+            }
+            setPosFileNameError('');
+            previewPosFilenameModal.show();
+            setTimeout(function() {
+                if (!previewPosFilenameInputEl) return;
+                previewPosFilenameInputEl.focus();
+                previewPosFilenameInputEl.select();
+            }, 80);
         }
 
         function previewShouldBlockLeave() {
@@ -2006,22 +2121,27 @@
                             return;
                         }
                         var proc = previewExitProceed;
-                        window.setAppSystemConfirmBusy(true, 'Saving...');
-                        requestPreviewHistorySave().then(function(data) {
-                            window.setAppSystemConfirmBusy(false);
-                            if (data && data.ok) {
-                                previewExitProceed = null;
-                                markPreviewHistorySavedInSession();
-                                showPreviewEditSuccessToast('POS Saved Successfuly!');
-                                afterLeaveConfirmCloses(close, proc);
-                            } else {
-                                enablePreviewSave();
-                                showPreviewPageError('Save failed', 'Save failed. Please try again.');
-                            }
-                        }).catch(function() {
-                            window.setAppSystemConfirmBusy(false);
-                            enablePreviewSave();
-                            showPreviewPageError('Save failed', 'Save request failed. Please try again.');
+                        afterAppSystemConfirmModalFullyHidden(close, function() {
+                            openPosFileNameModal(function(fileName) {
+                                if (previewPosFilenameModal) previewPosFilenameModal.hide();
+                                requestPreviewHistorySave(fileName).then(function(data) {
+                                    if (data && data.ok) {
+                                        previewExitProceed = null;
+                                        markPreviewHistorySavedInSession();
+                                        showPreviewEditSuccessToast('POS Saved Successfuly!');
+                                        executeExitProceed(proc);
+                                    } else {
+                                        enablePreviewSave();
+                                        showPreviewPageError('Save failed', (data && data.error) ? data.error : 'Save failed. Please try again.');
+                                    }
+                                }).catch(function() {
+                                    enablePreviewSave();
+                                    showPreviewPageError('Save failed', 'Save request failed. Please try again.');
+                                });
+                            }, {
+                                primaryText: 'Save',
+                                primaryClass: 'btn-outline-primary'
+                            });
                         });
                     },
                     onSecondary: function(close) {

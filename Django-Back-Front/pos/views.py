@@ -3342,8 +3342,12 @@ def download_pos_pdf(request):
     logo_path = os.path.abspath(os.path.normpath(os.path.join(str(settings.BASE_DIR), 'static', 'img', 'BSU_Logo.png')))
     if not os.path.isfile(logo_path):
         logo_path = None
-    academic_year_safe = (academic_year or '').replace("–", "-").replace(" ", "_")
-    sr_code_safe = student.sr_code or 'SR'
+    requested_name_raw = (request.GET.get("pos_file_name") or "").strip()
+    requested_name = re.sub(r'[\\/:*?"<>|]+', "_", requested_name_raw).strip().strip(".")
+    if not requested_name:
+        academic_year_safe = (academic_year or '').replace("–", "-").replace(" ", "_")
+        sr_code_safe = student.sr_code or 'SR'
+        requested_name = f"{academic_year_safe} {sr_code_safe}"
     pdf_bytes = build_preview_pos_pdf(
         student_name=student.full_name or '',
         sr_code=student.sr_code or '',
@@ -3356,8 +3360,7 @@ def download_pos_pdf(request):
         department_chair_name=signatories["department_chair"],
         program_chair_name=signatories["program_chair"],
     )
-    # Keep filename format requested: `academic_year sr code`.
-    filename = f"{academic_year_safe} {sr_code_safe}.pdf"
+    filename = f"{requested_name}.pdf"
     response = HttpResponse(pdf_bytes, content_type='application/pdf')
     response['Content-Disposition'] = f'attachment; filename="{filename}"'
     return response
@@ -3391,6 +3394,9 @@ def save_preview_pos_to_history(request):
         body = json.loads(body_raw) if body_raw.strip() else {}
     except Exception:
         body = {}
+    pos_file_name = (body.get("pos_file_name") or "").strip()
+    if not pos_file_name:
+        return JsonResponse({"ok": False, "error": "POS file name is required."}, status=400)
     signatories = _resolve_signatories(request, body=body, required=True)
     if not all(signatories.values()):
         return JsonResponse({"ok": False, "error": "Please select Adviser, Department Chair, and Program Chair before saving."}, status=400)
@@ -3402,11 +3408,12 @@ def save_preview_pos_to_history(request):
     if isinstance(preview_ui_sections, dict):
         # Keys should be UI section indices; JSON forces them to be strings.
         snap["preview_ui_sections"] = preview_ui_sections
+    snap["pos_file_name"] = pos_file_name
     snap["signatories"] = signatories
 
     last = POSRecord.objects.filter(student=student).order_by('-generated_at').first()
     if last is not None and last.preview_snapshot == snap:
-        return JsonResponse({"ok": True, "saved": False, "record_id": last.pk})
+        return JsonResponse({"ok": True, "saved": False, "record_id": last.pk, "pos_file_name": pos_file_name})
 
     yl = request.session.get('year_level') or ''
     sem = request.session.get('semester') or ''
@@ -3420,7 +3427,7 @@ def save_preview_pos_to_history(request):
     )
     _prune_old_pos_records(student)
 
-    return JsonResponse({"ok": True, "saved": True, "record_id": record.pk})
+    return JsonResponse({"ok": True, "saved": True, "record_id": record.pk, "pos_file_name": pos_file_name})
 
 
 @_require_student
@@ -3648,8 +3655,12 @@ def download_pos_pdf_record(request, record_id):
             eval_date=eval_date,
             logo_path=logo_path,
         )
-    date_str = eval_date.strftime('%Y-%m-%d')
-    filename = f"POS_{student.sr_code or 'POS'}_{date_str}.pdf"
+    date_str = eval_date.strftime('%d-%m-%Y')
+    saved_name_raw = (snap.get("pos_file_name") if isinstance(snap, dict) else "") or ""
+    saved_name = re.sub(r'[\\/:*?"<>|]+', "_", str(saved_name_raw)).strip().strip(".")
+    if not saved_name:
+        saved_name = f"POS_{student.sr_code or 'POS'}"
+    filename = f"{saved_name}_{date_str}.pdf"
     response = HttpResponse(pdf_bytes, content_type='application/pdf')
     response['Content-Disposition'] = f'attachment; filename="{filename}"'
     return response
