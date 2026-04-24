@@ -1362,7 +1362,17 @@
             overlay.classList.toggle('is-open', !!isOpen);
             overlay.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
         }
-        if (btn) btn.disabled = !!isOpen;
+        if (btn) {
+            btn.disabled = !!isOpen;
+            btn.setAttribute('data-busy', isOpen ? '1' : '0');
+        }
+    }
+
+    function setGenerateButtonBusy(isBusy) {
+        var btn = document.getElementById('generatePosBtn');
+        if (!btn) return;
+        btn.disabled = !!isBusy;
+        btn.setAttribute('data-busy', isBusy ? '1' : '0');
     }
 
     function ensureGradeMenuElements() {
@@ -2052,25 +2062,33 @@
     }
 
     document.getElementById('generatePosBtn').addEventListener('click', function() {
+        var generateBtn = document.getElementById('generatePosBtn');
+        if (generateBtn && generateBtn.getAttribute('data-busy') === '1') return;
+        setGenerateButtonBusy(true);
+
         if (!IS_REGULAR && !IRREG_CONFIGURED) {
             showGeneratedPosErrorPopup('Please select your Last Semester Enrolled before generating your Program of Study. The system uses this to anchor your curriculum progress and build the correct sequence of remaining courses. Choose the term from the dropdown, confirm your grades, then click Generate POS again.', 'infeasible');
+            setGenerateButtonBusy(false);
             return;
         }
         if (IS_REGULAR) {
             var regSel = document.getElementById('regular-current-semester');
             if (!regSel || !regSel.value) {
                 showGeneratedPosErrorPopup('Please select your Last Semester Enrolled before generating your Program of Study. The system uses this to anchor your curriculum progress and build the correct sequence of remaining courses. Choose the term from the dropdown, confirm your grades, then click Generate POS again.', 'infeasible');
+                setGenerateButtonBusy(false);
                 return;
             }
         }
         var sections = document.querySelectorAll('[id^="main-sem-"]');
         if (!IS_REGULAR && sections.length === 0) {
             showGeneratedPosErrorPopup('Please select your Last Semester Enrolled before generating your Program of Study. After you choose it, your course tables will load so you can enter grades. Then click Generate POS again.', 'infeasible');
+            setGenerateButtonBusy(false);
             return;
         }
         var validation = validateAllSectionsForGenerate();
         if (!validation.ok) {
             showGeneratedPosModal({ status: "infeasible", message: validation.message, pos: [] });
+            setGenerateButtonBusy(false);
             return;
         }
         var gradesBySection = mergedGradesForSave();
@@ -2090,6 +2108,7 @@
                 message: messageExcessiveSameCourseFailuresClient(bc, failCountsPre[bc], lookupCourseTitleFromPageCurriculum(bc)),
                 pos: []
             });
+            setGenerateButtonBusy(false);
             return;
         }
         localStorage.setItem('posGrades', JSON.stringify(gradesBySection));
