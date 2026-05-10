@@ -75,6 +75,8 @@ def add_term_type_aligned_offering_constraints(
                     valid_sems.append(s)
         if valid_sems:
             model.AddAllowedAssignments([semester[c]], [[s] for s in valid_sems])
+        else:
+            model.Add(semester[c] < current_sem)
 
 
 def add_capped_petition_trio_offering_constraints(
@@ -131,6 +133,8 @@ def add_capped_petition_trio_offering_constraints(
                 valid_sems.append(s)
         if valid_sems:
             model.AddAllowedAssignments([semester[c]], [[s] for s in valid_sems])
+        else:
+            model.Add(semester[c] < current_sem)
 
 
 def add_category_without_modulo3_offering_constraints(
@@ -178,6 +182,8 @@ def add_category_without_modulo3_offering_constraints(
 
         if valid_sems:
             model.AddAllowedAssignments([semester[c]], [[s] for s in valid_sems])
+        else:
+            model.Add(semester[c] < current_sem)
 
 
 def add_baseline_objective(

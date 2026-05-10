@@ -1,11 +1,26 @@
 from pathlib import Path
 import runpy
+import sys
 
 from django.conf import settings
 
 _SOLVER_NAMESPACE = None
-# When CP-SAT.py changes on disk, reload so probation/unit-threshold fixes apply without a full server restart.
-_SOLVER_SCRIPT_MTIME_AT_LOAD = None
+_SOLVER_MTIMES_AT_LOAD: dict[str, float | None] = {}
+
+_SOLVER_WATCHED_FILES = [
+    Path("Main-Solver") / "CP-SAT.py",
+    Path("algorithms_and_helpers") / "Configurations.py",
+    Path("courses_and_year_standings") / "units_and_year_standings.py",
+    Path("courses_and_year_standings") / "courses.py",
+    Path("Main-Solver") / "solver_settings.py",
+]
+
+_SOLVER_MODULE_PREFIXES = (
+    "algorithms_and_helpers",
+    "courses_and_year_standings",
+    "solver_settings",
+    "pos_terminal_display",
+)
 
 
 def _get_solver_namespace():
@@ -15,31 +30,39 @@ def _get_solver_namespace():
     The solver lives in the sibling 'Solver-Side/Main-Solver/CP-SAT.py' folder
     relative to the Django project root.
 
-    The namespace is reloaded when CP-SAT.py's modification time changes, so edits
-    to solver logic (e.g. check_probation) are not stuck behind a one-time import cache.
+    The namespace is reloaded when any watched solver-side file's modification
+    time changes, so edits to Configurations.py, courses.py, etc. are picked up
+    without a full server restart.
     """
-    global _SOLVER_NAMESPACE, _SOLVER_SCRIPT_MTIME_AT_LOAD
+    global _SOLVER_NAMESPACE, _SOLVER_MTIMES_AT_LOAD
 
-    # settings.BASE_DIR points to 'Django-Front-Back'.
     project_root = Path(settings.BASE_DIR).parent
-    solver_script = project_root / "Solver-Side" / "Main-Solver" / "CP-SAT.py"
+    solver_root = project_root / "Solver-Side"
+    solver_script = solver_root / "Main-Solver" / "CP-SAT.py"
     if not solver_script.is_file():
         raise RuntimeError(f"Solver script not found at {solver_script}")
 
-    try:
-        current_mtime = solver_script.stat().st_mtime
-    except OSError:
-        current_mtime = None
+    def _current_mtimes() -> dict[str, float | None]:
+        mtimes: dict[str, float | None] = {}
+        for rel in _SOLVER_WATCHED_FILES:
+            p = solver_root / rel
+            try:
+                mtimes[str(rel)] = p.stat().st_mtime
+            except OSError:
+                mtimes[str(rel)] = None
+        return mtimes
 
-    if _SOLVER_NAMESPACE is not None:
-        if current_mtime is None:
-            return _SOLVER_NAMESPACE
-        if current_mtime == _SOLVER_SCRIPT_MTIME_AT_LOAD:
-            return _SOLVER_NAMESPACE
+    current = _current_mtimes()
 
-    # run_path executes CP-SAT.py once and returns its globals as a dict.
+    if _SOLVER_NAMESPACE is not None and current == _SOLVER_MTIMES_AT_LOAD:
+        return _SOLVER_NAMESPACE
+
+    for key in list(sys.modules):
+        if any(key == pfx or key.startswith(pfx + ".") for pfx in _SOLVER_MODULE_PREFIXES):
+            del sys.modules[key]
+
     _SOLVER_NAMESPACE = runpy.run_path(str(solver_script))
-    _SOLVER_SCRIPT_MTIME_AT_LOAD = current_mtime
+    _SOLVER_MTIMES_AT_LOAD = current
     return _SOLVER_NAMESPACE
 
 
