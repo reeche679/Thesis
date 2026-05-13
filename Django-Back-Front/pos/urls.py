@@ -21,6 +21,9 @@ from .views import (
     sign_out,
     contact_us,
     help_page,
+    curriculum_choice,
+    api_curriculum_me,
+    api_curriculum_set_active,
     save_pos_grades,
     set_academic_term,
     delete_pos_record,
@@ -34,6 +37,11 @@ from .views import (
     feasible_add_courses_for_section,
     save_tuned_pos,
 )
+from .staff_curriculum_views import (
+    staff_curriculum_upload_page,
+    staff_api_upload_curriculum_pdf,
+    staff_api_curriculum_draft,
+)
 
 urlpatterns = [
     # Login as landing page
@@ -43,6 +51,22 @@ urlpatterns = [
 
     path("home/", pos_home, name="pos_home"),
     path("home/set-term/", set_academic_term, name="set_academic_term"),
+
+    path("curriculum/", curriculum_choice, name="curriculum_choice"),
+    path("api/curriculum/me/", api_curriculum_me, name="api_curriculum_me"),
+    path("api/curriculum/set-active/", api_curriculum_set_active, name="api_curriculum_set_active"),
+
+    path("staff/curriculum/upload/", staff_curriculum_upload_page, name="staff_curriculum_upload"),
+    path(
+        "staff/curriculum/api/upload-pdf/",
+        staff_api_upload_curriculum_pdf,
+        name="staff_api_upload_curriculum_pdf",
+    ),
+    path(
+        "staff/api/curriculum/version/<int:pk>/draft/",
+        staff_api_curriculum_draft,
+        name="staff_api_curriculum_draft",
+    ),
 
     path("generate/", pos_generate, name="pos_generate"),
     path("generate/save-grades/", save_pos_grades, name="save_pos_grades"),

@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+
+{% block title %}Curriculum | Program of Study Generation System{% endblock %}
+
+{% block nav_curriculum_active %}active{% endblock %}
+
+{% block extra_head %}
+<style>
+    .curriculum-card {
+        background-color: rgba(255, 255, 255, 0.72);
+        border-radius: 0.5rem;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+        padding: clamp(1rem, 3vw, 1.5rem);
+        max-width: min(720px, 100%);
+        margin: 0 auto;
+    }
+    .curriculum-card h1 {
+        font-size: clamp(1.1rem, 3vw, 1.35rem);
+        font-weight: 600;
+        color: #1a1a1a;
+        margin-bottom: 0.35rem;
+    }
+    .curriculum-muted {
+        font-size: 0.9rem;
+        color: #555;
+    }
+    .curriculum-status {
+        min-height: 1.5rem;
+        font-size: 0.9rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="curriculum-card">
+    <h1><i class="bi bi-journal-bookmark me-2" aria-hidden="true"></i>Active curriculum</h1>
+    <p class="curriculum-muted mb-3">
+        Choose an <strong>approved</strong> curriculum for your program. This is used when you generate or validate a Program of Study.
+    </p>
+    <div id="curriculum-status" class="curriculum-status text-secondary" role="status">Loading…</div>
+    <div id="curriculum-panel" class="d-none mt-3">
+        <p class="mb-1 small text-uppercase text-muted fw-semibold">Your program</p>
+        <p id="curriculum-program" class="fw-semibold mb-3">—</p>
+        <label for="curriculum-select" class="form-label">Approved curricula</label>
+        <select id="curriculum-select" class="form-select mb-3" aria-label="Approved curriculum versions"></select>
+        <div class="d-flex flex-wrap gap-2">
+            <button type="button" class="btn btn-primary" id="curriculum-save-btn">Save selection</button>
+            <button type="button" class="btn btn-outline-secondary" id="curriculum-clear-btn">Clear selection</button>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    const urls = {
+        me: "{% url 'api_curriculum_me' %}",
+        setActive: "{% url 'api_curriculum_set_active' %}",
+    };
+    const statusEl = document.getElementById('curriculum-status');
+    const panelEl = document.getElementById('curriculum-panel');
+    const programEl = document.getElementById('curriculum-program');
+    const selectEl = document.getElementById('curriculum-select');
+    const saveBtn = document.getElementById('curriculum-save-btn');
+    const clearBtn = document.getElementById('curriculum-clear-btn');
+
+    function getCookie(name) {
+        const v = document.cookie.match('(^|;) ?' + name + '=([^;]*)(;|$)');
+        return v ? decodeURIComponent(v[2]) : '';
+    }
+
+    function setStatus(msg, kind) {
+        statusEl.className = 'curriculum-status' + (kind === 'error' ? ' text-danger' : kind === 'ok' ? ' text-success' : ' text-secondary');
+        statusEl.textContent = msg;
+    }
+
+    function fillSelect(data) {
+        selectEl.innerHTML = '';
+        const versions = data.approved_versions || [];
+        if (!versions.length) {
+            const o = document.createElement('option');
+            o.value = '';
+            o.textContent = 'No approved curricula for your program';
+            selectEl.appendChild(o);
+            selectEl.disabled = true;
+            saveBtn.disabled = true;
+            return;
+        }
+        selectEl.disabled = false;
+        saveBtn.disabled = false;
+        const placeholder = document.createElement('option');
+        placeholder.value = '';
+        placeholder.textContent = '— Select one —';
+        selectEl.appendChild(placeholder);
+        for (const v of versions) {
+            const o = document.createElement('option');
+            o.value = String(v.id);
+            const label = (v.version_label || ('Version #' + v.id)).trim();
+            o.textContent = label + ' (id ' + v.id + ')';
+            selectEl.appendChild(o);
+        }
+        const sel = data.selected_curriculum_version;
+        if (sel && sel.id) {
+            selectEl.value = String(sel.id);
+        } else {
+            selectEl.value = '';
+        }
+    }
+
+    async function loadMe() {
+        setStatus('Loading…', '');
+        panelEl.classList.add('d-none');
+        const r = await fetch(urls.me, { credentials: 'same-origin' });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok || !data.ok) {
+            setStatus(data.error || 'Could not load curriculum data.', 'error');
+            return;
+        }
+        panelEl.classList.remove('d-none');
+        if (!data.program) {
+            programEl.textContent = 'Not assigned — ask an administrator to set your program (Student.program) to match a seeded or managed program.';
+            fillSelect({ approved_versions: [], selected_curriculum_version: null });
+            setStatus('Set your program in admin to see approved curricula.', 'error');
+            return;
+        }
+        programEl.textContent = data.program.name + ' (' + data.program.slug + ')';
+        fillSelect(data);
+        const sel = data.selected_curriculum_version;
+        if (sel && sel.id) {
+            setStatus('Current selection: ' + (sel.version_label || ('Version #' + sel.id)) + '.', 'ok');
+        } else if ((data.approved_versions || []).length) {
+            setStatus('No curriculum selected yet. Choose one and click Save.', '');
+        } else {
+            setStatus('No approved versions exist for this program yet.', '');
+        }
+    }
+
+    saveBtn.addEventListener('click', async function () {
+        const v = selectEl.value;
+        if (!v) {
+            setStatus('Pick a curriculum from the list first.', 'error');
+            return;
+        }
+        setStatus('Saving…', '');
+        const r = await fetch(urls.setActive, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken'),
+            },
+            body: JSON.stringify({ curriculum_version_id: parseInt(v, 10) }),
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok || !data.ok) {
+            setStatus(data.error || 'Save failed.', 'error');
+            return;
+        }
+        fillSelect(data);
+        setStatus('Saved. You can use Generate POS with this curriculum.', 'ok');
+    });
+
+    clearBtn.addEventListener('click', async function () {
+        setStatus('Clearing…', '');
+        const r = await fetch(urls.setActive, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken'),
+            },
+            body: JSON.stringify({ curriculum_version_id: null }),
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok || !data.ok) {
+            setStatus(data.error || 'Could not clear selection.', 'error');
+            return;
+        }
+        fillSelect(data);
+        setStatus('Selection cleared. POS will fall back to the built-in static curriculum until you choose again.', '');
+    });
+
+    loadMe();
+})();
+</script>
+{% endblock %}

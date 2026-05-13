@@ -14,11 +14,12 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.http import HttpResponse, HttpResponseBadRequest, JsonResponse
 from django.db.utils import OperationalError, ProgrammingError
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_POST, require_http_methods
 from django.views.decorators.csrf import ensure_csrf_cookie, csrf_exempt
 
 from django.utils import timezone
 from accounts.models import Student, StudentGrade, POSRecord, SignatoryOption, SignatoryPreference
+from .models import CurriculumVersion
 from .solver_bridge import generate_pos_via_solver, validate_pos_via_solver, get_solver_metadata
 
 SR_CODE_REGEX = re.compile(r'^\d{2}-\d{5}$')
@@ -125,6 +126,81 @@ def get_logged_in_student(request):
         return None
 
 
+def _attach_student_curriculum_to_payload(request, payload: dict) -> dict:
+    """Add curriculum_version_id from the logged-in student when the payload omits it."""
+    p = dict(payload or {})
+    if p.get("curriculum_version_id") is not None:
+        return p
+    student = get_logged_in_student(request)
+    vid = getattr(student, "selected_curriculum_version_id", None) if student is not None else None
+    if vid:
+        p["curriculum_version_id"] = int(vid)
+    return p
+
+
+def _solver_meta_for_request(request) -> dict:
+    student = get_logged_in_student(request)
+    vid = int(student.selected_curriculum_version_id) if student and student.selected_curriculum_version_id else None
+    return get_solver_metadata(vid) or {}
+
+
+def _canonical_approved_json_sha256(approved_json: dict) -> str:
+    """Stable digest for audit (same logical JSON → same hex)."""
+    raw = json.dumps(approved_json, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()
+
+
+def _payload_with_curriculum_audit(payload: dict | None, request) -> dict:
+    """
+    Session copy of the solver input: adds curriculum_version_id and approved_json_sha256
+    so validate / feasible / preview reuse the same curriculum context (not passed into ORM-free CP-SAT).
+    """
+    base = dict(payload or {})
+    student = get_logged_in_student(request)
+    vid = base.get("curriculum_version_id")
+    if vid is not None:
+        try:
+            vid = int(vid)
+            base["curriculum_version_id"] = vid
+        except (TypeError, ValueError):
+            vid = None
+            base.pop("curriculum_version_id", None)
+    if vid is None and student is not None and getattr(student, "selected_curriculum_version_id", None):
+        vid = int(student.selected_curriculum_version_id)
+        base["curriculum_version_id"] = vid
+
+    if vid is not None:
+        cv = (
+            CurriculumVersion.objects.filter(pk=int(vid), status=CurriculumVersion.STATUS_APPROVED)
+            .only("approved_json")
+            .first()
+        )
+        if cv and isinstance(cv.approved_json, dict) and cv.approved_json:
+            base["approved_json_sha256"] = _canonical_approved_json_sha256(cv.approved_json)
+        else:
+            base.pop("approved_json_sha256", None)
+    else:
+        base.pop("curriculum_version_id", None)
+        base.pop("approved_json_sha256", None)
+    return base
+
+
+def _session_curriculum_audit_for_pos_record(request) -> tuple[int | None, str]:
+    """Read curriculum_version_id and approved_json_sha256 from session last_generated_payload."""
+    lp = request.session.get("last_generated_payload")
+    if not isinstance(lp, dict):
+        return None, ""
+    vid_raw = lp.get("curriculum_version_id")
+    sha_raw = lp.get("approved_json_sha256")
+    sha = sha_raw.strip()[:64] if isinstance(sha_raw, str) else ""
+    if vid_raw is None:
+        return None, sha
+    try:
+        return int(vid_raw), sha
+    except (TypeError, ValueError):
+        return None, sha
+
+
 ACADEMIC_YEAR_CHOICES = [
     ('A.Y. 2025 – 2026', 'A.Y. 2025 – 2026'),
     ('A.Y. 2026 – 2027', 'A.Y. 2026 – 2027'),
@@ -164,6 +240,51 @@ def _require_student(view_func):
         _ensure_session_academic_year_from_student(request, student)
         return view_func(request, *args, **kwargs)
     return wrapper
+
+
+def _require_student_api(view_func):
+    """JSON API: 401 if not logged in as a student."""
+    def wrapper(request, *args, **kwargs):
+        if get_logged_in_student(request) is None:
+            return JsonResponse({"ok": False, "error": "Not authenticated"}, status=401)
+        return view_func(request, *args, **kwargs)
+    return wrapper
+
+
+def _curriculum_me_payload(student: Student) -> dict:
+    """Serialize program, selected version, and approved versions for the student's program."""
+    program = student.program
+    program_data = None
+    approved: list[dict] = []
+    if program is not None:
+        program_data = {"id": program.pk, "slug": program.slug, "name": program.name}
+        qs = (
+            CurriculumVersion.objects.filter(program=program, status=CurriculumVersion.STATUS_APPROVED)
+            .only("id", "version_label", "updated_at")
+            .order_by("-updated_at")
+        )
+        for v in qs:
+            approved.append(
+                {
+                    "id": v.pk,
+                    "version_label": v.version_label or "",
+                    "updated_at": v.updated_at.isoformat() if v.updated_at else "",
+                }
+            )
+    sel = student.selected_curriculum_version
+    selected_data = None
+    if sel is not None:
+        selected_data = {
+            "id": sel.pk,
+            "version_label": sel.version_label or "",
+            "program_id": sel.program_id,
+        }
+    return {
+        "ok": True,
+        "program": program_data,
+        "selected_curriculum_version": selected_data,
+        "approved_versions": approved,
+    }
 
 
 SEMESTER_CHOICES = [
@@ -1563,7 +1684,7 @@ def validate_pos(request):
     passed_sem_by_solver: dict[str, set[int]] = {}
     passed_occurrences: list[tuple[str, int]] = []  # (solver_code, solver_sem)
 
-    solver_meta = get_solver_metadata() or {}
+    solver_meta = _solver_meta_for_request(request) or {}
     solver_courses = solver_meta.get("courses") if isinstance(solver_meta.get("courses"), dict) else {}
     year_standing_rules = solver_meta.get("year_standing_rules") if isinstance(solver_meta.get("year_standing_rules"), dict) else {}
 
@@ -1709,7 +1830,7 @@ def validate_pos(request):
     }
 
     solver_result = validate_pos_via_solver(
-        payload=payload,
+        payload=_attach_student_curriculum_to_payload(request, payload),
         with_petition=False,
         forced_semester_map=None,
     )
@@ -1837,7 +1958,7 @@ def generate_pos_api(request):
         return JsonResponse({"status": "infeasible", "message": msg, "pos": [], "errors": [msg]})
 
     try:
-        result = generate_pos_via_solver(payload)
+        result = generate_pos_via_solver(_attach_student_curriculum_to_payload(request, payload))
     except ValueError as e:
         return JsonResponse({"error": str(e)}, status=400)
     except RuntimeError as e:
@@ -1877,7 +1998,7 @@ def generate_pos_api(request):
                     request.session["last_generated_pos_options"] = result.get("pos_options")
                 if result.get("default_petition_mode"):
                     request.session["last_selected_petition_mode"] = result.get("default_petition_mode")
-                request.session["last_generated_payload"] = payload
+                request.session["last_generated_payload"] = _payload_with_curriculum_audit(payload, request)
     except Exception:
         pass
 
@@ -2190,7 +2311,7 @@ def feasible_move_marks(request):
     }
 
     # Solver metadata needed for safe, fast pre-pruning (unit caps, offering windows).
-    solver_meta = get_solver_metadata() or {}
+    solver_meta = _solver_meta_for_request(request) or {}
     solver_courses = solver_meta.get("courses") if isinstance(solver_meta.get("courses"), dict) else {}
     max_units_for_sem_fn = solver_meta.get("max_units_for_sem")
     config_key: str | None = None
@@ -2203,7 +2324,7 @@ def feasible_move_marks(request):
         passed_courses_solver = []
 
     with_petition = mode == "with_petition"
-    solver_payload = dict(base_payload)
+    solver_payload = _attach_student_curriculum_to_payload(request, dict(base_payload))
     # Feasible-move highlighting must use exact CP-SAT validity, not heuristic status.
     solver_payload["alternative_algorithm"] = None
     config_key = str(solver_payload.get("configuration") or "")
@@ -2218,6 +2339,8 @@ def feasible_move_marks(request):
                 tuple(sorted((solver_payload.get("passed_courses") or []))),
                 tuple(sorted((solver_payload.get("failed_courses") or []))),
                 str(solver_payload.get("configuration") or ""),
+                str(solver_payload.get("curriculum_version_id") or ""),
+                str(solver_payload.get("approved_json_sha256") or ""),
             )
         ).encode("utf-8")
     ).hexdigest()
@@ -2488,14 +2611,6 @@ def feasible_add_courses_for_section(request):
     # UI section_index is 0-based, solver semesters are 1-based.
     forced_solver_sem = section_index + 1
 
-    # Fingerprint base payload for stable cache keys.
-    _base_payload_fp = hashlib.sha256(
-        repr((current_sem, tuple(sorted(passed_courses_solver)), tuple(sorted(failed_courses_solver)))).encode("utf-8")
-    ).hexdigest()
-
-    feasibility_memo: dict[str, bool] = {}
-    feasible_courses: set[str] = set()
-
     # Base payload for validation checks. We only add the forced assignment map.
     payload_current = {
         "current_sem": current_sem,
@@ -2508,6 +2623,27 @@ def feasible_add_courses_for_section(request):
     # Preserve optional configuration if supplied by the client.
     if "configuration" in solver_payload:
         payload_current["configuration"] = solver_payload.get("configuration")
+    if "curriculum_version_id" in solver_payload:
+        payload_current["curriculum_version_id"] = solver_payload.get("curriculum_version_id")
+    if "approved_json_sha256" in solver_payload:
+        payload_current["approved_json_sha256"] = solver_payload.get("approved_json_sha256")
+    payload_current = _attach_student_curriculum_to_payload(request, payload_current)
+
+    # Fingerprint base payload for stable cache keys.
+    _base_payload_fp = hashlib.sha256(
+        repr(
+            (
+                current_sem,
+                tuple(sorted(passed_courses_solver)),
+                tuple(sorted(failed_courses_solver)),
+                str(payload_current.get("curriculum_version_id") or ""),
+                str(payload_current.get("approved_json_sha256") or ""),
+            )
+        ).encode("utf-8")
+    ).hexdigest()
+
+    feasibility_memo: dict[str, bool] = {}
+    feasible_courses: set[str] = set()
 
     for code_ui in candidate_codes:
         if code_ui is None:
@@ -2603,7 +2739,7 @@ def validate_tuned_pos(request):
     )
 
     with_petition = mode == "with_petition"
-    solver_payload = dict(base_payload)
+    solver_payload = _attach_student_curriculum_to_payload(request, dict(base_payload))
     # Ensure the solver matches the requested mode.
     solver_payload["with_petition"] = bool(with_petition)
 
@@ -2624,7 +2760,7 @@ def validate_tuned_pos(request):
     MAX_MOVED_COURSES = 8
 
     # Prefer solver-provided cap function to avoid mismatches.
-    solver_meta = get_solver_metadata() or {}
+    solver_meta = _solver_meta_for_request(request) or {}
     max_units_for_sem_fn = solver_meta.get("max_units_for_sem")
 
     def _max_units_for_sem(sem_index: int) -> int:
@@ -3051,7 +3187,7 @@ def save_tuned_pos(request):
 
     base_payload = request.session.get("last_generated_payload") or {}
     with_petition = mode == "with_petition"
-    solver_payload = dict(base_payload)
+    solver_payload = _attach_student_curriculum_to_payload(request, dict(base_payload))
     solver_payload["with_petition"] = bool(with_petition)
 
     # Defense-in-depth: reject persistence if CP-SAT says infeasible.
@@ -3190,6 +3326,8 @@ def _persist_pos_history_on_download(request, student):
     request.session["last_generated_payload"] = snap["last_generated_payload"]
     yl = request.session.get("year_level") or ""
     sem = request.session.get("semester") or ""
+    cv_pk, sha = _session_curriculum_audit_for_pos_record(request)
+    cv_obj = CurriculumVersion.objects.filter(pk=cv_pk).first() if cv_pk is not None else None
     POSRecord.objects.create(
         student=student,
         academic_year=request.session.get("academic_year") or "",
@@ -3197,6 +3335,8 @@ def _persist_pos_history_on_download(request, student):
         year_level=yl,
         grades_snapshot=snap["grades_by_section"],
         preview_snapshot=snap,
+        curriculum_version=cv_obj,
+        approved_json_sha256=sha,
     )
     _prune_old_pos_records(student)
 
@@ -3417,6 +3557,8 @@ def save_preview_pos_to_history(request):
 
     yl = request.session.get('year_level') or ''
     sem = request.session.get('semester') or ''
+    cv_pk, sha = _session_curriculum_audit_for_pos_record(request)
+    cv_obj = CurriculumVersion.objects.filter(pk=cv_pk).first() if cv_pk is not None else None
     record = POSRecord.objects.create(
         student=student,
         academic_year=request.session.get('academic_year') or '',
@@ -3424,6 +3566,8 @@ def save_preview_pos_to_history(request):
         year_level=yl,
         grades_snapshot=snap.get("grades_by_section") or {},
         preview_snapshot=snap,
+        curriculum_version=cv_obj,
+        approved_json_sha256=sha,
     )
     _prune_old_pos_records(student)
 
@@ -3685,7 +3829,12 @@ def load_pos_record(request, record_id):
         request.session["last_selected_petition_mode"] = snap.get("petition_mode") or "no_petition"
         lp = snap.get("last_generated_payload")
         if isinstance(lp, dict) and lp:
-            request.session["last_generated_payload"] = copy.deepcopy(lp)
+            merged = copy.deepcopy(lp)
+            if record.curriculum_version_id and merged.get("curriculum_version_id") is None:
+                merged["curriculum_version_id"] = int(record.curriculum_version_id)
+            if getattr(record, "approved_json_sha256", None) and not merged.get("approved_json_sha256"):
+                merged["approved_json_sha256"] = str(record.approved_json_sha256).strip()[:64]
+            request.session["last_generated_payload"] = merged
         irr = snap.get("irreg_start_index")
         if irr is not None:
             try:
@@ -3847,6 +3996,92 @@ def register_view(request):
         return redirect('login')
 
     return render(request, "auth/register.html")
+
+
+@ensure_csrf_cookie
+@_require_student
+def curriculum_choice(request):
+    """List approved curricula for the student's program and persist selected_curriculum_version (basic Phase 2 UI)."""
+    return render(request, "pos/curriculum_choice.html", {})
+
+
+@require_http_methods(["GET"])
+@_require_student_api
+def api_curriculum_me(request):
+    student = get_logged_in_student(request)
+    if student is None:
+        return JsonResponse({"ok": False, "error": "Not authenticated"}, status=401)
+    try:
+        student = Student.objects.select_related("program", "selected_curriculum_version").get(pk=student.pk)
+    except Student.DoesNotExist:
+        return JsonResponse({"ok": False, "error": "Not authenticated"}, status=401)
+    try:
+        return JsonResponse(_curriculum_me_payload(student))
+    except (OperationalError, ProgrammingError):
+        return JsonResponse(
+            {"ok": False, "error": "Curriculum storage is not ready (run migrations)."},
+            status=500,
+        )
+
+
+@require_POST
+@_require_student_api
+def api_curriculum_set_active(request):
+    student = get_logged_in_student(request)
+    if student is None:
+        return JsonResponse({"ok": False, "error": "Not authenticated"}, status=401)
+    try:
+        body = json.loads(request.body.decode("utf-8") if request.body else "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"ok": False, "error": "Invalid JSON"}, status=400)
+    if not isinstance(body, dict):
+        return JsonResponse({"ok": False, "error": "Expected JSON object"}, status=400)
+    if "curriculum_version_id" not in body:
+        return JsonResponse(
+            {"ok": False, "error": "curriculum_version_id is required (use null to clear selection)."},
+            status=400,
+        )
+    raw_id = body.get("curriculum_version_id")
+    try:
+        if raw_id is None or raw_id is False:
+            Student.objects.filter(pk=student.pk).update(selected_curriculum_version=None)
+        else:
+            pk = int(raw_id)
+            if student.program_id is None:
+                return JsonResponse(
+                    {
+                        "ok": False,
+                        "error": "Your account has no program assigned. An administrator must set your program before you can choose a curriculum.",
+                    },
+                    status=400,
+                )
+            cv = CurriculumVersion.objects.filter(
+                pk=pk, status=CurriculumVersion.STATUS_APPROVED
+            ).first()
+            if cv is None:
+                return JsonResponse(
+                    {"ok": False, "error": "Curriculum version not found or not approved."},
+                    status=404,
+                )
+            if cv.program_id != student.program_id:
+                return JsonResponse(
+                    {"ok": False, "error": "That curriculum does not belong to your program."},
+                    status=403,
+                )
+            Student.objects.filter(pk=student.pk).update(selected_curriculum_version_id=cv.pk)
+    except (TypeError, ValueError):
+        return JsonResponse(
+            {"ok": False, "error": "curriculum_version_id must be an integer or null."},
+            status=400,
+        )
+    try:
+        student = Student.objects.select_related("program", "selected_curriculum_version").get(pk=student.pk)
+        return JsonResponse(_curriculum_me_payload(student))
+    except (OperationalError, ProgrammingError):
+        return JsonResponse(
+            {"ok": False, "error": "Curriculum storage is not ready (run migrations)."},
+            status=500,
+        )
 
 
 def contact_us(request):

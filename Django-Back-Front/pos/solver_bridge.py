@@ -4,6 +4,52 @@ import sys
 
 from django.conf import settings
 
+
+def _attach_curriculum_bundle_from_version(payload: dict) -> dict:
+    """
+    If payload contains curriculum_version_id, load approved_json from the DB
+    and set curriculum_bundle for the solver (solver stays ORM-free).
+    """
+    p = dict(payload or {})
+    vid = p.get("curriculum_version_id")
+    if vid is None:
+        return p
+    try:
+        from pos.models import CurriculumVersion
+    except Exception:
+        p.pop("curriculum_version_id", None)
+        return p
+    try:
+        pk = int(vid)
+    except (TypeError, ValueError):
+        p.pop("curriculum_version_id", None)
+        return p
+    cv = (
+        CurriculumVersion.objects.filter(pk=pk, status=CurriculumVersion.STATUS_APPROVED)
+        .only("approved_json")
+        .first()
+    )
+    if cv and isinstance(cv.approved_json, dict) and cv.approved_json.get("courses"):
+        p["curriculum_bundle"] = cv.approved_json
+    # Solver (CP-SAT) is ORM-free: never pass DB ids into generate_pos.
+    p.pop("curriculum_version_id", None)
+    return p
+
+
+def _curriculum_versions_mtime() -> float | None:
+    """Latest CurriculumVersion.updated_at as unix time for solver namespace cache busting."""
+    try:
+        from django.db.models import Max
+        from pos.models import CurriculumVersion
+
+        ts = CurriculumVersion.objects.aggregate(m=Max("updated_at"))["m"]
+        if ts is None:
+            return None
+        return ts.timestamp()
+    except Exception:
+        return None
+
+
 _SOLVER_NAMESPACE = None
 _SOLVER_MTIMES_AT_LOAD: dict[str, float | None] = {}
 
@@ -53,6 +99,7 @@ def _get_solver_namespace():
         return mtimes
 
     current = _current_mtimes()
+    current["__curriculum_versions__"] = _curriculum_versions_mtime()
 
     if _SOLVER_NAMESPACE is not None and current == _SOLVER_MTIMES_AT_LOAD:
         return _SOLVER_NAMESPACE
@@ -88,6 +135,7 @@ def generate_pos_via_solver(payload: dict) -> dict:
     # The UI will let the user choose which one to use for Preview/PDF.
     def _run(with_petition: bool) -> dict:
         p = dict(payload or {})
+        p = _attach_curriculum_bundle_from_version(p)
         p["with_petition"] = bool(with_petition)
         return generate_pos(p)
 
@@ -184,24 +232,52 @@ def validate_pos_via_solver(payload: dict, with_petition: bool, forced_semester_
         raise RuntimeError("generate_pos function not found in solver namespace")
 
     p = dict(payload or {})
+    p = _attach_curriculum_bundle_from_version(p)
     p["with_petition"] = bool(with_petition)
     if forced_semester_map is not None:
         p["forced_semester_map"] = forced_semester_map
     return generate_pos(p)
 
 
-def get_solver_metadata() -> dict:
+def get_solver_metadata(curriculum_version_id: int | None = None) -> dict:
     """
-    Return solver-side static metadata needed for typed violation heuristics.
+    Return solver-side metadata for typed violation heuristics.
 
-    This avoids fragile sys.path imports in Django by reusing the same CP-SAT
-    namespace loaded by `_get_solver_namespace()`.
-
-    Returns:
-      - courses: solver-side `courses` dict (code -> info)
-      - year_standing_rules: solver-side `YEAR_STANDING_RULES`
-      - max_units_for_sem: callable max_units_for_sem(sem_index) -> int
+    curriculum_version_id:
+      When set, loads courses / year_standing_rules / max_units_for_sem from that
+      approved CurriculumVersion. Otherwise uses the static solver namespace (legacy).
     """
+    if curriculum_version_id is not None:
+        try:
+            from pos.models import CurriculumVersion
+
+            cv = (
+                CurriculumVersion.objects.filter(
+                    pk=int(curriculum_version_id),
+                    status=CurriculumVersion.STATUS_APPROVED,
+                )
+                .only("approved_json")
+                .first()
+            )
+            if cv and isinstance(cv.approved_json, dict):
+                b = cv.approved_json
+                raw_caps = b.get("max_units_by_semester_index") or []
+
+                def max_units_for_sem(sem_index: int) -> int:
+                    if isinstance(sem_index, int) and 1 <= sem_index <= len(raw_caps):
+                        return int(raw_caps[sem_index - 1])
+                    return 0
+
+                return {
+                    "courses": b.get("courses") or {},
+                    "year_standing_rules": b.get("year_standing_rules") or {},
+                    "prereq_aliases": b.get("prereq_aliases") or {},
+                    "max_units_for_sem": max_units_for_sem,
+                    "curriculum_version_id": int(curriculum_version_id),
+                }
+        except (TypeError, ValueError, Exception):
+            pass
+
     ns = _get_solver_namespace()
     courses = ns.get("courses") or {}
     year_standing_rules = ns.get("YEAR_STANDING_RULES") or {}
@@ -217,5 +293,7 @@ def get_solver_metadata() -> dict:
         "courses": courses,
         "year_standing_rules": year_standing_rules,
         "max_units_for_sem": max_units_for_sem,
+        "prereq_aliases": ns.get("PREREQ_ALIASES") or {},
+        "curriculum_version_id": None,
     }
 

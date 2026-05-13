@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Curriculum PDF upload (staff)</title>
+    <style>
+        body { font-family: system-ui, sans-serif; max-width: 640px; margin: 2rem auto; padding: 0 1rem; }
+        label { display: block; margin-top: 1rem; font-weight: 600; }
+        .hint { font-size: 0.85rem; color: #555; margin-top: 0.25rem; }
+        button { margin-top: 1.25rem; padding: 0.5rem 1rem; cursor: pointer; }
+        pre { background: #f4f4f4; padding: 1rem; overflow: auto; font-size: 0.8rem; }
+        .err { color: #a00; }
+        .ok { color: #060; }
+    </style>
+</head>
+<body>
+    <h1>Curriculum PDF → draft (Phase 5)</h1>
+    <p class="hint">Log in as a <strong>Django staff / curriculum manager</strong> (e.g. via <a href="/admin/login/">/admin/login/</a>), then use this page in the same browser.</p>
+
+    {% if not programs %}
+        <p class="err">You have no managed programs (or you are not a superuser). Ask an admin to add you to <strong>Program → curriculum managers</strong>.</p>
+    {% else %}
+    <form id="upload-form">
+        {% csrf_token %}
+        <label for="program_id">Program</label>
+        <select id="program_id" name="program_id" required>
+            {% for p in programs %}
+                <option value="{{ p.pk }}">{{ p.name }} ({{ p.slug }})</option>
+            {% endfor %}
+        </select>
+
+        <label for="file">PDF file</label>
+        <input id="file" name="file" type="file" accept="application/pdf,.pdf" required>
+
+        <label for="version_label">Version label (optional)</label>
+        <input id="version_label" name="version_label" type="text" maxlength="128" placeholder="defaults to pdf-import-… timestamp">
+        <div class="hint">Creates a <strong>draft</strong> <code>CurriculumVersion</code> with <code>draft_json</code> rows + warnings. No approval in this step.</div>
+
+        <button type="submit">Upload &amp; extract</button>
+    </form>
+    <p id="status"></p>
+    <pre id="out" hidden></pre>
+    {% endif %}
+
+    <script>
+    function getCookie(name) {
+        const v = document.cookie.match('(^|;) ?' + name + '=([^;]*)(;|$)');
+        return v ? decodeURIComponent(v[2]) : '';
+    }
+    const form = document.getElementById('upload-form');
+    if (form) {
+        form.addEventListener('submit', async function (e) {
+            e.preventDefault();
+            const status = document.getElementById('status');
+            const out = document.getElementById('out');
+            status.textContent = 'Uploading…';
+            out.hidden = true;
+            const fd = new FormData(form);
+            try {
+                const r = await fetch('{% url "staff_api_upload_curriculum_pdf" %}', {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': getCookie('csrftoken') },
+                    body: fd,
+                    credentials: 'same-origin',
+                });
+                const data = await r.json().catch(() => ({}));
+                if (!r.ok || !data.ok) {
+                    status.innerHTML = '<span class="err">' + (data.error || ('HTTP ' + r.status)) + '</span>';
+                    return;
+                }
+                status.innerHTML = '<span class="ok">Saved draft id ' + data.curriculum_version_id + ' — ' + data.row_count + ' row(s).</span>';
+                out.textContent = JSON.stringify(data, null, 2);
+                out.hidden = false;
+            } catch (err) {
+                status.innerHTML = '<span class="err">' + err + '</span>';
+            }
+        });
+    }
+    </script>
+</body>
+</html>

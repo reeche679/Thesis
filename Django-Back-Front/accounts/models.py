@@ -15,6 +15,22 @@ class Student(models.Model):
     academic_year = models.CharField(max_length=32, blank=True)   # e.g. A.Y. 2025 – 2026 (persists across sign-out)
     semester = models.CharField(max_length=32, blank=True)         # e.g. First Semester (persists across sign-out)
     current_pos_snapshot = models.JSONField(default=dict, blank=True)
+    program = models.ForeignKey(
+        "pos.Program",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="students",
+        help_text="Academic program this student belongs to (for curriculum selection).",
+    )
+    selected_curriculum_version = models.ForeignKey(
+        "pos.CurriculumVersion",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="students_using",
+        help_text="Approved curriculum snapshot used for POS (solver wiring in a later phase).",
+    )
 
     class Meta:
         ordering = ['last_name', 'first_name']
@@ -68,6 +84,20 @@ class POSRecord(models.Model):
     grades_snapshot = models.JSONField(default=dict)  # {course_code: grade} at time of generation for this POS
     # Full preview/solver state at PDF download (grades, both POS options, petition mode, irregular start, boundary).
     preview_snapshot = models.JSONField(default=dict, blank=True)
+    curriculum_version = models.ForeignKey(
+        "pos.CurriculumVersion",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="pos_records",
+        help_text="Approved curriculum version tied to this saved POS run (Phase 4 audit).",
+    )
+    approved_json_sha256 = models.CharField(
+        max_length=64,
+        blank=True,
+        default="",
+        help_text="SHA-256 (hex) of canonical JSON for approved_json at save time; FK may be null if version was removed.",
+    )
 
     class Meta:
         ordering = ['-generated_at']

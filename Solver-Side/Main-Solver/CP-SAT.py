@@ -18,8 +18,16 @@ import json
 import hashlib
 import time
 from ortools.sat.python import cp_model
-from courses_and_year_standings.courses import PREREQ_ALIASES, YEAR_STANDING_RULES, courses
-import courses_and_year_standings.units_and_year_standings as u
+from algorithms_and_helpers.curriculum_runtime import (
+    GRADUATION_TRIO,
+    PREREQ_ALIASES,
+    YEAR_STANDING_RULES,
+    courses,
+    curriculum_context_scope,
+    get_curriculum_context,
+    resolve_curriculum_context_from_payload,
+    u,
+)
 from algorithms_and_helpers.pos_helpers import (
     _first_semester,
     _sem_label,
@@ -319,9 +327,6 @@ def add_offering_constraints(model, semester, passed_courses, current_sem, with_
     )
 
 
-# Graduation semester: only these three courses may appear in the final semester.
-GRADUATION_TRIO = ("CpE 405", "CpE 406", "ENGG 117")
-
 # Graduation trio enforcement toggle is centralized in solver_settings.py.
 
 
@@ -587,7 +592,7 @@ def _valid_semesters_for_course(code, info, current_sem, with_petition: bool):
     if CONFIGURATION == "config3_weightedtriocap":
         max_sem = min(max_sem, 14)
 
-    graduation_trio = {"ENGG 117", "CpE 405", "CpE 406"}
+    graduation_trio = set(get_curriculum_context().graduation_trio)
     if CONFIGURATION == "config3_weightedtriocap" and code in graduation_trio:
         return [max_sem]
 
@@ -1076,10 +1081,10 @@ def _run_alternative_core(current_sem, passed_courses, failed_courses, with_peti
                 max_units_for_sem=u.max_units_for_sem,
                 get_req_list=_get_req_list,
                 normalize_code=_normalize_code,
-                prereq_aliases=PREREQ_ALIASES,
-                year_standing_rules=YEAR_STANDING_RULES,
+                prereq_aliases=dict(PREREQ_ALIASES),
+                year_standing_rules=dict(YEAR_STANDING_RULES),
                 enforce_graduation_trio_only_semester=ENFORCE_GRADUATION_TRIO_ONLY_SEMESTER,
-                graduation_trio=GRADUATION_TRIO,
+                graduation_trio=tuple(get_curriculum_context().graduation_trio),
                 solver_name="chuffed",
             )
             if not is_feasible:
@@ -1283,6 +1288,10 @@ def generate_pos(payload: dict) -> dict:
       - configuration (str, optional) CP-SAT configuration key
       - alternative_algorithm (str | null, optional): discrete_opt | cpmpy_minizinc
       - enforce_graduation_trio_only_semester (bool, optional)
+      - curriculum_bundle (dict, optional): approved curriculum JSON (Phase 0 schema).
+        When omitted, static ``courses.py`` + ``units_and_year_standings`` are used.
+      - curriculum_version_id (optional): resolved by Django ``solver_bridge`` into
+        ``curriculum_bundle`` before the solver is invoked; not read inside CP-SAT.
 
     Alternative algorithms use the same CONFIGURATION offering windows as CP-SAT
     (see _valid_semesters_for_course); returned POS is always the heuristic's own result.
@@ -1328,18 +1337,20 @@ def generate_pos(payload: dict) -> dict:
     ALTERNATIVE_ALGORITHM = requested_alternative
     ENFORCE_GRADUATION_TRIO_ONLY_SEMESTER = requested_trio_enforcement
 
-    try:
-        return _run_core(
-            current_sem,
-            passed_courses,
-            failed_courses,
-            with_petition=with_petition,
-            forced_semester_map=forced_semester_map,
-        )
-    finally:
-        CONFIGURATION = old_configuration
-        ALTERNATIVE_ALGORITHM = old_alternative
-        ENFORCE_GRADUATION_TRIO_ONLY_SEMESTER = old_trio_enforcement
+    ctx = resolve_curriculum_context_from_payload(payload)
+    with curriculum_context_scope(ctx):
+        try:
+            return _run_core(
+                current_sem,
+                passed_courses,
+                failed_courses,
+                with_petition=with_petition,
+                forced_semester_map=forced_semester_map,
+            )
+        finally:
+            CONFIGURATION = old_configuration
+            ALTERNATIVE_ALGORITHM = old_alternative
+            ENFORCE_GRADUATION_TRIO_ONLY_SEMESTER = old_trio_enforcement
 
 
 def run_pos_with_state(current_sem, passed_courses, failed_courses, with_petition: bool = False):

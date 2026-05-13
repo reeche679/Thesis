@@ -869,6 +869,9 @@
                         <a class="nav-link {% block nav_home_active %}{% endblock %}" href="{% url 'pos_home' %}" title="Home"><i class="bi bi-house-door-fill"></i><span class="nav-link-text">Home</span></a>
                     </li>
                     <li class="nav-item">
+                        <a class="nav-link {% block nav_curriculum_active %}{% endblock %}" href="{% url 'curriculum_choice' %}" title="Curriculum"><i class="bi bi-journal-bookmark"></i><span class="nav-link-text">Curriculum</span></a>
+                    </li>
+                    <li class="nav-item">
                         <a class="nav-link {% block nav_generate_active %}{% endblock %}" href="{% if has_complete_info %}{% url 'pos_generate' %}{% else %}{% url 'pos_home' %}?required=1{% endif %}" title="Generate POS"><i class="bi bi-journal-plus"></i><span class="nav-link-text">Generate POS</span></a>
                     </li>
                     <li class="nav-item">
@@ -903,6 +906,7 @@
         </div>
         <nav class="pos-mobile-drawer-nav" aria-label="Mobile navigation">
             <a class="pos-mobile-drawer-link" href="{% url 'pos_home' %}" data-nav-key="home"><i class="bi bi-house-door-fill" aria-hidden="true"></i><span>Home</span></a>
+            <a class="pos-mobile-drawer-link" href="{% url 'curriculum_choice' %}" data-nav-key="curriculum"><i class="bi bi-journal-bookmark" aria-hidden="true"></i><span>Curriculum</span></a>
             <a class="pos-mobile-drawer-link" href="{% if has_complete_info %}{% url 'pos_generate' %}{% else %}{% url 'pos_home' %}?required=1{% endif %}" data-nav-key="generate"><i class="bi bi-journal-plus" aria-hidden="true"></i><span>Generate POS</span></a>
             <a class="pos-mobile-drawer-link" href="{% if has_complete_info %}{% url 'pos_preview' %}{% else %}{% url 'pos_home' %}?required=1{% endif %}" data-nav-key="preview"><i class="bi bi-eye-fill" aria-hidden="true"></i><span>Preview POS</span></a>
             <a class="pos-mobile-drawer-link" href="{% if has_complete_info %}{% url 'pos_history' %}{% else %}{% url 'pos_home' %}?required=1{% endif %}" data-nav-key="history"><i class="bi bi-clock-history" aria-hidden="true"></i><span>History</span></a>

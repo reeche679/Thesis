@@ -21,14 +21,14 @@ if str(_main_solver_dir) not in sys.path:
 if str(_root) not in sys.path:
     sys.path.insert(0, str(_root))
 
-from courses_and_year_standings.courses import courses
-import courses_and_year_standings.units_and_year_standings as u
+from algorithms_and_helpers.curriculum_runtime import courses, u
 from algorithms_and_helpers.pos_helpers import _first_semester, _sem_label, _normalize_code
 
 # Map of normalized course code -> canonical course code from the curriculum.
 # Normalization is case-insensitive and collapses whitespace, but the sequence
 # of letters and numbers must match exactly some curriculum code.
-COURSE_CODE_INDEX = {_normalize_code(code): code for code in courses}
+def _course_code_index() -> dict[str, str]:
+    return {_normalize_code(code): code for code in courses}
 
 
 def _grade_is_pass(grade_str: str) -> bool:
@@ -248,7 +248,7 @@ def gather_irregular_history():
                 codes = [c.strip() for c in raw_codes.split(",") if c.strip()]
                 for raw_code in codes:
                     norm = _normalize_code(raw_code)
-                    canonical = COURSE_CODE_INDEX.get(norm)
+                    canonical = _course_code_index().get(norm)
                     if canonical is None:
                         print(
                             f"  ! Skipping unknown course code '{raw_code}'. "

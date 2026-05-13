@@ -1,0 +1,733 @@
+{
+  "courses": {
+    "AI 101": {
+      "category": "Rigid",
+      "co-requisites": [],
+      "course_title": "Linear Algebra for AI",
+      "orig_sem": 4,
+      "pre-requisites": [],
+      "units": 3,
+      "year_level": 2
+    },
+    "AI 102": {
+      "category": "Rigid",
+      "co-requisites": [],
+      "course_title": "Probability and Statistics for AI",
+      "orig_sem": 5,
+      "pre-requisites": [
+        "MATH 102"
+      ],
+      "units": 3,
+      "year_level": 2
+    },
+    "AI 103": {
+      "category": "Rigid",
+      "co-requisites": [],
+      "course_title": "Machine Learning and Neural Networks",
+      "orig_sem": 8,
+      "pre-requisites": [
+        "AI 101",
+        "AI 102",
+        "CpE 101"
+      ],
+      "units": 3,
+      "year_level": 3
+    },
+    "CHEM 101": {
+      "category": "Rigid",
+      "co-requisites": [],
+      "course_title": "Chemistry for Engineers",
+      "orig_sem": 1,
+      "pre-requisites": [],
+      "units": 4,
+      "year_level": 1
+    },
+    "CpE 101": {
+      "category": "Rigid",
+      "co-requisites": [],
+      "course_title": "Computer Programming",
+      "orig_sem": 1,
+      "pre-requisites": [],
+      "units": 1,
+      "year_level": 1
+    },
+    "CpE 201": {
+      "category": "Rigid",
+      "co-requisites": [],
+      "course_title": "CpE Discipline, Professional Practice and laws",
+      "orig_sem": 4,
+      "pre-requisites": [],
+      "units": 3,
+      "year_level": 2
+    },
+    "CpE 202": {
+      "category": "Rigid",
+      "co-requisites": [],
+      "course_title": "Discrete Mathematics",
+      "orig_sem": 4,
+      "pre-requisites": [
+        "MATH 101"
+      ],
+      "units": 3,
+      "year_level": 2
+    },
+    "CpE 203": {
+      "category": "Rigid",
+      "co-requisites": [],
+      "course_title": "Programming Logic and Design",
+      "orig_sem": 4,
+      "pre-requisites": [],
+      "units": 2,
+      "year_level": 2
+    },
+    "CpE 204": {
+      "category": "Rigid",
+      "co-requisites": [],
+      "course_title": "Advance Engineering Mathematics for CpE",
+      "orig_sem": 5,
+      "pre-requisites": [
+        "2nd Year Standing"
+      ],
+      "units": 3,
+      "year_level": 2
+    },
+    "CpE 205": {
+      "category": "Rigid",
+      "co-requisites": [],
+      "course_title": "Object-Oriented Programming",
+      "orig_sem": 5,
+      "pre-requisites": [
+        "CpE 203"
+      ],
+      "units": 2,
+      "year_level": 2
+    },
+    "CpE 302": {
+      "category": "Rigid",
+      "co-requisites": [],
+      "course_title": "Logic Circuits and Design",
+      "orig_sem": 7,
+      "pre-requisites": [
+        "ECE 405"
+      ],
+      "units": 4,
+      "year_level": 3
+    },
+    "CpE 303": {
+      "category": "Rigid",
+      "co-requisites": [],
+      "course_title": "Data Structures and Algorithms",
+      "orig_sem": 7,
+      "pre-requisites": [
+        "CpE 205"
+      ],
+      "units": 2,
+      "year_level": 3
+    },
+    "CpE 304": {
+      "category": "Rigid",
+      "co-requisites": [
+        "CpE 302"
+      ],
+      "course_title": "Introduction to Networks, Data and Digital Communications",
+      "orig_sem": 7,
+      "pre-requisites": [
+        "ECE 405"
+      ],
+      "units": 3,
+      "year_level": 3
+    },
+    "CpE 305": {
+      "category": "Rigid",
+      "co-requisites": [],
+      "course_title": "Fundamentals of Mixed Signals and Sensors",
+      "orig_sem": 7,
+      "pre-requisites": [
+        "ECE 405"
+      ],
+      "units": 3,
+      "year_level": 3
+    },
+    "CpE 306": {
+      "category": "Rigid",
+      "co-requisites": [],
+      "course_title": "Feedback and Control Systems",
+      "orig_sem": 7,
+      "pre-requisites": [
+        "EE 212"
+      ],
+      "units": 3,
+      "year_level": 3
+    },
+    "CpE 308": {
+      "category": "Rigid",
+      "co-requisites": [],
+      "course_title": "Microprocessors",
+      "orig_sem": 8,
+      "pre-requisites": [
+        "CpE 302"
+      ],
+      "units": 4,
+      "year_level": 3
+    },
+    "CpE 309": {
+      "category": "Rigid",
+      "co-requisites": [],
+      "course_title": "Software Design",
+      "orig_sem": 8,
+      "pre-requisites": [
+        "CpE 303"
+      ],
+      "units": 4,
+      "year_level": 3
+    },
+    "CpE 310": {
+      "category": "Rigid",
+      "co-requisites": [],
+      "course_title": "Digital Signal Processing",
+      "orig_sem": 8,
+      "pre-requisites": [
+        "CpE 305",
+        "CpE 306"
+      ],
+      "units": 4,
+      "year_level": 3
+    },
+    "CpE 311": {
+      "category": "Rigid",
+      "co-requisites": [
+        "CpE 308"
+      ],
+      "course_title": "Computer Architecture and Organization",
+      "orig_sem": 8,
+      "pre-requisites": [],
+      "units": 4,
+      "year_level": 3
+    },
+    "CpE 312": {
+      "category": "Rigid",
+      "co-requisites": [],
+      "course_title": "Connecting Networks and Security",
+      "orig_sem": 8,
+      "pre-requisites": [
+        "CpE 304"
+      ],
+      "units": 4,
+      "year_level": 3
+    },
+    "CpE 313": {
+      "category": "Rigid",
+      "co-requisites": [],
+      "course_title": "Introduction to HDL",
+      "orig_sem": 9,
+      "pre-requisites": [
+        "CpE 203",
+        "CpE 302"
+      ],
+      "units": 1,
+      "year_level": 3
+    },
+    "CpE 314": {
+      "category": "Rigid",
+      "co-requisites": [],
+      "course_title": "Emerging Technologies in CpE",
+      "orig_sem": 9,
+      "pre-requisites": [
+        "3rd Year Standing"
+      ],
+      "units": 3,
+      "year_level": 3
+    },
+    "CpE 315": {
+      "category": "Rigid",
+      "co-requisites": [],
+      "course_title": "Computer Engineering Drafting and Design",
+      "orig_sem": 9,
+      "pre-requisites": [
+        "ECE 405"
+      ],
+      "units": 1,
+      "year_level": 3
+    },
+    "CpE 401": {
+      "category": "Rigid",
+      "co-requisites": [],
+      "course_title": "Operating Systems",
+      "orig_sem": 10,
+      "pre-requisites": [
+        "CpE 303"
+      ],
+      "units": 3,
+      "year_level": 4
+    },
+    "CpE 402": {
+      "category": "Rigid",
+      "co-requisites": [],
+      "course_title": "Embedded Systems",
+      "orig_sem": 10,
+      "pre-requisites": [
+        "CpE 308"
+      ],
+      "units": 4,
+      "year_level": 4
+    },
+    "CpE 403": {
+      "category": "Rigid",
+      "co-requisites": [],
+      "course_title": "Seminars and Fieldtrips",
+      "orig_sem": 10,
+      "pre-requisites": [
+        "4th Year Standing"
+      ],
+      "units": 2,
+      "year_level": 4
+    },
+    "CpE 404": {
+      "category": "Rigid",
+      "co-requisites": [],
+      "course_title": "CpE Practice and Design 1",
+      "orig_sem": 10,
+      "pre-requisites": [
+        "ENGG 116",
+        "CpE 308"
+      ],
+      "units": 1,
+      "year_level": 4
+    },
+    "CpE 405": {
+      "category": "Rigid",
+      "co-requisites": [],
+      "course_title": "CpE Practice and Design 2",
+      "orig_sem": 11,
+      "pre-requisites": [
+        "CpE 404"
+      ],
+      "units": 2,
+      "year_level": 4
+    },
+    "CpE 406": {
+      "category": "Rigid",
+      "co-requisites": [],
+      "course_title": "Comprehensive Examination for CpE",
+      "orig_sem": 11,
+      "pre-requisites": [
+        "Graduating"
+      ],
+      "units": 2,
+      "year_level": 4
+    },
+    "ECE 405": {
+      "category": "Rigid",
+      "co-requisites": [],
+      "course_title": "Electronic Circuits: Devices and Analysis",
+      "orig_sem": 5,
+      "pre-requisites": [
+        "EE 212"
+      ],
+      "units": 4,
+      "year_level": 2
+    },
+    "EE 212": {
+      "category": "Rigid",
+      "co-requisites": [],
+      "course_title": "Fundamentals of Electrical Circuits",
+      "orig_sem": 4,
+      "pre-requisites": [
+        "PHYS 103"
+      ],
+      "units": 4,
+      "year_level": 2
+    },
+    "ENGG 101": {
+      "category": "Rigid",
+      "co-requisites": [],
+      "course_title": "Introduction to Engineering",
+      "orig_sem": 1,
+      "pre-requisites": [],
+      "units": 1,
+      "year_level": 1
+    },
+    "ENGG 102": {
+      "category": "Rigid",
+      "co-requisites": [],
+      "course_title": "Engineering Drawing",
+      "orig_sem": 2,
+      "pre-requisites": [],
+      "units": 1,
+      "year_level": 1
+    },
+    "ENGG 103": {
+      "category": "Rigid",
+      "co-requisites": [],
+      "course_title": "Computer-Aided Design",
+      "orig_sem": 4,
+      "pre-requisites": [
+        "ENGG 102"
+      ],
+      "units": 1,
+      "year_level": 2
+    },
+    "ENGG 104": {
+      "category": "Rigid",
+      "co-requisites": [],
+      "course_title": "Engineering Economics",
+      "orig_sem": 4,
+      "pre-requisites": [
+        "MATH 102"
+      ],
+      "units": 3,
+      "year_level": 2
+    },
+    "ENGG 105": {
+      "category": "Flexible",
+      "co-requisites": [],
+      "course_title": "Technopreneurship",
+      "orig_sem": 10,
+      "pre-requisites": [
+        "4th Year Standing"
+      ],
+      "units": 3,
+      "year_level": 4
+    },
+    "ENGG 106": {
+      "category": "Rigid",
+      "co-requisites": [],
+      "course_title": "Engineering Management",
+      "orig_sem": 10,
+      "pre-requisites": [
+        "4th Year Standing"
+      ],
+      "units": 2,
+      "year_level": 4
+    },
+    "ENGG 114": {
+      "category": "Rigid",
+      "co-requisites": [],
+      "course_title": "Basic Occupational Safety and Health",
+      "orig_sem": 5,
+      "pre-requisites": [],
+      "units": 3,
+      "year_level": 2
+    },
+    "ENGG 116": {
+      "category": "Rigid",
+      "co-requisites": [],
+      "course_title": "Methods of Research",
+      "orig_sem": 7,
+      "pre-requisites": [
+        "AI 102",
+        "3rd Year Standing"
+      ],
+      "units": 3,
+      "year_level": 3
+    },
+    "ENGG 117": {
+      "category": "Flexible",
+      "co-requisites": [],
+      "course_title": "OJT/Internship (320 hrs)",
+      "orig_sem": 11,
+      "pre-requisites": [
+        "4th Year Standing"
+      ],
+      "units": 4,
+      "year_level": 4
+    },
+    "Elective Course 1": {
+      "category": "Rigid",
+      "co-requisites": [],
+      "course_title": "Elective Course 1",
+      "orig_sem": 5,
+      "pre-requisites": [
+        "2nd Year Standing"
+      ],
+      "units": 3,
+      "year_level": 2
+    },
+    "Elective Course 2": {
+      "category": "Rigid",
+      "co-requisites": [],
+      "course_title": "Elective Course 2",
+      "orig_sem": 7,
+      "pre-requisites": [
+        "CpEE 401"
+      ],
+      "units": 3,
+      "year_level": 3
+    },
+    "Elective Course 3": {
+      "category": "Rigid",
+      "co-requisites": [],
+      "course_title": "Elective Course 3",
+      "orig_sem": 10,
+      "pre-requisites": [
+        "CpEE 402"
+      ],
+      "units": 3,
+      "year_level": 4
+    },
+    "GEd 101": {
+      "category": "Rigid",
+      "co-requisites": [],
+      "course_title": "Understanding the Self",
+      "orig_sem": 2,
+      "pre-requisites": [],
+      "units": 3,
+      "year_level": 1
+    },
+    "GEd 102": {
+      "category": "Rigid",
+      "co-requisites": [],
+      "course_title": "Mathematics in the Modern World",
+      "orig_sem": 2,
+      "pre-requisites": [],
+      "units": 3,
+      "year_level": 1
+    },
+    "GEd 103": {
+      "category": "Rigid",
+      "co-requisites": [],
+      "course_title": "Life and Works of Rizal",
+      "orig_sem": 3,
+      "pre-requisites": [],
+      "units": 3,
+      "year_level": 1
+    },
+    "GEd 104": {
+      "category": "Rigid",
+      "co-requisites": [],
+      "course_title": "The Contemporary World",
+      "orig_sem": 1,
+      "pre-requisites": [],
+      "units": 3,
+      "year_level": 1
+    },
+    "GEd 105": {
+      "category": "Rigid",
+      "co-requisites": [],
+      "course_title": "Readings in Philippines History",
+      "orig_sem": 1,
+      "pre-requisites": [],
+      "units": 3,
+      "year_level": 1
+    },
+    "GEd 106": {
+      "category": "Rigid",
+      "co-requisites": [],
+      "course_title": "Purposive Communication",
+      "orig_sem": 2,
+      "pre-requisites": [],
+      "units": 3,
+      "year_level": 1
+    },
+    "GEd 107": {
+      "category": "Rigid",
+      "co-requisites": [],
+      "course_title": "Ethics",
+      "orig_sem": 3,
+      "pre-requisites": [],
+      "units": 3,
+      "year_level": 1
+    },
+    "GEd 108": {
+      "category": "Rigid",
+      "co-requisites": [],
+      "course_title": "Art Appreciation",
+      "orig_sem": 1,
+      "pre-requisites": [],
+      "units": 3,
+      "year_level": 1
+    },
+    "GEd 109": {
+      "category": "Rigid",
+      "co-requisites": [],
+      "course_title": "Science, Technology and Society",
+      "orig_sem": 2,
+      "pre-requisites": [],
+      "units": 3,
+      "year_level": 1
+    },
+    "GEdE 101": {
+      "category": "Rigid",
+      "co-requisites": [],
+      "course_title": "The Entrepreneurial Mind",
+      "orig_sem": 4,
+      "pre-requisites": [],
+      "units": 3,
+      "year_level": 2
+    },
+    "MATH 101": {
+      "category": "Bottleneck",
+      "co-requisites": [],
+      "course_title": "Differential Calculus",
+      "orig_sem": 1,
+      "pre-requisites": [],
+      "units": 4,
+      "year_level": 1
+    },
+    "MATH 102": {
+      "category": "Bottleneck",
+      "co-requisites": [],
+      "course_title": "Integral Calculus",
+      "orig_sem": 2,
+      "pre-requisites": [
+        "MATH 101"
+      ],
+      "units": 4,
+      "year_level": 1
+    },
+    "MATH 103": {
+      "category": "Bottleneck",
+      "co-requisites": [],
+      "course_title": "Differential Equations",
+      "orig_sem": 4,
+      "pre-requisites": [
+        "MATH 102"
+      ],
+      "units": 3,
+      "year_level": 2
+    },
+    "MATH 104": {
+      "category": "Rigid",
+      "co-requisites": [],
+      "course_title": "Numerical Methods",
+      "orig_sem": 5,
+      "pre-requisites": [
+        "MATH 103"
+      ],
+      "units": 3,
+      "year_level": 2
+    },
+    "NSTP 111": {
+      "category": "Rigid",
+      "co-requisites": [],
+      "course_title": "National Service Training Program 1",
+      "orig_sem": 1,
+      "pre-requisites": [],
+      "units": 3,
+      "year_level": 1
+    },
+    "NSTP 121": {
+      "category": "Rigid",
+      "co-requisites": [],
+      "course_title": "National Service Training Program 2",
+      "orig_sem": 2,
+      "pre-requisites": [
+        "NSTP 111"
+      ],
+      "units": 3,
+      "year_level": 1
+    },
+    "PATHFit 1": {
+      "category": "Rigid",
+      "co-requisites": [],
+      "course_title": "Movement Competency Training",
+      "orig_sem": 1,
+      "pre-requisites": [],
+      "units": 2,
+      "year_level": 1
+    },
+    "PATHFit 2": {
+      "category": "Rigid",
+      "co-requisites": [],
+      "course_title": "Exercise-based Fitness Activities",
+      "orig_sem": 2,
+      "pre-requisites": [
+        "PATHFit 1"
+      ],
+      "units": 2,
+      "year_level": 1
+    },
+    "PATHFit 3": {
+      "category": "Rigid",
+      "co-requisites": [],
+      "course_title": "Choice of dance, sports, Martial Arts, etc 1",
+      "orig_sem": 4,
+      "pre-requisites": [
+        "PATHFit 1",
+        "PATHFit 2"
+      ],
+      "units": 2,
+      "year_level": 2
+    },
+    "PATHFit 4": {
+      "category": "Rigid",
+      "co-requisites": [],
+      "course_title": "Choice of Dance, Sports, etc 2",
+      "orig_sem": 5,
+      "pre-requisites": [
+        "PATHFit 1",
+        "PATHFit 2"
+      ],
+      "units": 2,
+      "year_level": 2
+    },
+    "PHYS 102": {
+      "category": "Bottleneck",
+      "co-requisites": [
+        "MATH 102"
+      ],
+      "course_title": "Physics for Engineers 1",
+      "orig_sem": 2,
+      "pre-requisites": [
+        "MATH 101"
+      ],
+      "units": 4,
+      "year_level": 1
+    },
+    "PHYS 103": {
+      "category": "Bottleneck",
+      "co-requisites": [],
+      "course_title": "Physics for Engineers 2",
+      "orig_sem": 3,
+      "pre-requisites": [
+        "PHYS 102",
+        "MATH 102"
+      ],
+      "units": 3,
+      "year_level": 1
+    }
+  },
+  "max_units_by_semester_index": [
+    24,
+    26,
+    9,
+    27,
+    23,
+    9,
+    21,
+    23,
+    5,
+    19,
+    21,
+    9,
+    21,
+    23,
+    9,
+    21,
+    23,
+    9
+  ],
+  "metadata": {
+    "curriculum_version_label": "static-export-v1",
+    "program_slug": "bscpe_batstateu",
+    "source_pdf_sha256": null
+  },
+  "prereq_aliases": {
+    "CpEE 401": [
+      "Elective Course 1"
+    ],
+    "CpEE 402": [
+      "Elective Course 2"
+    ],
+    "CpEE 403": [
+      "Elective Course 3"
+    ]
+  },
+  "schema_version": 1,
+  "year_standing_rules": {
+    "2nd Year Standing": 1,
+    "3rd Year Standing": 2,
+    "4th Year Standing": 3,
+    "Graduating": 3
+  }
+}
