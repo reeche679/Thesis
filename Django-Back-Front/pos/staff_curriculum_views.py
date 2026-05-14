@@ -1,14 +1,17 @@
 """
-Phase 5 — staff-only curriculum PDF upload and draft extraction (Django User auth).
+Phase 5–6 — staff-only curriculum PDF upload, draft extraction, analyze, review APIs (Django User auth).
 """
 
 from __future__ import annotations
 
 import hashlib
+import json
 import tempfile
+import uuid
 from pathlib import Path
 
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import UploadedFile
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render
@@ -16,9 +19,13 @@ from django.utils import timezone
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_http_methods, require_POST
 
-from .curriculum_pdf_extract import extract_curriculum_rows_from_pdf
-from .models import CurriculumVersion, Program
-from .permissions import user_can_manage_program_curriculum
+from pos.admin import validate_approved_bundle
+from pos.curriculum_draft_analyze import analyze_draft_json
+from pos.curriculum_draft_to_approved import draft_to_approved_json
+from pos.curriculum_pdf_extract import _canonical_course_code, extract_curriculum_rows_from_pdf
+from pos.models import CurriculumVersion, Program
+from pos.permissions import user_can_manage_program_curriculum
+from pos.staff_auth_views import user_may_use_staff_curriculum_portal
 
 MAX_PDF_BYTES = 25 * 1024 * 1024
 
@@ -31,8 +38,87 @@ def _programs_for_staff(user) -> list[Program]:
     )
 
 
+def _assign_draft_row_ids(rows: list) -> None:
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        if not str(r.get("draft_row_id") or "").strip():
+            r["draft_row_id"] = str(uuid.uuid4())
+
+
+def _validate_extracted_rows(rows: list) -> None:
+    if not isinstance(rows, list):
+        raise ValidationError("extracted_rows must be a list.")
+    seen: set[str] = set()
+    for i, r in enumerate(rows):
+        if not isinstance(r, dict):
+            raise ValidationError(f"extracted_rows[{i}] must be an object.")
+        code = str(r.get("code") or "").strip()
+        if not code:
+            raise ValidationError(f"extracted_rows[{i}].code is required.")
+        canon = _canonical_course_code(code)
+        if canon in seen:
+            raise ValidationError(f"Duplicate course code: {canon}")
+        seen.add(canon)
+        rid = str(r.get("draft_row_id") or "").strip()
+        if not rid:
+            raise ValidationError(f"extracted_rows[{i}].draft_row_id is required.")
+        for key in ("units", "year_level", "orig_sem", "orig_sem_override"):
+            if key not in r or r[key] in (None, ""):
+                continue
+            if key == "units":
+                try:
+                    float(r[key])
+                except (TypeError, ValueError):
+                    raise ValidationError(f"extracted_rows[{i}].{key} must be numeric.") from None
+            else:
+                try:
+                    int(r[key])
+                except (TypeError, ValueError):
+                    raise ValidationError(f"extracted_rows[{i}].{key} must be an integer.") from None
+
+
+def _merge_draft_json(cv: CurriculumVersion, body: dict) -> dict:
+    dj = cv.draft_json if isinstance(cv.draft_json, dict) else {}
+    dj = dict(dj)
+    rows = body.get("extracted_rows")
+    if rows is not None:
+        if not isinstance(rows, list):
+            raise ValidationError("extracted_rows must be a list.")
+        _assign_draft_row_ids(rows)
+        _validate_extracted_rows(rows)
+        dj["extracted_rows"] = rows
+    if "warnings" in body and isinstance(body["warnings"], list):
+        dj["warnings"] = body["warnings"]
+    if "extraction_meta" in body and isinstance(body["extraction_meta"], dict):
+        dj["extraction_meta"] = body["extraction_meta"]
+    if "suggested_graph" in body:
+        dj["suggested_graph"] = body["suggested_graph"]
+    return dj
+
+
+def _draft_json_response(cv: CurriculumVersion) -> dict:
+    dj = cv.draft_json if isinstance(cv.draft_json, dict) else {}
+    rows = dj.get("extracted_rows") or []
+    return {
+        "ok": True,
+        "curriculum_version_id": cv.pk,
+        "program_slug": cv.program.slug,
+        "version_label": cv.version_label,
+        "status": cv.status,
+        "phase": dj.get("phase"),
+        "source_pdf_sha256": getattr(cv, "source_pdf_sha256", "") or "",
+        "rows": rows,
+        "extracted_rows": rows,
+        "warnings": dj.get("warnings") or [],
+        "extraction_meta": dj.get("extraction_meta") or {},
+        "suggested_graph": dj.get("suggested_graph"),
+        "draft_analysis": dj.get("draft_analysis"),
+    }
+
+
 @ensure_csrf_cookie
-@login_required(login_url="/admin/login/")
+@login_required
 @require_http_methods(["GET"])
 def staff_curriculum_upload_page(request):
     programs = _programs_for_staff(request.user)
@@ -45,9 +131,36 @@ def staff_curriculum_upload_page(request):
     )
 
 
-@login_required(login_url="/admin/login/")
+@ensure_csrf_cookie
+@login_required
+@require_http_methods(["GET"])
+def staff_curriculum_review_page(request, pk: int):
+    if not user_may_use_staff_curriculum_portal(request.user):
+        return render(request, "pos/staff_curriculum_review.html", {"forbidden": True, "cv_id": pk})
+    cv = get_object_or_404(CurriculumVersion.objects.select_related("program"), pk=pk)
+    if not user_can_manage_program_curriculum(request.user, cv.program):
+        return render(request, "pos/staff_curriculum_review.html", {"forbidden": True, "cv_id": pk})
+    if cv.status != CurriculumVersion.STATUS_DRAFT:
+        return render(request, "pos/staff_curriculum_review.html", {"not_draft": True, "cv_id": pk})
+    return render(
+        request,
+        "pos/staff_curriculum_review.html",
+        {
+            "forbidden": False,
+            "not_draft": False,
+            "cv_id": pk,
+            "program_slug": cv.program.slug,
+            "version_label": cv.version_label,
+        },
+    )
+
+
 @require_POST
 def staff_api_upload_curriculum_pdf(request):
+    if not request.user.is_authenticated:
+        return JsonResponse({"ok": False, "error": "Not authenticated"}, status=401)
+    if not user_may_use_staff_curriculum_portal(request.user):
+        return JsonResponse({"ok": False, "error": "Curriculum staff portal only."}, status=403)
     programs = _programs_for_staff(request.user)
     if not programs and not getattr(request.user, "is_superuser", False):
         return JsonResponse(
@@ -102,6 +215,12 @@ def staff_api_upload_curriculum_pdf(request):
             except OSError:
                 pass
 
+    rows = list((draft_body or {}).get("extracted_rows") or [])
+    _assign_draft_row_ids(rows)
+    if isinstance(draft_body, dict):
+        draft_body["extracted_rows"] = rows
+    draft_body["draft_analysis"] = analyze_draft_json(draft_body)
+
     f.seek(0)
     cv = CurriculumVersion(
         program=program,
@@ -122,34 +241,97 @@ def staff_api_upload_curriculum_pdf(request):
             "version_label": cv.version_label,
             "status": cv.status,
             "source_pdf_sha256": digest,
-            "row_count": len((draft_body or {}).get("extracted_rows") or []),
+            "row_count": len(rows),
             "warnings": (draft_body or {}).get("warnings") or [],
             "draft_url": f"/staff/api/curriculum/version/{cv.pk}/draft/",
+            "review_url": f"/staff/curriculum/version/{cv.pk}/review/",
         }
     )
 
 
-@login_required(login_url="/admin/login/")
-@require_http_methods(["GET"])
-def staff_api_curriculum_draft(request, pk: int):
+def _require_cv_draft_staff(request, pk: int) -> tuple[CurriculumVersion | None, JsonResponse | None]:
+    if not request.user.is_authenticated:
+        return None, JsonResponse({"ok": False, "error": "Not authenticated"}, status=401)
+    if not user_may_use_staff_curriculum_portal(request.user):
+        return None, JsonResponse({"ok": False, "error": "Curriculum staff portal only."}, status=403)
     cv = get_object_or_404(CurriculumVersion.objects.select_related("program"), pk=pk)
     if not user_can_manage_program_curriculum(request.user, cv.program):
-        return JsonResponse({"ok": False, "error": "Not allowed for this program."}, status=403)
+        return None, JsonResponse({"ok": False, "error": "Not allowed for this program."}, status=403)
     if cv.status != CurriculumVersion.STATUS_DRAFT:
-        return JsonResponse({"ok": False, "error": "Version is not a draft (read-only policy for Phase 5)."}, status=400)
+        return None, JsonResponse({"ok": False, "error": "Version is not a draft."}, status=400)
+    return cv, None
+
+
+@require_http_methods(["GET", "PATCH"])
+def staff_api_curriculum_draft(request, pk: int):
+    cv, err = _require_cv_draft_staff(request, pk)
+    if err:
+        return err
+    assert cv is not None
+
+    if request.method == "GET":
+        return JsonResponse(_draft_json_response(cv))
+
+    try:
+        body = json.loads(request.body.decode("utf-8") or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"ok": False, "error": "Invalid JSON body."}, status=400)
+    if not isinstance(body, dict):
+        return JsonResponse({"ok": False, "error": "Body must be a JSON object."}, status=400)
+
+    try:
+        merged = _merge_draft_json(cv, body)
+    except ValidationError as e:
+        return JsonResponse({"ok": False, "error": str(e)}, status=400)
+
+    merged["draft_analysis"] = analyze_draft_json(merged)
+    cv.draft_json = merged
+    cv.save(update_fields=["draft_json", "updated_at"])
+    return JsonResponse({"ok": True, **_draft_json_response(cv)})
+
+
+@require_POST
+def staff_api_curriculum_analyze(request, pk: int):
+    cv, err = _require_cv_draft_staff(request, pk)
+    if err:
+        return err
+    assert cv is not None
 
     dj = cv.draft_json if isinstance(cv.draft_json, dict) else {}
+    merged = dict(dj)
+    merged["draft_analysis"] = analyze_draft_json(merged)
+    cv.draft_json = merged
+    cv.save(update_fields=["draft_json", "updated_at"])
+    return JsonResponse({"ok": True, **_draft_json_response(cv)})
+
+
+@require_POST
+def staff_api_curriculum_approve(request, pk: int):
+    cv, err = _require_cv_draft_staff(request, pk)
+    if err:
+        return err
+    assert cv is not None
+
+    dj = cv.draft_json if isinstance(cv.draft_json, dict) else {}
+    try:
+        approved = draft_to_approved_json(
+            dj,
+            program_slug=cv.program.slug,
+            curriculum_version_label=cv.version_label or f"version-{cv.pk}",
+            source_pdf_sha256=(cv.source_pdf_sha256 or "").strip() or None,
+        )
+        validate_approved_bundle(approved)
+    except ValidationError as e:
+        return JsonResponse({"ok": False, "error": str(e)}, status=400)
+
+    cv.approved_json = approved
+    cv.status = CurriculumVersion.STATUS_APPROVED
+    cv.save(update_fields=["approved_json", "status", "updated_at"])
     return JsonResponse(
         {
             "ok": True,
             "curriculum_version_id": cv.pk,
-            "program_slug": cv.program.slug,
-            "version_label": cv.version_label,
             "status": cv.status,
-            "source_pdf_sha256": getattr(cv, "source_pdf_sha256", "") or "",
-            "rows": dj.get("extracted_rows") or [],
-            "warnings": dj.get("warnings") or [],
-            "extraction_meta": dj.get("extraction_meta") or {},
-            "suggested_graph": dj.get("suggested_graph"),
+            "course_count": len((approved.get("courses") or {})),
         }
     )

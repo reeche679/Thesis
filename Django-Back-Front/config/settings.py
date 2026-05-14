@@ -159,8 +159,8 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# Staff curriculum upload (Phase 5) uses @login_required; managers log in via Django admin.
-LOGIN_URL = "/admin/login/"
+# Staff curriculum tools (Django User); default @login_required redirect.
+LOGIN_URL = "/staff/login/"
 
 # User-uploaded files (e.g. student photos)
 MEDIA_URL = "/media/"

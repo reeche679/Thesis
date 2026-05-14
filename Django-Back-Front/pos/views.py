@@ -19,7 +19,7 @@ from django.views.decorators.csrf import ensure_csrf_cookie, csrf_exempt
 
 from django.utils import timezone
 from accounts.models import Student, StudentGrade, POSRecord, SignatoryOption, SignatoryPreference
-from .models import CurriculumVersion
+from .models import CurriculumVersion, Program
 from .solver_bridge import generate_pos_via_solver, validate_pos_via_solver, get_solver_metadata
 
 SR_CODE_REGEX = re.compile(r'^\d{2}-\d{5}$')
@@ -126,13 +126,27 @@ def get_logged_in_student(request):
         return None
 
 
+def _curriculum_version_id_for_student(student) -> int | None:
+    """Prefer explicit selection; else program default approved version when configured."""
+    if student is None:
+        return None
+    sel = getattr(student, "selected_curriculum_version_id", None)
+    if sel:
+        return int(sel)
+    pid = getattr(student, "program_id", None)
+    if not pid:
+        return None
+    dcv = Program.objects.filter(pk=pid).values_list("default_curriculum_version_id", flat=True).first()
+    return int(dcv) if dcv else None
+
+
 def _attach_student_curriculum_to_payload(request, payload: dict) -> dict:
     """Add curriculum_version_id from the logged-in student when the payload omits it."""
     p = dict(payload or {})
     if p.get("curriculum_version_id") is not None:
         return p
     student = get_logged_in_student(request)
-    vid = getattr(student, "selected_curriculum_version_id", None) if student is not None else None
+    vid = _curriculum_version_id_for_student(student)
     if vid:
         p["curriculum_version_id"] = int(vid)
     return p
@@ -140,7 +154,7 @@ def _attach_student_curriculum_to_payload(request, payload: dict) -> dict:
 
 def _solver_meta_for_request(request) -> dict:
     student = get_logged_in_student(request)
-    vid = int(student.selected_curriculum_version_id) if student and student.selected_curriculum_version_id else None
+    vid = _curriculum_version_id_for_student(student)
     return get_solver_metadata(vid) or {}
 
 
@@ -165,9 +179,11 @@ def _payload_with_curriculum_audit(payload: dict | None, request) -> dict:
         except (TypeError, ValueError):
             vid = None
             base.pop("curriculum_version_id", None)
-    if vid is None and student is not None and getattr(student, "selected_curriculum_version_id", None):
-        vid = int(student.selected_curriculum_version_id)
-        base["curriculum_version_id"] = vid
+    if vid is None and student is not None:
+        c_vid = _curriculum_version_id_for_student(student)
+        if c_vid is not None:
+            vid = c_vid
+            base["curriculum_version_id"] = vid
 
     if vid is not None:
         cv = (

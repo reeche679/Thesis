@@ -28,6 +28,14 @@ class Program(models.Model):
         related_name="managed_curriculum_programs",
         help_text="Staff users who may create and edit draft curriculum versions for this program.",
     )
+    default_curriculum_version = models.ForeignKey(
+        "CurriculumVersion",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="programs_as_default_curriculum",
+        help_text="When set, solver/student flows may use this approved version if none is selected.",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -52,6 +60,24 @@ class Program(models.Model):
         if not user.has_perm("pos.manage_curriculum_versions"):
             return False
         return self.curriculum_managers.filter(pk=user.pk).exists()
+
+    def clean(self) -> None:
+        super().clean()
+        dcv = self.default_curriculum_version
+        if dcv is None:
+            return
+        if dcv.status != CurriculumVersion.STATUS_APPROVED:
+            raise ValidationError(
+                {
+                    "default_curriculum_version": "Default curriculum must be an approved version.",
+                }
+            )
+        if self.pk is not None and dcv.program_id != self.pk:
+            raise ValidationError(
+                {
+                    "default_curriculum_version": "Default curriculum must belong to this program.",
+                }
+            )
 
 
 class CurriculumVersion(models.Model):

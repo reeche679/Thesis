@@ -37,10 +37,14 @@ from .views import (
     feasible_add_courses_for_section,
     save_tuned_pos,
 )
+from .staff_auth_views import staff_login_view, staff_logout_view
 from .staff_curriculum_views import (
     staff_curriculum_upload_page,
+    staff_curriculum_review_page,
     staff_api_upload_curriculum_pdf,
     staff_api_curriculum_draft,
+    staff_api_curriculum_analyze,
+    staff_api_curriculum_approve,
 )
 
 urlpatterns = [
@@ -56,7 +60,14 @@ urlpatterns = [
     path("api/curriculum/me/", api_curriculum_me, name="api_curriculum_me"),
     path("api/curriculum/set-active/", api_curriculum_set_active, name="api_curriculum_set_active"),
 
+    path("staff/login/", staff_login_view, name="staff_login"),
+    path("staff/logout/", staff_logout_view, name="staff_logout"),
     path("staff/curriculum/upload/", staff_curriculum_upload_page, name="staff_curriculum_upload"),
+    path(
+        "staff/curriculum/version/<int:pk>/review/",
+        staff_curriculum_review_page,
+        name="staff_curriculum_review",
+    ),
     path(
         "staff/curriculum/api/upload-pdf/",
         staff_api_upload_curriculum_pdf,
@@ -66,6 +77,16 @@ urlpatterns = [
         "staff/api/curriculum/version/<int:pk>/draft/",
         staff_api_curriculum_draft,
         name="staff_api_curriculum_draft",
+    ),
+    path(
+        "staff/api/curriculum/version/<int:pk>/analyze/",
+        staff_api_curriculum_analyze,
+        name="staff_api_curriculum_analyze",
+    ),
+    path(
+        "staff/api/curriculum/version/<int:pk>/approve/",
+        staff_api_curriculum_approve,
+        name="staff_api_curriculum_approve",
     ),
 
     path("generate/", pos_generate, name="pos_generate"),

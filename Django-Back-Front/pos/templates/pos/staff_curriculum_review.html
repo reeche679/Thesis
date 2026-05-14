@@ -1,0 +1,214 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Curriculum draft review (staff)</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="icon" type="image/png" href="{% static 'img/BSU_Logo.png' %}">
+    <style>
+        body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: #f5f2f2; min-height: 100vh; margin: 0; }
+        .staff-topbar { background: linear-gradient(90deg, #a0161c, #8b1218); color: #fff; padding: 0.65rem 1.25rem; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.75rem; }
+        .staff-topbar a { color: #fff; text-decoration: underline; font-size: 0.9rem; }
+        .staff-wrap { max-width: 1200px; margin: 0 auto; padding: 1.25rem 1rem 2.5rem; }
+        .err { color: #a00; }
+        .ok { color: #060; }
+        table { font-size: 0.85rem; }
+        textarea.raw-json { font-family: ui-monospace, monospace; font-size: 0.75rem; min-height: 4rem; }
+    </style>
+</head>
+<body>
+    <header class="staff-topbar">
+        <span><strong>Curriculum review</strong> — version {{ cv_id }}</span>
+        <span>
+            <a href="{% url 'staff_curriculum_upload' %}">Upload</a>
+            · <a href="{% url 'staff_logout' %}">Sign out</a>
+        </span>
+    </header>
+    <div class="staff-wrap">
+        {% if forbidden %}
+            <p class="err">You are not allowed to view this draft. <a href="{% url 'staff_login' %}?next={{ request.path|urlencode }}">Staff sign-in</a></p>
+        {% elif not_draft %}
+            <p class="err">This curriculum version is not a draft (open in admin or create a new version).</p>
+        {% else %}
+            <p class="text-muted small mb-2">Program <strong>{{ program_slug }}</strong> — {{ version_label }}</p>
+            <div class="d-flex flex-wrap gap-2 mb-3">
+                <button type="button" class="btn btn-primary btn-sm" id="btn-save">Save draft</button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" id="btn-analyze">Re-analyze</button>
+                <button type="button" class="btn btn-success btn-sm" id="btn-approve">Approve</button>
+            </div>
+            <p id="status" class="small"></p>
+            <div class="table-responsive bg-white border rounded shadow-sm">
+                <table class="table table-sm table-striped mb-0" id="grid">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Code</th>
+                            <th>Title</th>
+                            <th>Units</th>
+                            <th>orig_sem</th>
+                            <th>year_level</th>
+                            <th>Prereq (raw)</th>
+                            <th>Coreq (raw)</th>
+                            <th>Analyzer</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        {% endif %}
+    </div>
+    {% if not forbidden and not not_draft %}
+    <script>
+    const CV_ID = {{ cv_id }};
+    function getCookie(name) {
+        const v = document.cookie.match('(^|;) ?' + name + '=([^;]*)(;|$)');
+        return v ? decodeURIComponent(v[2]) : '';
+    }
+    const draftUrl = '/staff/api/curriculum/version/' + CV_ID + '/draft/';
+    const analyzeUrl = '/staff/api/curriculum/version/' + CV_ID + '/analyze/';
+    const approveUrl = '/staff/api/curriculum/version/' + CV_ID + '/approve/';
+    const statusEl = document.getElementById('status');
+    const tbody = document.querySelector('#grid tbody');
+
+    function analysisCell(row, analysisById) {
+        const rid = row.draft_row_id;
+        const a = rid && analysisById ? analysisById[rid] : null;
+        if (!a) return '—';
+        const u = (a.unresolved && a.unresolved.length) ? ('<span class="err">unresolved: ' + a.unresolved.join('; ') + '</span>') : '';
+        return 'suggested sem ' + (a.orig_sem_suggested || '?') + (u ? '<br>' + u : '');
+    }
+
+    function render(data) {
+        const rows = data.extracted_rows || data.rows || [];
+        const analysis = (data.draft_analysis && data.draft_analysis.rows) || {};
+        tbody.innerHTML = '';
+        rows.forEach(function (row, idx) {
+            const tr = document.createElement('tr');
+            tr.dataset.index = String(idx);
+            tr.innerHTML =
+                '<td><input class="form-control form-control-sm code" type="text" value="' + escapeHtml(row.code || '') + '"></td>' +
+                '<td><input class="form-control form-control-sm title" type="text" value="' + escapeHtml(row.title || '') + '"></td>' +
+                '<td><input class="form-control form-control-sm units" type="text" value="' + escapeHtml(String(row.units != null ? row.units : '')) + '"></td>' +
+                '<td><input class="form-control form-control-sm orig_sem" type="number" min="1" step="1" value="' + escapeHtml(String(row.orig_sem_override != null ? row.orig_sem_override : (row.orig_sem != null ? row.orig_sem : ''))) + '" placeholder="auto" data-draft-row-id="' + escapeHtml(row.draft_row_id || '') + '"></td>' +
+                '<td><input class="form-control form-control-sm year_level" type="number" min="1" step="1" value="' + escapeHtml(String(row.year_level != null ? row.year_level : '1')) + '"></td>' +
+                '<td><textarea class="form-control raw-json">' + escapeHtml(row.raw_prerequisites || '') + '</textarea></td>' +
+                '<td><textarea class="form-control raw-json">' + escapeHtml(row.raw_corequisites || '') + '</textarea></td>' +
+                '<td class="small">' + analysisCell(row, analysis) + '</td>';
+            tr.querySelector('.orig_sem').dataset.draftRowId = row.draft_row_id || '';
+            tbody.appendChild(tr);
+        });
+    }
+
+    function escapeHtml(s) {
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function collectRows(originalRows) {
+        const byId = {};
+        (originalRows || []).forEach(function (r) { if (r.draft_row_id) byId[r.draft_row_id] = Object.assign({}, r); });
+        const out = [];
+        tbody.querySelectorAll('tr').forEach(function (tr) {
+            const code = tr.querySelector('.code').value.trim();
+            const title = tr.querySelector('.title').value.trim();
+            const units = tr.querySelector('.units').value.trim();
+            const origInput = tr.querySelector('.orig_sem').value.trim();
+            const yearLevel = tr.querySelector('.year_level').value.trim();
+            const rawPre = tr.querySelector('textarea').value;
+            const rawCo = tr.querySelectorAll('textarea')[1].value;
+            const draftRowId = tr.querySelector('.orig_sem').getAttribute('data-draft-row-id') || '';
+            const base = draftRowId && byId[draftRowId] ? Object.assign({}, byId[draftRowId]) : {};
+            base.code = code;
+            base.title = title;
+            base.units = units;
+            if (origInput === '') {
+                delete base.orig_sem;
+                delete base.orig_sem_override;
+            } else {
+                base.orig_sem_override = parseInt(origInput, 10);
+            }
+            base.year_level = yearLevel === '' ? 1 : parseInt(yearLevel, 10);
+            base.raw_prerequisites = rawPre;
+            base.raw_corequisites = rawCo;
+            if (draftRowId) base.draft_row_id = draftRowId;
+            else if (!base.draft_row_id) base.draft_row_id = '';
+            out.push(base);
+        });
+        return out;
+    }
+
+    let lastPayload = null;
+
+    async function loadDraft() {
+        statusEl.textContent = 'Loading…';
+        const r = await fetch(draftUrl, { credentials: 'same-origin' });
+        const data = await r.json().catch(function () { return {}; });
+        if (!r.ok || !data.ok) {
+            statusEl.innerHTML = '<span class="err">' + (data.error || ('HTTP ' + r.status)) + '</span>';
+            return;
+        }
+        lastPayload = data;
+        render(data);
+        statusEl.textContent = 'Loaded.';
+    }
+
+    document.getElementById('btn-save').addEventListener('click', async function () {
+        const rows = collectRows((lastPayload && (lastPayload.extracted_rows || lastPayload.rows)) || []);
+        statusEl.textContent = 'Saving…';
+        const r = await fetch(draftUrl, {
+            method: 'PATCH',
+            credentials: 'same-origin',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken'),
+            },
+            body: JSON.stringify({ extracted_rows: rows }),
+        });
+        const data = await r.json().catch(function () { return {}; });
+        if (!r.ok || !data.ok) {
+            statusEl.innerHTML = '<span class="err">' + (data.error || ('HTTP ' + r.status)) + '</span>';
+            return;
+        }
+        lastPayload = data;
+        render(data);
+        statusEl.innerHTML = '<span class="ok">Saved.</span>';
+    });
+
+    document.getElementById('btn-analyze').addEventListener('click', async function () {
+        statusEl.textContent = 'Analyzing…';
+        const r = await fetch(analyzeUrl, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'X-CSRFToken': getCookie('csrftoken') },
+        });
+        const data = await r.json().catch(function () { return {}; });
+        if (!r.ok || !data.ok) {
+            statusEl.innerHTML = '<span class="err">' + (data.error || ('HTTP ' + r.status)) + '</span>';
+            return;
+        }
+        lastPayload = data;
+        render(data);
+        statusEl.innerHTML = '<span class="ok">Analysis updated.</span>';
+    });
+
+    document.getElementById('btn-approve').addEventListener('click', async function () {
+        if (!confirm('Approve this draft? This will validate against the curriculum schema and mark the version approved.')) return;
+        statusEl.textContent = 'Approving…';
+        const r = await fetch(approveUrl, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'X-CSRFToken': getCookie('csrftoken') },
+        });
+        const data = await r.json().catch(function () { return {}; });
+        if (!r.ok || !data.ok) {
+            statusEl.innerHTML = '<span class="err">' + (data.error || ('HTTP ' + r.status)) + '</span>';
+            return;
+        }
+        statusEl.innerHTML = '<span class="ok">Approved (' + (data.course_count || 0) + ' courses). This page is read-only now; use admin for a new version.</span>';
+    });
+
+    loadDraft();
+    </script>
+    {% endif %}
+</body>
+</html>

@@ -7,6 +7,12 @@ from django.contrib import admin, messages
 from django.core.exceptions import ValidationError
 
 from .models import CurriculumVersion, Program
+
+
+class ProgramAdminForm(forms.ModelForm):
+    class Meta:
+        model = Program
+        fields = "__all__"
 from .permissions import user_can_manage_program_curriculum
 
 
@@ -67,7 +73,8 @@ class CurriculumVersionInline(admin.TabularInline):
 
 @admin.register(Program)
 class ProgramAdmin(admin.ModelAdmin):
-    list_display = ("slug", "name", "is_active", "updated_at")
+    form = ProgramAdminForm
+    list_display = ("slug", "name", "is_active", "default_curriculum_version", "updated_at")
     list_filter = ("is_active",)
     search_fields = ("slug", "name")
     filter_horizontal = ("curriculum_managers",)
@@ -106,6 +113,18 @@ class ProgramAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return request.user.is_superuser
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "default_curriculum_version":
+            obj = kwargs.get("obj")
+            if obj is not None and getattr(obj, "pk", None):
+                kwargs["queryset"] = CurriculumVersion.objects.filter(
+                    program=obj,
+                    status=CurriculumVersion.STATUS_APPROVED,
+                ).order_by("-created_at")
+            else:
+                kwargs["queryset"] = CurriculumVersion.objects.none()
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 
 @admin.register(CurriculumVersion)
