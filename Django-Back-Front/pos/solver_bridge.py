@@ -246,6 +246,9 @@ def get_solver_metadata(curriculum_version_id: int | None = None) -> dict:
     curriculum_version_id:
       When set, loads courses / year_standing_rules / max_units_for_sem from that
       approved CurriculumVersion. Otherwise uses the static solver namespace (legacy).
+
+    Returned dict includes ``max_semester`` (planning horizon length) so callers can
+    clamp ``current_sem`` before invoking CP-SAT (short DB curricula vs long static grid).
     """
     if curriculum_version_id is not None:
         try:
@@ -262,6 +265,7 @@ def get_solver_metadata(curriculum_version_id: int | None = None) -> dict:
             if cv and isinstance(cv.approved_json, dict):
                 b = cv.approved_json
                 raw_caps = b.get("max_units_by_semester_index") or []
+                max_semester = len(raw_caps) if isinstance(raw_caps, list) and raw_caps else 0
 
                 def max_units_for_sem(sem_index: int) -> int:
                     if isinstance(sem_index, int) and 1 <= sem_index <= len(raw_caps):
@@ -273,6 +277,7 @@ def get_solver_metadata(curriculum_version_id: int | None = None) -> dict:
                     "year_standing_rules": b.get("year_standing_rules") or {},
                     "prereq_aliases": b.get("prereq_aliases") or {},
                     "max_units_for_sem": max_units_for_sem,
+                    "max_semester": int(max_semester),
                     "curriculum_version_id": int(curriculum_version_id),
                 }
         except (TypeError, ValueError, Exception):
@@ -283,9 +288,12 @@ def get_solver_metadata(curriculum_version_id: int | None = None) -> dict:
     year_standing_rules = ns.get("YEAR_STANDING_RULES") or {}
     u = ns.get("u")
     max_units_for_sem = None
+    max_semester = 0
     try:
         if u is not None and hasattr(u, "max_units_for_sem"):
             max_units_for_sem = u.max_units_for_sem
+        if u is not None and hasattr(u, "MAX_SEMESTER"):
+            max_semester = int(u.MAX_SEMESTER)
     except Exception:
         max_units_for_sem = None
 
@@ -293,6 +301,7 @@ def get_solver_metadata(curriculum_version_id: int | None = None) -> dict:
         "courses": courses,
         "year_standing_rules": year_standing_rules,
         "max_units_for_sem": max_units_for_sem,
+        "max_semester": max_semester,
         "prereq_aliases": ns.get("PREREQ_ALIASES") or {},
         "curriculum_version_id": None,
     }

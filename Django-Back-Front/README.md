@@ -104,3 +104,10 @@ If the **Curriculum managers** group is missing (empty auth tables), `bootstrap_
 - **Staff APIs:** `GET` / `PATCH` **`/staff/api/curriculum/version/<id>/draft/`**, **`POST …/analyze/`**, **`POST …/approve/`** (same auth rules as Phase 5). **`GET`** includes `draft_analysis` when present.
 - **Review UI:** **`/staff/curriculum/version/<id>/review/`** (linked from upload success as **`review_url`**) — minimal table + **Save** / **Re-analyze** / **Approve** via `fetch`.
 - **Program default:** Set **`Program.default_curriculum_version`** in Django admin (filtered to approved versions for that program). Validation enforces same program + approved status.
+
+### Generate POS (student UI curriculum source)
+
+- **When the student has a resolvable approved curriculum** (same rules as **`selected_curriculum_version`** / program default), the **Generate** and **Preview** PDF paths build semester tables from **`approved_json`**: courses grouped by **`orig_sem`** into UI section indices (`orig_sem - 1`). Headings use the same year/semester band labels as the legacy grid when indices fit [`pos/curriculum_section_labels.py`](Django-Back-Front/pos/curriculum_section_labels.py); longer programs use synthetic labels.
+- **Fallback:** If there is no program, no version, empty **`courses`**, or any course is missing a valid **`orig_sem`**, the UI uses the legacy static **`POS_CURRICULUM`** in [`pos/pos_pdf.py`](Django-Back-Front/pos/pos_pdf.py) (BSCpE reference). That static definition is **not removed**.
+- **Flexible “add course” picker:** BSCpE-only **`FLEXIBLE_SUBJECTS`** extras are disabled when the UI is in DB mode (v1); only curriculum rows and grades drive pickers.
+- **Grades and section indices** are stored per **`section_index`**. If a student **switches** active curriculum after entering grades, old indices may no longer line up with the new bundle—re-enter or clear grades as needed.

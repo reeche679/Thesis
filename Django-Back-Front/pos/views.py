@@ -58,6 +58,33 @@ def _dbg41755c(hypothesis_id: str, location: str, message: str, data: dict, run_
     # #endregion
 
 
+_DEBUG_488397_LOG_PATH = Path(__file__).resolve().parents[2] / "debug-488397.log"
+
+
+def _dbg488397(hypothesis_id: str, location: str, message: str, data: dict, run_id: str = "validate_pos"):
+    # #region agent log
+    try:
+        with _DEBUG_488397_LOG_PATH.open("a", encoding="utf-8") as f:
+            f.write(
+                json.dumps(
+                    {
+                        "sessionId": "488397",
+                        "runId": run_id,
+                        "hypothesisId": hypothesis_id,
+                        "location": location,
+                        "message": message,
+                        "data": data,
+                        "timestamp": int(__import__("time").time() * 1000),
+                    },
+                    ensure_ascii=True,
+                )
+                + "\n"
+            )
+    except Exception:
+        pass
+    # #endregion
+
+
 # #region feasible-move-speed cache (cross-request)
 # Module-level LRU cache to speed up exact feasibility checks for feasible move highlights.
 _FEASIBLE_DEST_CACHE_MAXSIZE = 4096
@@ -156,6 +183,28 @@ def _solver_meta_for_request(request) -> dict:
     student = get_logged_in_student(request)
     vid = _curriculum_version_id_for_student(student)
     return get_solver_metadata(vid) or {}
+
+
+def _clamp_solver_current_sem_to_horizon(current_sem: int, request) -> int:
+    """
+    CP-SAT uses IntVar domains [current_sem, MAX_SEMESTER]. The UI maps session
+    semester to ``section_index + 2`` using the same convention as the legacy
+    BSCpE grid; DB-backed curricula often have a shorter ``max_units_by_semester_index``
+    horizon. If ``current_sem`` exceeds that horizon, OR-Tools raises and Django returns 500.
+    """
+    try:
+        cs = int(current_sem)
+    except (TypeError, ValueError):
+        return 1
+    meta = _solver_meta_for_request(request) or {}
+    raw = meta.get("max_semester")
+    try:
+        mx = int(raw) if raw is not None else 0
+    except (TypeError, ValueError):
+        mx = 0
+    if mx < 1:
+        return max(1, cs)
+    return max(1, min(cs, mx))
 
 
 def _canonical_approved_json_sha256(approved_json: dict) -> str:
@@ -538,41 +587,8 @@ def _curriculum_for_irregular():
     return sections
 
 
-# Order matches POS_CURRICULUM: 0=1st Y 1st Sem, 1=1st Y 2nd Sem, 2=1st Y Midterm, 3=2nd Y 1st Sem, ...
-# Section index 0-11: 1st-4th year; 12-29: 5th-10th year (each year: First Sem, Second Sem, Midterm)
-_INDEX_TO_YEAR_SEM = [
-    ("1st Year", "First Semester"),
-    ("1st Year", "Second Semester"),
-    ("1st Year", "Midterm"),
-    ("2nd Year", "First Semester"),
-    ("2nd Year", "Second Semester"),
-    ("2nd Year", "Midterm"),
-    ("3rd Year", "First Semester"),
-    ("3rd Year", "Second Semester"),
-    ("3rd Year", "Midterm"),
-    ("4th Year", "First Semester"),
-    ("4th Year", "Second Semester"),
-    ("4th Year", "Midterm"),
-    ("5th Year", "First Semester"),
-    ("5th Year", "Second Semester"),
-    ("5th Year", "Midterm"),
-    ("6th Year", "First Semester"),
-    ("6th Year", "Second Semester"),
-    ("6th Year", "Midterm"),
-    ("7th Year", "First Semester"),
-    ("7th Year", "Second Semester"),
-    ("7th Year", "Midterm"),
-    ("8th Year", "First Semester"),
-    ("8th Year", "Second Semester"),
-    ("8th Year", "Midterm"),
-    ("9th Year", "First Semester"),
-    ("9th Year", "Second Semester"),
-    ("9th Year", "Midterm"),
-    ("10th Year", "First Semester"),
-    ("10th Year", "Second Semester"),
-    ("10th Year", "Midterm"),
-]
-_YEAR_SEM_TO_INDEX = {(yl, sem): i for i, (yl, sem) in enumerate(_INDEX_TO_YEAR_SEM)}
+# Order matches POS_CURRICULUM (see pos/curriculum_section_labels.py).
+from .curriculum_section_labels import INDEX_TO_YEAR_SEM as _INDEX_TO_YEAR_SEM, YEAR_SEM_TO_INDEX as _YEAR_SEM_TO_INDEX
 
 # For home: current semester dropdown (section_index -> label)
 CURRENT_SEMESTER_CHOICES = [
@@ -707,12 +723,13 @@ def _failed_attempt_counts_by_course(grades_by_section):
     return counts
 
 
-def _first_excessive_failure_violation(grades_by_section):
+def _first_excessive_failure_violation(grades_by_section, course_lookup=None):
     """Return (code, count, title) if any course has >= MAX_FAILED_ATTEMPTS_SAME_COURSE fails; else None."""
     counts = _failed_attempt_counts_by_course(grades_by_section)
     if not counts:
         return None
-    course_lookup = _course_lookup_from_curriculum()
+    if course_lookup is None:
+        course_lookup = _course_lookup_from_curriculum()
     for code, n in sorted(counts.items(), key=lambda x: (-x[1], x[0])):
         if n >= MAX_FAILED_ATTEMPTS_SAME_COURSE:
             info = course_lookup.get(code)
@@ -730,8 +747,10 @@ def _message_excessive_same_course_failures(code: str, count: int, title: str) -
     )
 
 
-def _flexible_courses_for_section(section_index):
-    """Return list of course dicts for flexible subjects offered in this section (with EE Dept note if applicable)."""
+def _flexible_courses_for_section(section_index, gen_mode="static"):
+    """Return list of course dicts for flexible subjects offered in this section (BSCpE static only in v1)."""
+    if gen_mode == "db":
+        return []
     from .pos_pdf import FLEXIBLE_SUBJECTS, display_pos_course_code
     out = []
     for row in FLEXIBLE_SUBJECTS:
@@ -755,7 +774,9 @@ def _flexible_courses_for_section(section_index):
     return out
 
 
-def _picker_available_for_next_section(next_section_index, curriculum_sections, saved_grades_by_section):
+def _picker_available_for_next_section(
+    next_section_index, curriculum_sections, saved_grades_by_section, gen_mode="static"
+):
     """
     Courses available to add: this and previous semesters where the user has no grade in that section
     or has failed (5.00) in that section. Plus flexible subjects offered in the current section.
@@ -773,7 +794,7 @@ def _picker_available_for_next_section(next_section_index, curriculum_sections, 
             if _is_passing_grade(grade):
                 continue
             candidates.append(c)
-    for flex in _flexible_courses_for_section(next_section_index):
+    for flex in _flexible_courses_for_section(next_section_index, gen_mode):
         if flex["code"] not in curriculum_codes_current:
             candidates.append(flex)
     return candidates
@@ -865,6 +886,112 @@ def _preview_sections_from_curriculum(grades_by_section):
     return sections
 
 
+def _preview_sections_from_resolved_sections(curriculum_sections, course_lookup, grades_by_section):
+    """Preview rows from DB-resolved curriculum_sections (same output shape as _preview_sections_from_curriculum)."""
+    from .pos_pdf import display_pos_course_code
+
+    sections = []
+    for section_index, sec in enumerate(curriculum_sections or []):
+        section_grades = (grades_by_section or {}).get(section_index, {})
+        section_label = sec.get("label") or ""
+        course_rows = []
+        seen_codes: set[str] = set()
+        for c in sec.get("courses") or []:
+            code = c.get("code")
+            if not code:
+                continue
+            title = c.get("title") or code
+            units = c.get("units", 0)
+            lec = c.get("lec", 0)
+            lab = c.get("lab", 0)
+            prereq = c.get("prereq") or ""
+            coreq = c.get("coreq") or ""
+            grade = section_grades.get(code)
+            if grade is not None and grade != "":
+                seen_codes.add(code)
+                try:
+                    g = float(grade)
+                    remark = "Passed" if g <= 3.00 else ("Failed" if g == 5.00 else "")
+                except (ValueError, TypeError):
+                    remark = ""
+                course_rows.append(
+                    {
+                        "code": code,
+                        "display_code": display_pos_course_code(code),
+                        "title": title,
+                        "units": units,
+                        "lec": lec,
+                        "lab": lab,
+                        "prereq": prereq,
+                        "coreq": coreq,
+                        "grade": grade,
+                        "remark": remark,
+                    }
+                )
+        for code, grade in (section_grades or {}).items():
+            if not code or not grade:
+                continue
+            if code in seen_codes:
+                continue
+            seen_codes.add(code)
+            info = course_lookup.get(code)
+            if info:
+                title, units, lec, lab, prereq, coreq = info
+            else:
+                title, units, lec, lab, prereq, coreq = code, 0, 0, 0, "", ""
+            try:
+                g = float(grade)
+                remark = "Passed" if g <= 3.00 else ("Failed" if g == 5.00 else "")
+            except (ValueError, TypeError):
+                remark = ""
+            course_rows.append(
+                {
+                    "code": code,
+                    "display_code": display_pos_course_code(code),
+                    "title": title,
+                    "units": units,
+                    "lec": lec,
+                    "lab": lab,
+                    "prereq": prereq,
+                    "coreq": coreq,
+                    "grade": grade,
+                    "remark": remark,
+                }
+            )
+        total_units_cur = sum(float(c.get("units") or 0) for c in (sec.get("courses") or []))
+        total_units_shown = sum(row.get("units", 0) for row in course_rows) if course_rows else 0
+        if course_rows:
+            sections.append(
+                {
+                    "label": section_label,
+                    "total_units": total_units_shown or total_units_cur,
+                    "rows": course_rows,
+                }
+            )
+    return sections
+
+
+def _session_year_sem_from_section_index(
+    gen_mode: str,
+    curriculum_sections: list,
+    section_index: int,
+) -> tuple[str, str]:
+    """Persist year_level/semester from DB-mapped section labels when in db mode; else legacy index table."""
+    if (
+        gen_mode == "db"
+        and isinstance(curriculum_sections, list)
+        and 0 <= section_index < len(curriculum_sections)
+    ):
+        sec = curriculum_sections[section_index]
+        yl = sec.get("year")
+        sem = sec.get("semester")
+        if yl and sem:
+            return str(yl), str(sem)
+    if 0 <= section_index < len(_INDEX_TO_YEAR_SEM):
+        return _INDEX_TO_YEAR_SEM[section_index]
+    return _INDEX_TO_YEAR_SEM[0] if _INDEX_TO_YEAR_SEM else ("", "")
+
+
 @ensure_csrf_cookie
 @_require_student
 def pos_generate(request):
@@ -873,7 +1000,12 @@ def pos_generate(request):
         return redirect(reverse('pos_home') + '?required=1')
     student = get_logged_in_student(request)
     saved_grades_by_section = _saved_grades_by_section(student)
-    curriculum_sections = _curriculum_for_irregular()
+    from .generate_curriculum_context import resolve_generate_curriculum_context
+
+    gen_curriculum_ctx = resolve_generate_curriculum_context(student)
+    curriculum_sections = gen_curriculum_ctx["curriculum_sections"]
+    course_lookup = gen_curriculum_ctx["course_lookup"]
+    gen_curriculum_mode = gen_curriculum_ctx["mode"]
 
     section_param = request.GET.get('section')
     pos_reset = bool(request.session.get('pos_reset', False))
@@ -885,8 +1017,8 @@ def pos_generate(request):
             pos_reset = False
         try:
             idx = int(section_param)
-            if 0 <= idx < len(_INDEX_TO_YEAR_SEM):
-                yl, sem = _INDEX_TO_YEAR_SEM[idx]
+            if 0 <= idx < len(curriculum_sections):
+                yl, sem = _session_year_sem_from_section_index(gen_curriculum_mode, curriculum_sections, idx)
                 request.session['year_level'] = yl
                 request.session['semester'] = sem
                 if hasattr(student, 'year_level'):
@@ -925,8 +1057,10 @@ def pos_generate(request):
             next_section_index = -1
         else:
             next_section_index = 0
-            if next_section_index < len(_INDEX_TO_YEAR_SEM):
-                yl, sem = _INDEX_TO_YEAR_SEM[next_section_index]
+            if next_section_index < len(curriculum_sections):
+                yl, sem = _session_year_sem_from_section_index(
+                    gen_curriculum_mode, curriculum_sections, next_section_index
+                )
                 request.session['year_level'] = yl
                 request.session['semester'] = sem
     year_level = request.session.get('year_level') or ''
@@ -944,7 +1078,6 @@ def pos_generate(request):
 
     # Build helpers shared by both Regular and Irregular paths
     from .pos_pdf import display_pos_course_code
-    course_lookup = _course_lookup_from_curriculum()
     preview_sections = []
     display_sections = []
     editable_section_index = None
@@ -955,7 +1088,9 @@ def pos_generate(request):
     pos_reload_pending = False
     # For every section, precompute courses available to add (this + previous semesters, failed or not yet taken, plus flexible)
     picker_available_by_section = {
-        si: _picker_available_for_next_section(si, curriculum_sections, saved_grades_by_section)
+        si: _picker_available_for_next_section(
+            si, curriculum_sections, saved_grades_by_section, gen_curriculum_mode
+        )
         for si in range(len(curriculum_sections))
     }
 
@@ -1054,7 +1189,9 @@ def pos_generate(request):
 
             table_scope_sem = irreg_current_sem
 
-            yl, sem = _INDEX_TO_YEAR_SEM[irreg_current_sem]
+            yl, sem = _session_year_sem_from_section_index(
+                gen_curriculum_mode, curriculum_sections, irreg_current_sem
+            )
             request.session['year_level'] = yl
             request.session['semester'] = sem
             if hasattr(student, 'year_level'):
@@ -1418,7 +1555,9 @@ def pos_generate(request):
             # Rebuild picker_available_by_section filtering out passed courses
             picker_available_by_section = {}
             for si in range(effective_irreg_start_index + 1, table_scope_sem + 1):
-                candidates = _picker_available_for_next_section(si, curriculum_sections, saved_grades_by_section)
+                candidates = _picker_available_for_next_section(
+                    si, curriculum_sections, saved_grades_by_section, gen_curriculum_mode
+                )
                 if use_loaded_schedule:
                     if use_loaded_preview_ui_sections:
                         loaded_list = loaded_preview_ui_sections.get(str(si)) or []
@@ -1494,6 +1633,11 @@ def pos_generate(request):
         'session_academic_year': request.session.get('academic_year', ''),
         'session_semester': request.session.get('semester', ''),
         'session_year_level': year_level,
+        'curriculum_display_title': gen_curriculum_ctx.get("display_title") or "",
+        'curriculum_source': gen_curriculum_ctx.get("mode") or "static",
+        'curriculum_subtitle': gen_curriculum_ctx.get("subtitle") or "",
+        'curriculum_version_id': gen_curriculum_ctx.get("curriculum_version_id"),
+        'curriculum_truncated': bool(gen_curriculum_ctx.get("curriculum_truncated")),
         'curriculum_sections': curriculum_sections,
         'curriculum_sections_dropdown': curriculum_sections[:dropdown_max_generate + 1],
         'current_semester_choices_regular': current_semester_choices_regular,
@@ -1611,7 +1755,36 @@ def validate_pos(request):
     if not isinstance(grades_by_section, dict):
         grades_by_section = {}
 
-    viol = _first_excessive_failure_violation(grades_by_section)
+    student = get_logged_in_student(request)
+    from .generate_curriculum_context import resolve_generate_curriculum_context
+
+    try:
+        gctx = resolve_generate_curriculum_context(student) if student is not None else {}
+    except Exception as e:
+        _dbg488397(
+            "H0",
+            "views.py:validate_pos",
+            "resolve_generate_curriculum_context raised",
+            {"exc_type": type(e).__name__, "exc_msg": str(e)[:800]},
+        )
+        raise
+    if not gctx:
+        gctx = {"mode": "static", "curriculum_sections": [], "course_lookup": _course_lookup_from_curriculum()}
+    g_course_lookup = gctx.get("course_lookup") or _course_lookup_from_curriculum()
+
+    _dbg488397(
+        "H1",
+        "views.py:validate_pos",
+        "after_gctx",
+        {
+            "mode": gctx.get("mode"),
+            "cv_id": gctx.get("curriculum_version_id"),
+            "n_curriculum_sections": len(gctx.get("curriculum_sections") or []),
+            "grade_section_keys_sample": [str(k) for k in list(grades_by_section.keys())[:12]],
+        },
+    )
+
+    viol = _first_excessive_failure_violation(grades_by_section, g_course_lookup)
     if viol:
         code, n, title = viol
         msg = _message_excessive_same_course_failures(code, n, title)
@@ -1625,8 +1798,12 @@ def validate_pos(request):
         )
 
     errors = []
-    course_lookup = _course_lookup_from_curriculum()
+    course_lookup = g_course_lookup
     from .pos_pdf import POS_CURRICULUM
+
+    num_sections = len(POS_CURRICULUM)
+    if gctx.get("mode") == "db" and gctx.get("curriculum_sections"):
+        num_sections = len(gctx["curriculum_sections"])
     for section_key, section_grades in grades_by_section.items():
         if not isinstance(section_grades, dict):
             continue
@@ -1634,10 +1811,14 @@ def validate_pos(request):
             si = int(section_key)
         except (ValueError, TypeError):
             continue
-        if si < 0 or si >= len(POS_CURRICULUM):
+        if si < 0 or si >= num_sections:
             continue
-        _t1, _t2, _total_units_cur, _lec, _lab, rows = POS_CURRICULUM[si]
-        section_label = "{} - {}".format(_t1.title(), _t2.title())
+        if gctx.get("mode") == "db" and gctx.get("curriculum_sections"):
+            sec = gctx["curriculum_sections"][si]
+            section_label = sec.get("label") or ""
+        else:
+            _t1, _t2, _total_units_cur, _lec, _lab, rows = POS_CURRICULUM[si]
+            section_label = "{} - {}".format(_t1.title(), _t2.title())
         # Per this semester table only (not pooled with other tables). Denominator: units for rows
         # with a non-empty grade only. Neither the 50% nor the 75% rule runs if graded units < minimum.
         graded_u = 0.0
@@ -1816,6 +1997,17 @@ def validate_pos(request):
                 # Unknown prereq token: don't block on it here.
                 continue
 
+    _dbg488397(
+        "H1b",
+        "views.py:validate_pos",
+        "prereq_loop_done",
+        {
+            "n_passed_ui": len(passed_ui),
+            "n_failed_ui": len(failed_ui),
+            "n_solver_courses_meta": len(solver_courses) if isinstance(solver_courses, dict) else -1,
+        },
+    )
+
     # 2) CP-SAT check for offering windows / other constraints.
     #    Note: CP-SAT itself does not treat `failed_courses` as prerequisite blockers, so we
     #    keep the strict grade-table prereq validation above. CP-SAT is still valuable for
@@ -1833,7 +2025,10 @@ def validate_pos(request):
             }
         )
 
-    current_sem_solver = int(current_section_index) + 2  # keep same convention as frontend
+    _raw_current_sem = int(current_section_index) + 2
+    current_sem_solver = _clamp_solver_current_sem_to_horizon(
+        _raw_current_sem, request
+    )  # UI convention: section_index + 2; clamp to active curriculum MAX_SEMESTER
 
     passed_solver = [_UI_TO_SOLVER_ELECTIVE.get(c, c) for c in passed_ui]
     failed_solver = [_UI_TO_SOLVER_ELECTIVE.get(c, c) for c in failed_ui]
@@ -1845,10 +2040,44 @@ def validate_pos(request):
         'alternative_algorithm': None,  # enforce CP-SAT exactness
     }
 
-    solver_result = validate_pos_via_solver(
-        payload=_attach_student_curriculum_to_payload(request, payload),
-        with_petition=False,
-        forced_semester_map=None,
+    _meta_pre_solve = _solver_meta_for_request(request) or {}
+    _dbg488397(
+        "H2",
+        "views.py:validate_pos",
+        "before_solver",
+        {
+            "year_level": str(year_level or ""),
+            "semester": str(semester or ""),
+            "current_section_index": int(current_section_index),
+            "raw_current_sem": _raw_current_sem,
+            "clamped_current_sem": int(current_sem_solver),
+            "max_semester_meta": _meta_pre_solve.get("max_semester"),
+            "n_passed_solver": len(passed_solver),
+            "n_failed_solver": len(failed_solver),
+            "failed_solver_sample": failed_solver[:15],
+            "curriculum_vid": _curriculum_version_id_for_student(student),
+        },
+    )
+
+    try:
+        solver_result = validate_pos_via_solver(
+            payload=_attach_student_curriculum_to_payload(request, payload),
+            with_petition=False,
+            forced_semester_map=None,
+        )
+    except Exception as e:
+        _dbg488397(
+            "H4",
+            "views.py:validate_pos",
+            "validate_pos_via_solver raised",
+            {"exc_type": type(e).__name__, "exc_msg": str(e)[:1200]},
+        )
+        raise
+    _dbg488397(
+        "H3",
+        "views.py:validate_pos",
+        "solver_returned",
+        {"status": str(solver_result.get("status") or "")},
     )
     status = solver_result.get('status')
     message = _user_facing_solver_message(solver_result.get('message') or 'Schedule is infeasible.')
@@ -1961,13 +2190,19 @@ def generate_pos_api(request):
         payload["current_sem"] = int(cur_sem)
     except (TypeError, ValueError):
         return JsonResponse({"status": "infeasible", "message": "Invalid semester selection. Please check your dropdowns.", "pos": []}, status=400)
+    payload["current_sem"] = _clamp_solver_current_sem_to_horizon(payload["current_sem"], request)
     if "configuration" in data:
         payload["configuration"] = data.get("configuration")
     if "alternative_algorithm" in data:
         payload["alternative_algorithm"] = data.get("alternative_algorithm")
 
     merged_for_policy = _merged_grades_by_section_for_policy(request, data.get("grades_by_section"))
-    viol = _first_excessive_failure_violation(merged_for_policy)
+    student = get_logged_in_student(request)
+    from .generate_curriculum_context import resolve_generate_curriculum_context
+
+    gctx = resolve_generate_curriculum_context(student) if student is not None else {}
+    g_lookup = (gctx.get("course_lookup") if gctx else None) or _course_lookup_from_curriculum()
+    viol = _first_excessive_failure_violation(merged_for_policy, g_lookup)
     if viol:
         code, n, title = viol
         msg = _message_excessive_same_course_failures(code, n, title)
@@ -3386,7 +3621,15 @@ def pos_preview(request):
         return redirect(reverse('pos_home') + '?required=1')
     student = get_logged_in_student(request)
     grades_by_section = _saved_grades_by_section(student)
-    preview_sections = _preview_sections_from_curriculum(grades_by_section)
+    from .generate_curriculum_context import resolve_generate_curriculum_context
+
+    gctx = resolve_generate_curriculum_context(student)
+    if gctx.get("mode") == "db":
+        preview_sections = _preview_sections_from_resolved_sections(
+            gctx["curriculum_sections"], gctx["course_lookup"], grades_by_section
+        )
+    else:
+        preview_sections = _preview_sections_from_curriculum(grades_by_section)
     generated_pos = request.session.get("last_generated_pos") or []
 
     def _has_generated_schedule(pos_rows):
@@ -3407,7 +3650,10 @@ def pos_preview(request):
         preview_sections = []
     # For solver-generated future semesters we only get course codes back.
     # Provide a lookup so the preview tables can still show lec/lab/pre/core fields.
-    course_lookup_tuple = _course_lookup_from_curriculum()
+    if gctx.get("mode") == "db":
+        course_lookup_tuple = gctx["course_lookup"]
+    else:
+        course_lookup_tuple = _course_lookup_from_curriculum()
     course_lookup = {
         code: {
             "title": info[0],
@@ -3491,7 +3737,15 @@ def download_pos_pdf(request):
 
     # Match Preview exactly: past/current semesters come from `preview_sections`,
     # while future semesters are appended from the last solver-generated POS.
-    preview_sections = _preview_sections_from_curriculum(grades_by_section)
+    from .generate_curriculum_context import resolve_generate_curriculum_context
+
+    gctx = resolve_generate_curriculum_context(student)
+    if gctx.get("mode") == "db":
+        preview_sections = _preview_sections_from_resolved_sections(
+            gctx["curriculum_sections"], gctx["course_lookup"], grades_by_section
+        )
+    else:
+        preview_sections = _preview_sections_from_curriculum(grades_by_section)
     generated_pos = request.session.get("last_generated_pos") or []
 
     from .pos_pdf import build_preview_pos_pdf
@@ -3786,7 +4040,15 @@ def download_pos_pdf_record(request, record_id):
             body={"signatories": signatories_raw},
             required=False,
         )
-        preview_sections = _preview_sections_from_curriculum(grades_by_section)
+        from .generate_curriculum_context import resolve_generate_curriculum_context
+
+        gctx = resolve_generate_curriculum_context(student)
+        if gctx.get("mode") == "db":
+            preview_sections = _preview_sections_from_resolved_sections(
+                gctx["curriculum_sections"], gctx["course_lookup"], grades_by_section
+            )
+        else:
+            preview_sections = _preview_sections_from_curriculum(grades_by_section)
         from .pos_pdf import build_preview_pos_pdf
         pdf_bytes = build_preview_pos_pdf(
             student_name=student.full_name or '',

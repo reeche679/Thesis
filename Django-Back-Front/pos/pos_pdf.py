@@ -45,6 +45,8 @@ def display_pos_course_code(code):
     return str(code).strip()
 
 
+# Legacy BSCpE static curriculum (BatState-style POS grid). Used when Generate POS cannot resolve
+# a DB-backed approved bundle for the student — see pos.generate_curriculum_context.resolve_generate_curriculum_context.
 # Curriculum: (section_title_line1, section_title_line2, total_units, lec_total, lab_total, rows).
 # Each row: (course_code, course_title, units, lec, lab, prereq, coreq)
 POS_CURRICULUM = [
