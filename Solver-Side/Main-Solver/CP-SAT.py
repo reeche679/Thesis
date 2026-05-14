@@ -99,6 +99,18 @@ def _ab886b_log(hypothesis_id: str, location: str, message: str, data: dict, run
 MIN_GRADED_UNITS_PER_SEMESTER_FOR_FAIL_RATIO = 10
 
 
+def _int_units_for_cp_sat(raw) -> int:
+    """
+    CP-SAT linear constraints require integer coefficients. Approved JSON from Django
+    often has ``units`` as JSON floats (e.g. 3.0); mixing ``b * 3.0`` with ``b * 3`` in
+    the same ``sum()`` raises TypeError from OR-Tools.
+    """
+    try:
+        return int(round(float(raw if raw is not None else 0)))
+    except (TypeError, ValueError):
+        return 0
+
+
 def _assignment_fingerprint(state: dict, remaining: list) -> str:
     payload = json.dumps(
         {str(c): int(state.get(c, -1)) for c in sorted(remaining, key=str)},
@@ -360,7 +372,7 @@ def add_unit_constraints(model, semester, passed_courses, current_sem):
             b = model.NewBoolVar(f"{c}_in_sem_{s}")
             model.Add(semester[c] == s).OnlyEnforceIf(b)
             model.Add(semester[c] != s).OnlyEnforceIf(b.Not())
-            active_in_sem.append(b * info.get("units", 0))
+            active_in_sem.append(b * _int_units_for_cp_sat(info.get("units", 0)))
         model.Add(sum(active_in_sem) <= u.max_units_for_sem(s))
 
 
@@ -408,7 +420,7 @@ def add_prereq_year_coreq_constraints(
             orig_sem = _first_semester(info)
             if orig_sem is None or orig_sem >= orig_sem_c:
                 continue
-            units = info.get("units", 0)
+            units = _int_units_for_cp_sat(info.get("units", 0))
             prefix_courses.append((code, units))
             total_units += units
             if code in passed_courses:

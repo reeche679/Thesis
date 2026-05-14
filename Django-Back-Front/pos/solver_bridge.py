@@ -56,6 +56,7 @@ _SOLVER_MTIMES_AT_LOAD: dict[str, float | None] = {}
 _SOLVER_WATCHED_FILES = [
     Path("Main-Solver") / "CP-SAT.py",
     Path("algorithms_and_helpers") / "Configurations.py",
+    Path("algorithms_and_helpers") / "curriculum_runtime.py",
     Path("courses_and_year_standings") / "units_and_year_standings.py",
     Path("courses_and_year_standings") / "courses.py",
     Path("Main-Solver") / "solver_settings.py",

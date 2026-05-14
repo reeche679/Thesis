@@ -105,6 +105,57 @@ class ResolveGenerateCurriculumContextTests(TestCase):
         self.assertEqual(_clamp_solver_current_sem_to_horizon(2, req), 2)
         self.assertEqual(_clamp_solver_current_sem_to_horizon(1, req), 1)
 
+    def test_validate_pos_mixed_float_int_units_no_typeerror(self) -> None:
+        """OR-Tools rejects float coefficients in unit-sum constraints (DB JSON uses 3.0)."""
+        from pos.solver_bridge import validate_pos_via_solver
+
+        bundle = {
+            "schema_version": 1,
+            "metadata": {"program_slug": "x", "curriculum_version_label": "t", "source_pdf_sha256": None},
+            "max_units_by_semester_index": [24, 24, 24, 24],
+            "courses": {
+                "ENGG 102": {
+                    "course_title": "E",
+                    "units": 3.0,
+                    "orig_sem": 1,
+                    "category": "Rigid",
+                    "year_level": 1,
+                    "pre-requisites": [],
+                    "co-requisites": [],
+                },
+                "MATH 101": {
+                    "course_title": "M",
+                    "units": 3,
+                    "orig_sem": 1,
+                    "category": "Rigid",
+                    "year_level": 1,
+                    "pre-requisites": [],
+                    "co-requisites": [],
+                },
+                "OTHER": {
+                    "course_title": "O",
+                    "units": 4.0,
+                    "orig_sem": 2,
+                    "category": "Rigid",
+                    "year_level": 1,
+                    "pre-requisites": [],
+                    "co-requisites": [],
+                },
+            },
+        }
+        res = validate_pos_via_solver(
+            {
+                "current_sem": 2,
+                "passed_courses": [],
+                "failed_courses": ["ENGG 102"],
+                "with_petition": False,
+                "curriculum_bundle": bundle,
+            },
+            with_petition=False,
+            forced_semester_map=None,
+        )
+        self.assertIn(res.get("status"), ("ok", "infeasible", "probation"))
+
     def test_db_maps_orig_sem_and_matches_student_version_id(self) -> None:
         prog = Program.objects.create(slug="tgen", name="Test Gen")
         s = Student.objects.create(

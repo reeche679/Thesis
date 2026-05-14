@@ -75,6 +75,13 @@ def context_from_approved_bundle(bundle: dict[str, Any]) -> CurriculumContext:
 
     caps = tuple(int(x) for x in raw_caps)
     courses = dict(raw_courses)
+    for _code, rec in courses.items():
+        if isinstance(rec, dict):
+            u = rec.get("units", 0)
+            try:
+                rec["units"] = int(round(float(u if u is not None else 0)))
+            except (TypeError, ValueError):
+                rec["units"] = 0
     pa = dict(bundle.get("prereq_aliases") or {})
     ysr_raw = bundle.get("year_standing_rules")
     if isinstance(ysr_raw, dict) and ysr_raw:
