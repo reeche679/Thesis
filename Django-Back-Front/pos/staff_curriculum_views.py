@@ -63,6 +63,11 @@ def _validate_extracted_rows(rows: list) -> None:
         rid = str(r.get("draft_row_id") or "").strip()
         if not rid:
             raise ValidationError(f"extracted_rows[{i}].draft_row_id is required.")
+        cat = str(r.get("category") or "").strip()
+        if cat and cat not in ("Rigid", "Bottleneck", "Flexible"):
+            raise ValidationError(
+                f"extracted_rows[{i}].category must be Rigid, Bottleneck, or Flexible when set."
+            )
         for key in ("units", "year_level", "orig_sem", "orig_sem_override"):
             if key not in r or r[key] in (None, ""):
                 continue
@@ -88,6 +93,11 @@ def _merge_draft_json(cv: CurriculumVersion, body: dict) -> dict:
         _assign_draft_row_ids(rows)
         _validate_extracted_rows(rows)
         dj["extracted_rows"] = rows
+    if "max_units_by_year_term" in body:
+        caps = body["max_units_by_year_term"]
+        if not isinstance(caps, dict):
+            raise ValidationError("max_units_by_year_term must be an object.")
+        dj["max_units_by_year_term"] = caps
     if "warnings" in body and isinstance(body["warnings"], list):
         dj["warnings"] = body["warnings"]
     if "extraction_meta" in body and isinstance(body["extraction_meta"], dict):
@@ -110,6 +120,7 @@ def _draft_json_response(cv: CurriculumVersion) -> dict:
         "source_pdf_sha256": getattr(cv, "source_pdf_sha256", "") or "",
         "rows": rows,
         "extracted_rows": rows,
+        "max_units_by_year_term": dj.get("max_units_by_year_term") or {},
         "warnings": dj.get("warnings") or [],
         "extraction_meta": dj.get("extraction_meta") or {},
         "suggested_graph": dj.get("suggested_graph"),

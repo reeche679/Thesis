@@ -7,6 +7,7 @@ import os
 import copy
 import math
 import hashlib
+import logging
 from collections import OrderedDict
 from pathlib import Path
 from django.conf import settings
@@ -20,7 +21,15 @@ from django.views.decorators.csrf import ensure_csrf_cookie, csrf_exempt
 from django.utils import timezone
 from accounts.models import Student, StudentGrade, POSRecord, SignatoryOption, SignatoryPreference
 from .models import CurriculumVersion, Program
-from .solver_bridge import generate_pos_via_solver, validate_pos_via_solver, get_solver_metadata
+from .solver_bridge import (
+    generate_pos_via_solver,
+    validate_pos_via_solver,
+    get_solver_metadata,
+    compute_placement_diagnostics_via_solver,
+)
+from .constraint_trace_summary import build_constraint_trace_summary_by_course
+from .standing_parity import build_standing_logic_mismatch_rows
+from .curriculum_static_feasibility import static_prereq_horizon_diagnosis
 
 SR_CODE_REGEX = re.compile(r'^\d{2}-\d{5}$')
 # BSU student email: local part may be SR-style (23-00000) or name-style (e.g. first.last@...); no spaces.
@@ -63,25 +72,34 @@ _DEBUG_488397_LOG_PATH = Path(__file__).resolve().parents[2] / "debug-488397.log
 
 def _dbg488397(hypothesis_id: str, location: str, message: str, data: dict, run_id: str = "validate_pos"):
     # #region agent log
+    line_obj = {
+        "sessionId": "488397",
+        "runId": run_id,
+        "hypothesisId": hypothesis_id,
+        "location": location,
+        "message": message,
+        "data": data,
+        "timestamp": int(__import__("time").time() * 1000),
+    }
+    line = json.dumps(line_obj, ensure_ascii=True) + "\n"
     try:
-        with _DEBUG_488397_LOG_PATH.open("a", encoding="utf-8") as f:
-            f.write(
-                json.dumps(
-                    {
-                        "sessionId": "488397",
-                        "runId": run_id,
-                        "hypothesisId": hypothesis_id,
-                        "location": location,
-                        "message": message,
-                        "data": data,
-                        "timestamp": int(__import__("time").time() * 1000),
-                    },
-                    ensure_ascii=True,
-                )
-                + "\n"
-            )
+        logging.getLogger("pos.validate_pos").info("%s", line.strip())
     except Exception:
         pass
+    paths = [_DEBUG_488397_LOG_PATH]
+    try:
+        bd = getattr(settings, "BASE_DIR", None)
+        if bd is not None:
+            paths.append(Path(bd) / "debug-488397.log")
+    except Exception:
+        pass
+    for p in paths:
+        try:
+            p.parent.mkdir(parents=True, exist_ok=True)
+            with p.open("a", encoding="utf-8") as f:
+                f.write(line)
+        except OSError:
+            continue
     # #endregion
 
 
@@ -185,12 +203,48 @@ def _solver_meta_for_request(request) -> dict:
     return get_solver_metadata(vid) or {}
 
 
+def _curriculum_horizon_debug_snapshot(request, payload: dict) -> dict:
+    """Lightweight curriculum vs horizon check for DEBUG infeasibility responses."""
+    meta = _solver_meta_for_request(request) or {}
+    raw_courses = meta.get("courses") if isinstance(meta.get("courses"), dict) else {}
+    try:
+        mh = int(meta.get("max_semester") or 0)
+    except (TypeError, ValueError):
+        mh = 0
+    max_orig = 0
+    beyond: list[tuple[str, int]] = []
+    for code, info in raw_courses.items():
+        if not isinstance(info, dict):
+            continue
+        o = info.get("orig_sem")
+        try:
+            if o is None or (isinstance(o, str) and not str(o).strip()):
+                continue
+            oi = int(o)
+        except (TypeError, ValueError):
+            continue
+        max_orig = max(max_orig, oi)
+        if mh >= 1 and oi > mh:
+            beyond.append((str(code), int(oi)))
+    beyond.sort(key=lambda t: t[0])
+    return {
+        "max_semester_horizon": mh,
+        "max_orig_sem_among_courses": max_orig,
+        "courses_with_orig_sem_strictly_beyond_horizon": beyond[:50],
+        "current_sem": payload.get("current_sem"),
+        "n_passed": len(payload.get("passed_courses") or []),
+        "n_failed": len(payload.get("failed_courses") or []),
+    }
+
+
 def _clamp_solver_current_sem_to_horizon(current_sem: int, request) -> int:
     """
-    CP-SAT uses IntVar domains [current_sem, MAX_SEMESTER]. The UI maps session
-    semester to ``section_index + 2`` using the same convention as the legacy
-    BSCpE grid; DB-backed curricula often have a shorter ``max_units_by_semester_index``
-    horizon. If ``current_sem`` exceeds that horizon, OR-Tools raises and Django returns 500.
+    CP-SAT uses IntVar domains [current_sem, MAX_SEMESTER]. The UI maps
+    "last semester enrolled" (0-based curriculum row) to the first **future**
+    planning semester: ``(section_index + 1)`` as the next row, then +1 again to
+    convert that row to 1-based solver index → ``section_index + 2`` (same as
+    ``generate_pos.html``). DB-backed curricula may shorten ``MAX_SEMESTER``;
+    if ``current_sem`` exceeds that horizon, OR-Tools raises and Django returns 500.
     """
     try:
         cs = int(current_sem)
@@ -705,6 +759,73 @@ MAX_FAILED_ATTEMPTS_SAME_COURSE = 4
 # Per semester table only: 50% and 75% failed-unit rules apply only when the student entered
 # grades for at least this many units in that table (graded rows only; blanks excluded).
 MIN_GRADED_UNITS_PER_SEMESTER_TABLE_FOR_FAIL_RATIO = 10
+
+
+def _units_for_policy_grade(
+    code: str,
+    section_index: int,
+    gctx: dict,
+    course_lookup: dict,
+) -> float:
+    """
+    Units for per-semester-table failed-unit ratio checks.
+
+    Prefer ``course_lookup`` (program catalog). If the grade key does not match the
+    lookup (whitespace, legacy saves, version skew), fall back to that section's
+    curriculum row so missing keys do not shrink the denominator to a few units.
+    """
+    if not code:
+        return 0.0
+    code_s = str(code).strip()
+    if not code_s:
+        return 0.0
+    cl = course_lookup or {}
+    for key in (code_s, code):
+        info = cl.get(key)
+        if info is not None:
+            try:
+                return float(info[1])
+            except (TypeError, ValueError, IndexError):
+                break
+    mode = (gctx or {}).get("mode")
+    if mode == "db":
+        secs = (gctx or {}).get("curriculum_sections") or []
+        try:
+            sec = secs[int(section_index)]
+        except (IndexError, TypeError, ValueError):
+            sec = None
+        if isinstance(sec, dict):
+            for c in sec.get("courses") or []:
+                if not isinstance(c, dict):
+                    continue
+                cc = str(c.get("code") or "").strip()
+                if cc == code_s:
+                    u = c.get("units", 0)
+                    try:
+                        if u is None or (isinstance(u, str) and not str(u).strip()):
+                            return 0.0
+                        return float(u)
+                    except (TypeError, ValueError):
+                        return 0.0
+        # Do not fall back to legacy POS_CURRICULUM in db mode: section index and course
+        # codes are for the student's approved bundle, not the static BSCpE grid.
+        return 0.0
+    try:
+        from .pos_pdf import POS_CURRICULUM
+
+        si = int(section_index)
+        if 0 <= si < len(POS_CURRICULUM):
+            _t1, _t2, _tu, _lec, _lab, rows = POS_CURRICULUM[si]
+            for r in rows:
+                rc = str(r[0]).strip() if r[0] is not None else ""
+                if rc == code_s:
+                    try:
+                        return float(r[2])
+                    except (TypeError, ValueError):
+                        return 0.0
+    except (TypeError, ValueError):
+        pass
+    return 0.0
 
 
 def _failed_attempt_counts_by_course(grades_by_section):
@@ -1830,11 +1951,7 @@ def validate_pos(request):
                 continue
             if grade is None or (isinstance(grade, str) and not str(grade).strip()):
                 continue
-            info = course_lookup.get(code)
-            try:
-                units = float(info[1]) if info else 0.0
-            except (TypeError, ValueError):
-                units = 0.0
+            units = _units_for_policy_grade(str(code), si, gctx, course_lookup)
             graded_u += units
             n_graded += 1
             if _is_failing_grade(grade):
@@ -2012,26 +2129,58 @@ def validate_pos(request):
     #    Note: CP-SAT itself does not treat `failed_courses` as prerequisite blockers, so we
     #    keep the strict grade-table prereq validation above. CP-SAT is still valuable for
     #    other constraints (offering windows, unit caps, etc.).
+    #
+    #    IMPORTANT: Generate POS sends `current_sem` from the same convention as the
+    #    Last Semester Enrolled dropdown (see generate_pos.html `buildSolverPayloadFromGrades`).
+    #    Historically this view used only session year_level/semester, which can drift if
+    #    the session was not updated on the last navigation — then validate says INFEASIBLE
+    #    while generate would use the correct anchor. Prefer explicit `current_sem` when valid.
     year_level = request.session.get('year_level')
     semester = request.session.get('semester')
     current_section_index = _year_semester_to_section_index(year_level, semester)
-    if current_section_index is None:
-        return JsonResponse(
-            {
-                'ok': False,
-                'status': 'infeasible',
-                'message': 'Please select your Last Semester Enrolled to proceed.',
-                'errors': [],
-            }
-        )
 
-    _raw_current_sem = int(current_section_index) + 2
-    current_sem_solver = _clamp_solver_current_sem_to_horizon(
-        _raw_current_sem, request
-    )  # UI convention: section_index + 2; clamp to active curriculum MAX_SEMESTER
+    current_sem_solver = None
+    current_sem_source = "session"
+    body_cs = data.get("current_sem")
+    if body_cs is not None and body_cs != "":
+        try:
+            current_sem_solver = _clamp_solver_current_sem_to_horizon(int(body_cs), request)
+            current_sem_source = "body"
+        except (TypeError, ValueError):
+            current_sem_solver = None
+
+    if current_sem_solver is None:
+        if current_section_index is None:
+            return JsonResponse(
+                {
+                    'ok': False,
+                    'status': 'infeasible',
+                    'message': 'Please select your Last Semester Enrolled to proceed.',
+                    'errors': [],
+                }
+            )
+
+        _raw_current_sem = int(current_section_index) + 2
+        current_sem_solver = _clamp_solver_current_sem_to_horizon(
+            _raw_current_sem, request
+        )  # UI convention: section_index + 2; clamp to active curriculum MAX_SEMESTER
+        current_sem_source = "session"
 
     passed_solver = [_UI_TO_SOLVER_ELECTIVE.get(c, c) for c in passed_ui]
     failed_solver = [_UI_TO_SOLVER_ELECTIVE.get(c, c) for c in failed_ui]
+
+    trace_raw = data.get("cp_sat_constraint_trace_courses")
+    trace_solver: list[str] | None = None
+    if trace_raw is not None:
+        if isinstance(trace_raw, str) and trace_raw.strip():
+            trace_parts = [p.strip() for p in trace_raw.split(",") if p.strip()]
+        elif isinstance(trace_raw, (list, tuple)):
+            trace_parts = [str(x).strip() for x in trace_raw if str(x).strip()]
+        else:
+            trace_parts = []
+        if trace_parts:
+            trace_solver = [_UI_TO_SOLVER_ELECTIVE.get(c, c) for c in trace_parts]
+
     payload = {
         'current_sem': current_sem_solver,
         'passed_courses': passed_solver,
@@ -2039,6 +2188,8 @@ def validate_pos(request):
         'with_petition': False,
         'alternative_algorithm': None,  # enforce CP-SAT exactness
     }
+    if trace_solver:
+        payload["cp_sat_constraint_trace_courses"] = trace_solver
 
     _meta_pre_solve = _solver_meta_for_request(request) or {}
     _dbg488397(
@@ -2048,8 +2199,8 @@ def validate_pos(request):
         {
             "year_level": str(year_level or ""),
             "semester": str(semester or ""),
-            "current_section_index": int(current_section_index),
-            "raw_current_sem": _raw_current_sem,
+            "current_sem_source": current_sem_source,
+            "current_section_index": int(current_section_index) if current_section_index is not None else None,
             "clamped_current_sem": int(current_sem_solver),
             "max_semester_meta": _meta_pre_solve.get("max_semester"),
             "n_passed_solver": len(passed_solver),
@@ -2083,14 +2234,96 @@ def validate_pos(request):
     message = _user_facing_solver_message(solver_result.get('message') or 'Schedule is infeasible.')
     ok = status == 'ok'
 
-    return JsonResponse(
-        {
-            'ok': ok,
-            'status': status,
-            'message': 'POS is valid.' if ok else message,
-            'errors': [],
-        }
-    )
+    resp: dict = {
+        'ok': ok,
+        'status': status,
+        'message': 'POS is valid.' if ok else message,
+        'errors': [] if ok else [message],
+    }
+    if settings.DEBUG:
+        tr = solver_result.get("constraint_build_trace")
+        if tr is not None:
+            if isinstance(tr, list) and len(tr) > 600:
+                resp["constraint_build_trace"] = tr[:600]
+                resp["constraint_build_trace_truncated"] = True
+            else:
+                resp["constraint_build_trace"] = tr
+    if settings.DEBUG and not ok:
+        resp["solver_status"] = status
+        raw = solver_result.get('message')
+        if raw is not None:
+            resp['solver_message_raw'] = str(raw)[:8000]
+        resp['curriculum_horizon_debug'] = _curriculum_horizon_debug_snapshot(request, payload)
+        meta_dbg = _meta_pre_solve or {}
+        try:
+            resp["static_prereq_diagnosis"] = static_prereq_horizon_diagnosis(
+                courses=meta_dbg.get("courses") if isinstance(meta_dbg.get("courses"), dict) else {},
+                passed_courses=passed_solver,
+                failed_courses=failed_solver,
+                current_sem=int(current_sem_solver),
+                max_semester=int(meta_dbg.get("max_semester") or 0),
+                prereq_aliases=meta_dbg.get("prereq_aliases")
+                if isinstance(meta_dbg.get("prereq_aliases"), dict)
+                else {},
+                year_standing_rules=meta_dbg.get("year_standing_rules")
+                if isinstance(meta_dbg.get("year_standing_rules"), dict)
+                else {},
+            )
+        except Exception as e:
+            resp["static_prereq_diagnosis_error"] = str(e)[:500]
+
+        try:
+            diag_payload = _attach_student_curriculum_to_payload(request, dict(payload))
+            diag = compute_placement_diagnostics_via_solver(diag_payload)
+            cap = diag.get("capacity_feasibility_snapshot")
+            if isinstance(cap, dict):
+                sc = cap.get("suffix_checks")
+                if isinstance(sc, list) and len(sc) > 30:
+                    cap = {**cap, "suffix_checks": sc[:30], "suffix_checks_truncated": True}
+                resp["capacity_feasibility_snapshot"] = cap
+            tb = diag.get("term_bottleneck_report")
+            if isinstance(tb, list):
+                resp["term_bottleneck_report"] = tb[:20]
+            resp["placement_diagnostics_meta"] = {
+                "diagnostics_version": diag.get("diagnostics_version"),
+                "configuration": diag.get("configuration"),
+                "notes": diag.get("notes"),
+            }
+            mc = diag.get("most_constrained_courses") or []
+            if isinstance(mc, list):
+                resp["most_constrained_courses"] = mc[:15]
+
+            meta_courses = meta_dbg.get("courses") if isinstance(meta_dbg.get("courses"), dict) else {}
+            pss = {str(k): set(v) for k, v in (passed_sem_by_solver or {}).items()}
+            resp["standing_logic_mismatches"] = build_standing_logic_mismatch_rows(
+                courses=meta_courses,
+                passed_courses=passed_solver,
+                failed_courses=failed_solver,
+                current_sem=int(current_sem_solver),
+                max_semester=int(meta_dbg.get("max_semester") or 0),
+                year_standing_rules=meta_dbg.get("year_standing_rules")
+                if isinstance(meta_dbg.get("year_standing_rules"), dict)
+                else {},
+                prereq_aliases=meta_dbg.get("prereq_aliases")
+                if isinstance(meta_dbg.get("prereq_aliases"), dict)
+                else {},
+                passed_sem_by_solver=pss,
+                most_constrained_courses=mc[:15] if isinstance(mc, list) else [],
+            )
+
+            tr = solver_result.get("constraint_build_trace")
+            if isinstance(tr, list) and tr:
+                terms_map = {
+                    str(r.get("course")): (r.get("final_candidate_terms") or [])[:25]
+                    for r in mc
+                    if isinstance(r, dict) and r.get("course")
+                }
+                resp["constraint_build_summary_by_course"] = build_constraint_trace_summary_by_course(
+                    tr[:400], terms_map
+                )
+        except Exception as e:
+            resp["placement_diagnostics_error"] = str(e)[:800]
+    return JsonResponse(resp)
 
 
 
@@ -2115,8 +2348,9 @@ _SOLVER_VERBOSE_DIAGNOSTIC_MARKERS = (
 )
 
 _HORIZON_GAP_USER_MESSAGE = (
-    "Please proceed to manual evaluation. The POS has exceeded the horizon gap. "
-    "Please refer to the academic adviser to proceed."
+    "Automatic scheduling is not possible with your current grades and curriculum rules "
+    "(for example: where failed courses may be retaken, term placement, unit limits, or prerequisites). "
+    "Please consult your academic adviser so they can review your situation and approve a manual Program of Study."
 )
 
 

@@ -10,6 +10,18 @@ main solver.
 from dataclasses import dataclass
 from typing import Callable
 
+from .curriculum_runtime import normalize_offering_category_value
+
+
+def _offering_constraint_trace(ct, tc, c, **row):
+    """Append one ordered row when ``c`` is in the traced course set."""
+    if ct is None or not tc or c not in tc:
+        return
+    out = {"seq": len(ct) + 1, "phase": "offering", "course": c}
+    out.update(row)
+    ct.append(out)
+
+
 # ---------------------------------------------------------------------------
 # Weights (Configuration 2 input)
 # ---------------------------------------------------------------------------
@@ -50,32 +62,55 @@ def add_term_type_aligned_offering_constraints(
     with_petition: bool,
     first_semester_fn,
     max_semester: int,
+    failed_courses=None,
+    **kwargs,
 ):
     """Baseline modulo-3 offering rule (Rigid/Flexible/Bottleneck + petition)."""
+    failed_set = frozenset(failed_courses) if failed_courses is not None else frozenset()
+    ct = kwargs.get("constraint_trace")
+    tc = kwargs.get("trace_course_codes") or frozenset()
     for c, info in courses.items():
         if c in passed_courses:
             continue
         orig = first_semester_fn(info) or 1
-        cat = info.get("category", "Rigid")
+        cat = normalize_offering_category_value(info)
         valid_sems = []
         for s in range(current_sem, max_semester + 1):
             sem_type, orig_type = s % 3, orig % 3  # 1: 1st, 2: 2nd, 0: Summer
-            if cat == "Rigid" and sem_type == orig_type:
+            if cat == "Bottleneck":
+                # Bottleneck rules apply only with petition (failed or not).
+                # No petition: same term-type grid as Rigid.
+                if with_petition:
+                    valid_sems.append(s)
+                elif sem_type == orig_type:
+                    valid_sems.append(s)
+            elif c in failed_set:
+                valid_sems.append(s)
+            elif cat == "Rigid" and sem_type == orig_type:
                 valid_sems.append(s)
             elif cat == "Flexible" and (
                 (orig_type in [1, 2] and sem_type in [1, 2])
                 or (orig_type == 0 and sem_type == 0)
             ):
                 valid_sems.append(s)
-            elif cat == "Bottleneck":
-                if not with_petition:
-                    if sem_type == orig_type:
-                        valid_sems.append(s)
-                else:
-                    valid_sems.append(s)
         if valid_sems:
+            _offering_constraint_trace(
+                ct,
+                tc,
+                c,
+                kind="term_type_aligned",
+                constraint="allowed_assignments",
+                n_valid_semesters=len(valid_sems),
+            )
             model.AddAllowedAssignments([semester[c]], [[s] for s in valid_sems])
         else:
+            _offering_constraint_trace(
+                ct,
+                tc,
+                c,
+                kind="term_type_aligned",
+                constraint="no_valid_window_uses_semester_lt_current_sem",
+            )
             model.Add(semester[c] < current_sem)
 
 
@@ -88,6 +123,8 @@ def add_capped_petition_trio_offering_constraints(
     with_petition: bool,
     first_semester_fn,
     max_semester: int,
+    failed_courses=None,
+    **kwargs,
 ):
     """
     Petition-friendly, capped offering rule that matches the template POS:
@@ -99,6 +136,9 @@ def add_capped_petition_trio_offering_constraints(
     """
     # 1) Cap horizon at 5th Year 2nd Sem.
     cap_sem = min(max_semester, 14)
+    failed_set = frozenset(failed_courses) if failed_courses is not None else frozenset()
+    ct = kwargs.get("constraint_trace")
+    tc = kwargs.get("trace_course_codes") or frozenset()
 
     # 2) Graduation trio fixed at cap_sem, no one else allowed there.
     graduation_trio = ("ENGG 117", "CpE 405", "CpE 406")
@@ -106,21 +146,39 @@ def add_capped_petition_trio_offering_constraints(
     if trio_remaining:
         for c in trio_remaining:
             model.Add(semester[c] == cap_sem)
+            _offering_constraint_trace(
+                ct,
+                tc,
+                c,
+                kind="capped_trio_config",
+                constraint="trio_member_fixed_semester",
+                fixed_semester=int(cap_sem),
+            )
         for c in courses:
             if c in passed_courses or c in graduation_trio:
                 continue
             model.Add(semester[c] != cap_sem)
+            _offering_constraint_trace(
+                ct,
+                tc,
+                c,
+                kind="capped_trio_config",
+                constraint="exclude_non_trio_from_trio_semester",
+                trio_semester=int(cap_sem),
+            )
 
     # 3) Offering windows for all other courses within [current_sem, cap_sem].
     for c, info in courses.items():
         if c in passed_courses or c in graduation_trio:
             continue
         orig = first_semester_fn(info) or 1
-        cat = info.get("category", "Rigid")
+        cat = normalize_offering_category_value(info)
         valid_sems = []
         for s in range(current_sem, cap_sem + 1):
             sem_type, orig_type = s % 3, orig % 3  # 1: 1st, 2: 2nd, 0: Summer
-            if cat == "Rigid" and sem_type == orig_type:
+            if c in failed_set and cat in ("Rigid", "Flexible"):
+                valid_sems.append(s)
+            elif cat == "Rigid" and sem_type == orig_type:
                 valid_sems.append(s)
             elif cat == "Flexible" and (
                 (orig_type in [1, 2] and sem_type in [1, 2])
@@ -132,8 +190,23 @@ def add_capped_petition_trio_offering_constraints(
                 # allow them in any regular term from current_sem to cap_sem.
                 valid_sems.append(s)
         if valid_sems:
+            _offering_constraint_trace(
+                ct,
+                tc,
+                c,
+                kind="capped_trio_config",
+                constraint="allowed_assignments",
+                n_valid_semesters=len(valid_sems),
+            )
             model.AddAllowedAssignments([semester[c]], [[s] for s in valid_sems])
         else:
+            _offering_constraint_trace(
+                ct,
+                tc,
+                c,
+                kind="capped_trio_config",
+                constraint="no_valid_window_uses_semester_lt_current_sem",
+            )
             model.Add(semester[c] < current_sem)
 
 
@@ -146,6 +219,8 @@ def add_category_without_modulo3_offering_constraints(
     with_petition: bool,
     first_semester_fn,
     max_semester: int,
+    failed_courses=None,
+    **kwargs,
 ):
     """
     Same problem class as the baseline, but **no modulo-3 term-type domain reduction**.
@@ -155,7 +230,7 @@ def add_category_without_modulo3_offering_constraints(
     - **Rigid**: semesters s with max(current_sem, first_offering_sem) ≤ s ≤ max_semester
       (petition does not change Rigid — same as modulo-3 baseline).
     - **Bottleneck** (no petition): same continuous floor as Rigid (s ≥ lo).
-    - **Bottleneck** (with petition): full [current_sem, max_semester] (same as baseline).
+    - **Bottleneck** (with petition or this course failed): full [current_sem, max_semester].
     - **Flexible** (no petition): same continuous floor as Rigid (s ≥ lo).
     - **Flexible** (with petition): full [current_sem, max_semester] (extra placement freedom
       when petition mode is on; baseline only used petition for Bottleneck, but config0
@@ -163,16 +238,21 @@ def add_category_without_modulo3_offering_constraints(
 
     Use next to config1 to measure the effect of modulo-3 slot restriction alone.
     """
+    failed_set = frozenset(failed_courses) if failed_courses is not None else frozenset()
+    ct = kwargs.get("constraint_trace")
+    tc = kwargs.get("trace_course_codes") or frozenset()
     for c, info in courses.items():
         if c in passed_courses:
             continue
         orig = first_semester_fn(info) or 1
-        cat = info.get("category", "Rigid")
+        cat = normalize_offering_category_value(info)
         lo = max(current_sem, orig)
 
         strict = [s for s in range(current_sem, max_semester + 1) if s >= lo]
 
         if cat == "Bottleneck" and with_petition:
+            valid_sems = list(range(current_sem, max_semester + 1))
+        elif c in failed_set and cat in ("Rigid", "Flexible"):
             valid_sems = list(range(current_sem, max_semester + 1))
         elif cat == "Flexible" and with_petition:
             valid_sems = list(range(current_sem, max_semester + 1))
@@ -181,8 +261,23 @@ def add_category_without_modulo3_offering_constraints(
             valid_sems = strict
 
         if valid_sems:
+            _offering_constraint_trace(
+                ct,
+                tc,
+                c,
+                kind="category_no_modulo3",
+                constraint="allowed_assignments",
+                n_valid_semesters=len(valid_sems),
+            )
             model.AddAllowedAssignments([semester[c]], [[s] for s in valid_sems])
         else:
+            _offering_constraint_trace(
+                ct,
+                tc,
+                c,
+                kind="category_no_modulo3",
+                constraint="no_valid_window_uses_semester_lt_current_sem",
+            )
             model.Add(semester[c] < current_sem)
 
 

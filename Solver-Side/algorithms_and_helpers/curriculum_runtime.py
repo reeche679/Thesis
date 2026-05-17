@@ -66,6 +66,91 @@ def _static_context() -> CurriculumContext:
     return _STATIC_CACHE
 
 
+_VALID_OFFERING_CATEGORIES = frozenset({"Rigid", "Bottleneck", "Flexible"})
+
+
+def normalize_offering_category_value(info: Any) -> str:
+    """
+    Canonical offering category for CP-SAT (Rigid / Flexible / Bottleneck).
+
+    Staff JSON sometimes stores non-strings (numbers, booleans). Those must not
+    flow into string-only comparisons in offering constraints — unknown values
+    would otherwise yield **no** allowed semesters (immediate INFEASIBLE).
+    """
+    if not isinstance(info, dict):
+        return "Rigid"
+    raw = info.get("category", "Rigid")
+    if isinstance(raw, bool) or raw is None:
+        cat = ""
+    elif isinstance(raw, str):
+        cat = raw.strip()
+    else:
+        cat = str(raw).strip()
+    if cat in _VALID_OFFERING_CATEGORIES:
+        return cat
+    return "Rigid"
+
+
+def _normalize_categories_from_static(courses: dict[str, Any]) -> None:
+    """Fill missing/invalid ``category`` on each course from static ``courses.py`` when the code matches."""
+    try:
+        from courses_and_year_standings.courses import courses as static_courses
+    except Exception:
+        static_courses = {}
+
+    def _lookup_static(code: str) -> dict | None:
+        if code in static_courses and isinstance(static_courses.get(code), dict):
+            return static_courses[code]
+        cu = str(code).strip().upper()
+        for sk, sv in static_courses.items():
+            if str(sk).strip().upper() == cu and isinstance(sv, dict):
+                return sv
+        return None
+
+    for code, rec in courses.items():
+        if not isinstance(rec, dict):
+            continue
+        raw = rec.get("category")
+        if isinstance(raw, bool) or raw is None:
+            cat = ""
+        elif isinstance(raw, str):
+            cat = raw.strip()
+        else:
+            cat = str(raw).strip()
+        if cat in _VALID_OFFERING_CATEGORIES:
+            if cat == "Rigid":
+                info = _lookup_static(str(code))
+                if info:
+                    sc = str(info.get("category", "")).strip()
+                    if sc in ("Bottleneck", "Flexible"):
+                        rec["category"] = sc
+            continue
+        info = _lookup_static(str(code))
+        if info:
+            sc = str(info.get("category", "")).strip()
+            if sc in _VALID_OFFERING_CATEGORIES:
+                rec["category"] = sc
+                continue
+        rec["category"] = "Rigid"
+
+    for code, rec in courses.items():
+        if isinstance(rec, dict):
+            rec["category"] = normalize_offering_category_value(rec)
+
+
+_OVERFLOW_SEMESTERS = 6
+_DEFAULT_OVERFLOW_CAP = 24
+
+
+def _year6_overflow_cap(caps: tuple[int, ...], sem: int) -> int:
+    """Return an overflow cap for ``sem`` by reusing the Year 6 value for the matching term type."""
+    term_in_year = ((sem - 1) % 3) + 1
+    y6_sem = (6 - 1) * 3 + term_in_year  # global semester index for Year 6
+    if y6_sem <= len(caps):
+        return caps[y6_sem - 1]
+    return _DEFAULT_OVERFLOW_CAP
+
+
 def context_from_approved_bundle(bundle: dict[str, Any]) -> CurriculumContext:
     """Build a context from Phase 0 / Django ``approved_json``."""
     raw_courses = bundle.get("courses")
@@ -82,6 +167,17 @@ def context_from_approved_bundle(bundle: dict[str, Any]) -> CurriculumContext:
                 rec["units"] = int(round(float(u if u is not None else 0)))
             except (TypeError, ValueError):
                 rec["units"] = 0
+    _normalize_categories_from_static(courses)
+
+    max_orig = max(
+        (int(rec.get("orig_sem", 1)) for rec in courses.values() if isinstance(rec, dict)),
+        default=1,
+    )
+    min_horizon = max_orig + _OVERFLOW_SEMESTERS
+    if len(caps) < min_horizon:
+        overflow = tuple(_year6_overflow_cap(caps, s) for s in range(len(caps) + 1, min_horizon + 1))
+        caps = caps + overflow
+
     pa = dict(bundle.get("prereq_aliases") or {})
     ysr_raw = bundle.get("year_standing_rules")
     if isinstance(ysr_raw, dict) and ysr_raw:

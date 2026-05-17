@@ -4,12 +4,17 @@ import json
 import uuid
 
 from django.contrib.auth.models import User
+from django.core.exceptions import ValidationError
 from django.test import RequestFactory, TestCase
 
 from pos.admin import validate_approved_bundle
 from pos.curriculum_draft_analyze import analyze_draft_json
 from pos.curriculum_draft_semesters import term_index_to_orig_sem_map
 from pos.curriculum_draft_to_approved import draft_to_approved_json
+from pos.curriculum_unit_caps import (
+    build_max_units_by_semester_index,
+    validate_max_units_by_year_term,
+)
 from pos.models import CurriculumVersion, Program
 from pos.staff_curriculum_views import (
     staff_api_curriculum_analyze,
@@ -18,12 +23,25 @@ from pos.staff_curriculum_views import (
 )
 
 
+def _default_caps() -> dict:
+    """Full 18-cell max_units_by_year_term with uniform 24 for tests."""
+    return {str(y): {"1": 24, "2": 24, "3": 24} for y in range(1, 7)}
+
+
 def _json(resp):
     return json.loads(resp.content.decode())
 
 
-def _row(code: str, term_index: int, page: int, table: int = 0, row_index: int = 0) -> dict:
-    return {
+def _row(
+    code: str,
+    term_index: int,
+    page: int,
+    table: int = 0,
+    row_index: int = 0,
+    *,
+    term_label: str = "",
+) -> dict:
+    d = {
         "code": code,
         "title": f"T {code}",
         "units": "3",
@@ -35,6 +53,9 @@ def _row(code: str, term_index: int, page: int, table: int = 0, row_index: int =
         "draft_row_id": str(uuid.uuid4()),
         "source": {"kind": "pdf_table", "page": page, "table": table, "row_index": row_index},
     }
+    if term_label:
+        d["term_label"] = term_label
+    return d
 
 
 class OrigSemBandTests(TestCase):
@@ -56,6 +77,53 @@ class OrigSemBandTests(TestCase):
         ti_map = term_index_to_orig_sem_map(rows)
         self.assertEqual(ti_map[1], 1)
         self.assertEqual(ti_map[2], 2)
+
+    def test_term_label_canonical_orig_sem_not_compressed_by_term_index(self) -> None:
+        """Missing midterm in PDF: term_index bands compress; term_label still maps to slot 7."""
+        row = _row("EE 201", 5, 1, term_label="3rd Year - First Semester")
+        rows = [row]
+        ti_map = term_index_to_orig_sem_map(rows)
+        self.assertEqual(ti_map[5], 1)
+        da = analyze_draft_json({"extracted_rows": rows})
+        block = da["rows"][row["draft_row_id"]]
+        self.assertEqual(block["orig_sem_suggested"], 7)
+        self.assertEqual(block["orig_sem_source"], "label")
+        self.assertEqual(block["year_level_suggested"], 3)
+        self.assertTrue(any("term_index-only" in w for w in block.get("calendar_warnings") or []))
+
+    def test_no_term_label_falls_back_to_term_index_map(self) -> None:
+        row = _row("MATH 101", 2, 1)
+        da = analyze_draft_json({"extracted_rows": [row]})
+        block = da["rows"][row["draft_row_id"]]
+        self.assertEqual(block["orig_sem_source"], "term_index")
+        self.assertEqual(block["orig_sem_suggested"], 1)
+
+    def test_approved_uses_year_level_suggested_when_year_level_omitted(self) -> None:
+        rid = str(uuid.uuid4())
+        row = {
+            "draft_row_id": rid,
+            "code": "EE 201",
+            "title": "Signals",
+            "units": "4",
+            "term_index": 4,
+            "term_label": "3rd Year - First Semester",
+            "raw_prerequisites": "",
+            "raw_corequisites": "",
+            "prerequisite_codes": [],
+            "corequisite_codes": [],
+            "source": {"page": 1, "table": 0, "row_index": 0},
+        }
+        da = analyze_draft_json({"extracted_rows": [row]})
+        draft = {"extracted_rows": [row], "draft_analysis": da, "max_units_by_year_term": _default_caps()}
+        bundle = draft_to_approved_json(
+            draft,
+            program_slug="ee",
+            curriculum_version_label="v1",
+            source_pdf_sha256="a" * 64,
+        )
+        validate_approved_bundle(bundle)
+        self.assertEqual(bundle["courses"]["EE 201"]["orig_sem"], 7)
+        self.assertEqual(bundle["courses"]["EE 201"]["year_level"], 3)
 
 
 class BuilderSchemaTests(TestCase):
@@ -95,6 +163,7 @@ class BuilderSchemaTests(TestCase):
                     ]
                 }
             ),
+            "max_units_by_year_term": _default_caps(),
         }
         bundle = draft_to_approved_json(
             draft,
@@ -104,8 +173,115 @@ class BuilderSchemaTests(TestCase):
         )
         validate_approved_bundle(bundle)
         self.assertEqual(bundle["schema_version"], 1)
-        self.assertEqual(bundle["courses"]["MATH 101"]["category"], "Rigid")
-        self.assertEqual(bundle["max_units_by_semester_index"], [24])
+        self.assertIn(bundle["courses"]["MATH 101"]["category"], ("Rigid", "Bottleneck"))
+        self.assertGreaterEqual(len(bundle["max_units_by_semester_index"]), 18)
+
+    def test_builder_respects_staff_category_override(self) -> None:
+        rid = str(uuid.uuid4())
+        draft = {
+            "extracted_rows": [
+                {
+                    "draft_row_id": rid,
+                    "code": "MATH 101",
+                    "title": "Algebra",
+                    "units": "3",
+                    "term_index": 1,
+                    "year_level": 1,
+                    "category": "Bottleneck",
+                    "raw_prerequisites": "",
+                    "raw_corequisites": "",
+                    "prerequisite_codes": [],
+                    "corequisite_codes": [],
+                    "source": {"page": 1, "table": 0, "row_index": 0},
+                }
+            ],
+            "draft_analysis": analyze_draft_json(
+                {
+                    "extracted_rows": [
+                        {
+                            "draft_row_id": rid,
+                            "code": "MATH 101",
+                            "title": "Algebra",
+                            "units": "3",
+                            "term_index": 1,
+                            "raw_prerequisites": "",
+                            "raw_corequisites": "",
+                            "prerequisite_codes": [],
+                            "corequisite_codes": [],
+                            "source": {"page": 1, "table": 0, "row_index": 0},
+                        }
+                    ]
+                }
+            ),
+            "max_units_by_year_term": _default_caps(),
+        }
+        bundle = draft_to_approved_json(
+            draft,
+            program_slug="test_prog",
+            curriculum_version_label="v1",
+            source_pdf_sha256="a" * 64,
+        )
+        validate_approved_bundle(bundle)
+        self.assertEqual(bundle["courses"]["MATH 101"]["category"], "Bottleneck")
+
+    def test_builder_fails_without_caps(self) -> None:
+        rid = str(uuid.uuid4())
+        draft = {
+            "extracted_rows": [
+                {
+                    "draft_row_id": rid, "code": "A 100", "title": "A", "units": "3",
+                    "term_index": 1, "year_level": 1,
+                    "raw_prerequisites": "", "raw_corequisites": "",
+                    "prerequisite_codes": [], "corequisite_codes": [],
+                    "source": {"page": 1, "table": 0, "row_index": 0},
+                }
+            ],
+            "draft_analysis": analyze_draft_json({"extracted_rows": [{
+                "draft_row_id": rid, "code": "A 100", "title": "A", "units": "3",
+                "term_index": 1, "raw_prerequisites": "", "raw_corequisites": "",
+                "prerequisite_codes": [], "corequisite_codes": [],
+                "source": {"page": 1},
+            }]}),
+        }
+        with self.assertRaises(ValidationError):
+            draft_to_approved_json(
+                draft, program_slug="t", curriculum_version_label="v1", source_pdf_sha256=None,
+            )
+
+    def test_builder_uses_staff_caps_with_overflow(self) -> None:
+        rid = str(uuid.uuid4())
+        caps = {
+            str(y): {"1": 20 + y, "2": 22 + y, "3": 5 + y}
+            for y in range(1, 7)
+        }
+        draft = {
+            "extracted_rows": [
+                {
+                    "draft_row_id": rid, "code": "X 100", "title": "X", "units": "3",
+                    "term_index": 1, "year_level": 4,
+                    "raw_prerequisites": "", "raw_corequisites": "",
+                    "prerequisite_codes": [], "corequisite_codes": [],
+                    "source": {"page": 1, "table": 0, "row_index": 0},
+                }
+            ],
+            "draft_analysis": analyze_draft_json({"extracted_rows": [{
+                "draft_row_id": rid, "code": "X 100", "title": "X", "units": "3",
+                "term_index": 1, "raw_prerequisites": "", "raw_corequisites": "",
+                "prerequisite_codes": [], "corequisite_codes": [],
+                "source": {"page": 1},
+            }]}),
+            "max_units_by_year_term": caps,
+        }
+        bundle = draft_to_approved_json(
+            draft, program_slug="t", curriculum_version_label="v1", source_pdf_sha256=None,
+        )
+        validate_approved_bundle(bundle)
+        idx = bundle["max_units_by_semester_index"]
+        self.assertEqual(idx[0], 21)
+        self.assertEqual(idx[1], 23)
+        self.assertEqual(idx[2], 6)
+        self.assertGreater(len(idx), 18)
+        self.assertEqual(idx[18], caps["6"]["1"])
 
 
 class StaffCurriculumAPITests(TestCase):
@@ -134,6 +310,7 @@ class StaffCurriculumAPITests(TestCase):
                         "source": {"page": 1, "table": 0, "row_index": 0},
                     }
                 ],
+                "max_units_by_year_term": _default_caps(),
                 "warnings": [],
                 "extraction_meta": {},
                 "suggested_graph": None,
@@ -213,3 +390,84 @@ class StaffCurriculumAPITests(TestCase):
         req.user = self.user
         r = staff_api_curriculum_draft(req, pk=self.cv.pk)
         self.assertEqual(r.status_code, 400)
+
+    def test_approve_fails_without_caps(self) -> None:
+        cv_no_caps = CurriculumVersion.objects.create(
+            program=self.program,
+            status=CurriculumVersion.STATUS_DRAFT,
+            version_label="no-caps",
+            draft_json={
+                "extracted_rows": [
+                    {
+                        "draft_row_id": str(uuid.uuid4()),
+                        "code": "A 100", "title": "A", "units": "2",
+                        "term_index": 1, "year_level": 1,
+                        "raw_prerequisites": "", "raw_corequisites": "",
+                        "prerequisite_codes": [], "corequisite_codes": [],
+                        "source": {"page": 1, "table": 0, "row_index": 0},
+                    }
+                ],
+            },
+        )
+        req = self.factory.post(f"/staff/api/curriculum/version/{cv_no_caps.pk}/approve/")
+        req.user = self.user
+        r = staff_api_curriculum_approve(req, pk=cv_no_caps.pk)
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("max_units_by_year_term", _json(r).get("error", ""))
+
+    def test_save_draft_with_caps_roundtrip(self) -> None:
+        caps = {str(y): {"1": 20, "2": 22, "3": 9} for y in range(1, 7)}
+        req = self.factory.patch(
+            f"/staff/api/curriculum/version/{self.cv.pk}/draft/",
+            data=json.dumps({"max_units_by_year_term": caps}),
+            content_type="application/json",
+        )
+        req.user = self.user
+        r = staff_api_curriculum_draft(req, pk=self.cv.pk)
+        self.assertEqual(r.status_code, 200)
+        data = _json(r)
+        self.assertEqual(data["max_units_by_year_term"]["1"]["1"], 20)
+        self.assertEqual(data["max_units_by_year_term"]["3"]["3"], 9)
+
+
+class UnitCapsModuleTests(TestCase):
+    def test_validate_complete_map(self) -> None:
+        m = validate_max_units_by_year_term(_default_caps())
+        self.assertEqual(len(m), 6)
+        for y in range(1, 7):
+            self.assertEqual(len(m[y]), 3)
+
+    def test_validate_rejects_missing_year(self) -> None:
+        caps = _default_caps()
+        del caps["3"]
+        with self.assertRaises(ValidationError):
+            validate_max_units_by_year_term(caps)
+
+    def test_validate_rejects_missing_term(self) -> None:
+        caps = _default_caps()
+        del caps["2"]["2"]
+        with self.assertRaises(ValidationError):
+            validate_max_units_by_year_term(caps)
+
+    def test_validate_rejects_negative(self) -> None:
+        caps = _default_caps()
+        caps["1"]["1"] = -5
+        with self.assertRaises(ValidationError):
+            validate_max_units_by_year_term(caps)
+
+    def test_builder_first_18_from_map(self) -> None:
+        m = {y: {t: y * 10 + t for t in range(1, 4)} for y in range(1, 7)}
+        result = build_max_units_by_semester_index(m, max_orig=1)
+        self.assertEqual(result[0], 11)
+        self.assertEqual(result[1], 12)
+        self.assertEqual(result[2], 13)
+        self.assertEqual(result[3], 21)
+        self.assertEqual(result[17], 63)
+
+    def test_builder_overflow_uses_year6(self) -> None:
+        m = {y: {1: 20, 2: 22, 3: 9} for y in range(1, 7)}
+        m[6] = {1: 30, 2: 32, 3: 15}
+        result = build_max_units_by_semester_index(m, max_orig=18, overflow_semesters=3)
+        self.assertEqual(result[18], 30)
+        self.assertEqual(result[19], 32)
+        self.assertEqual(result[20], 15)

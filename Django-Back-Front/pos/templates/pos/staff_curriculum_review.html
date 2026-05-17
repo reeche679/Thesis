@@ -39,6 +39,31 @@
                 <button type="button" class="btn btn-success btn-sm" id="btn-approve">Approve</button>
             </div>
             <p id="status" class="small"></p>
+            <div class="bg-white border rounded shadow-sm p-3 mb-3" id="caps-section">
+                <h6 class="mb-2">Max units per semester <span class="text-danger">(required)</span></h6>
+                <p class="small text-muted mb-2">
+                    Set the maximum allowed unit load for each term. These are <strong>not</strong> read from the PDF.
+                    Overflow semesters beyond Year 6 reuse Year 6 values.
+                </p>
+                <table class="table table-sm table-bordered mb-0" style="max-width:520px">
+                    <thead class="table-light">
+                        <tr><th>Year</th><th>1st Sem</th><th>2nd Sem</th><th>Summer</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>1</td><td><input type="number" min="0" class="form-control form-control-sm cap-input" data-y="1" data-t="1"></td><td><input type="number" min="0" class="form-control form-control-sm cap-input" data-y="1" data-t="2"></td><td><input type="number" min="0" class="form-control form-control-sm cap-input" data-y="1" data-t="3"></td></tr>
+                        <tr><td>2</td><td><input type="number" min="0" class="form-control form-control-sm cap-input" data-y="2" data-t="1"></td><td><input type="number" min="0" class="form-control form-control-sm cap-input" data-y="2" data-t="2"></td><td><input type="number" min="0" class="form-control form-control-sm cap-input" data-y="2" data-t="3"></td></tr>
+                        <tr><td>3</td><td><input type="number" min="0" class="form-control form-control-sm cap-input" data-y="3" data-t="1"></td><td><input type="number" min="0" class="form-control form-control-sm cap-input" data-y="3" data-t="2"></td><td><input type="number" min="0" class="form-control form-control-sm cap-input" data-y="3" data-t="3"></td></tr>
+                        <tr><td>4</td><td><input type="number" min="0" class="form-control form-control-sm cap-input" data-y="4" data-t="1"></td><td><input type="number" min="0" class="form-control form-control-sm cap-input" data-y="4" data-t="2"></td><td><input type="number" min="0" class="form-control form-control-sm cap-input" data-y="4" data-t="3"></td></tr>
+                        <tr><td>5</td><td><input type="number" min="0" class="form-control form-control-sm cap-input" data-y="5" data-t="1"></td><td><input type="number" min="0" class="form-control form-control-sm cap-input" data-y="5" data-t="2"></td><td><input type="number" min="0" class="form-control form-control-sm cap-input" data-y="5" data-t="3"></td></tr>
+                        <tr><td>6</td><td><input type="number" min="0" class="form-control form-control-sm cap-input" data-y="6" data-t="1"></td><td><input type="number" min="0" class="form-control form-control-sm cap-input" data-y="6" data-t="2"></td><td><input type="number" min="0" class="form-control form-control-sm cap-input" data-y="6" data-t="3"></td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mb-2">
+                <strong>Category</strong> (Rigid / Bottleneck / Flexible) controls solver offering windows; it defaults to <strong>Rigid</strong> and should match your program rules (e.g. Bottleneck for key math/physics chains).
+                Leave <strong>orig_sem</strong> and <strong>year_level</strong> empty to use analyzer suggestions.
+                When <code>term_label</code> matches the EE/CpE grid (e.g. &quot;3rd Year - First Semester&quot;), <code>orig_sem</code> follows the same order as Generate POS, including slots for missing midterm bands.
+            </p>
             <div class="table-responsive bg-white border rounded shadow-sm">
                 <table class="table table-sm table-striped mb-0" id="grid">
                     <thead class="table-light">
@@ -46,6 +71,7 @@
                             <th>Code</th>
                             <th>Title</th>
                             <th>Units</th>
+                            <th>Category</th>
                             <th>orig_sem</th>
                             <th>year_level</th>
                             <th>Prereq (raw)</th>
@@ -75,8 +101,19 @@
         const rid = row.draft_row_id;
         const a = rid && analysisById ? analysisById[rid] : null;
         if (!a) return '—';
-        const u = (a.unresolved && a.unresolved.length) ? ('<span class="err">unresolved: ' + a.unresolved.join('; ') + '</span>') : '';
-        return 'suggested sem ' + (a.orig_sem_suggested || '?') + (u ? '<br>' + u : '');
+        const u = (a.unresolved && a.unresolved.length)
+            ? ('<span class="err">unresolved: ' + a.unresolved.map(escapeHtml).join('; ') + '</span>')
+            : '';
+        const cw = (a.calendar_warnings && a.calendar_warnings.length)
+            ? ('<br><span class="text-warning small">' + a.calendar_warnings.map(escapeHtml).join('<br>') + '</span>')
+            : '';
+        const src = a.orig_sem_source
+            ? ('<br><span class="text-muted small">sem source: ' + escapeHtml(String(a.orig_sem_source)) + '</span>')
+            : '';
+        const yl = (a.year_level_suggested != null && a.year_level_suggested !== '')
+            ? ('<br><span class="text-muted small">suggested year_level: ' + escapeHtml(String(a.year_level_suggested)) + '</span>')
+            : '';
+        return 'suggested sem ' + escapeHtml(String(a.orig_sem_suggested != null ? a.orig_sem_suggested : '?')) + yl + src + (u ? '<br>' + u : '') + cw;
     }
 
     function render(data) {
@@ -86,14 +123,21 @@
         rows.forEach(function (row, idx) {
             const tr = document.createElement('tr');
             tr.dataset.index = String(idx);
+            const catRaw = (row.category != null && String(row.category).trim()) ? String(row.category).trim() : 'Rigid';
+            const catVal = (['Rigid', 'Bottleneck', 'Flexible'].indexOf(catRaw) >= 0) ? catRaw : 'Rigid';
             tr.innerHTML =
                 '<td><input class="form-control form-control-sm code" type="text" value="' + escapeHtml(row.code || '') + '"></td>' +
                 '<td><input class="form-control form-control-sm title" type="text" value="' + escapeHtml(row.title || '') + '"></td>' +
                 '<td><input class="form-control form-control-sm units" type="text" value="' + escapeHtml(String(row.units != null ? row.units : '')) + '"></td>' +
+                '<td><select class="form-select form-select-sm category">' +
+                    '<option value="Rigid"' + (catVal === 'Rigid' ? ' selected' : '') + '>Rigid</option>' +
+                    '<option value="Bottleneck"' + (catVal === 'Bottleneck' ? ' selected' : '') + '>Bottleneck</option>' +
+                    '<option value="Flexible"' + (catVal === 'Flexible' ? ' selected' : '') + '>Flexible</option>' +
+                '</select></td>' +
                 '<td><input class="form-control form-control-sm orig_sem" type="number" min="1" step="1" value="' + escapeHtml(String(row.orig_sem_override != null ? row.orig_sem_override : (row.orig_sem != null ? row.orig_sem : ''))) + '" placeholder="auto" data-draft-row-id="' + escapeHtml(row.draft_row_id || '') + '"></td>' +
-                '<td><input class="form-control form-control-sm year_level" type="number" min="1" step="1" value="' + escapeHtml(String(row.year_level != null ? row.year_level : '1')) + '"></td>' +
-                '<td><textarea class="form-control raw-json">' + escapeHtml(row.raw_prerequisites || '') + '</textarea></td>' +
-                '<td><textarea class="form-control raw-json">' + escapeHtml(row.raw_corequisites || '') + '</textarea></td>' +
+                '<td><input class="form-control form-control-sm year_level" type="number" min="1" step="1" placeholder="auto" value="' + escapeHtml((row.year_level != null && row.year_level !== '') ? String(row.year_level) : '') + '"></td>' +
+                '<td><textarea class="form-control raw-json raw-pre">' + escapeHtml(row.raw_prerequisites || '') + '</textarea></td>' +
+                '<td><textarea class="form-control raw-json raw-co">' + escapeHtml(row.raw_corequisites || '') + '</textarea></td>' +
                 '<td class="small">' + analysisCell(row, analysis) + '</td>';
             tr.querySelector('.orig_sem').dataset.draftRowId = row.draft_row_id || '';
             tbody.appendChild(tr);
@@ -104,6 +148,29 @@
         return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
 
+    function renderCaps(data) {
+        const caps = data.max_units_by_year_term || {};
+        document.querySelectorAll('.cap-input').forEach(function (inp) {
+            const y = inp.getAttribute('data-y');
+            const t = inp.getAttribute('data-t');
+            const yObj = caps[y] || caps[parseInt(y)] || {};
+            const val = yObj[t] != null ? yObj[t] : (yObj[parseInt(t)] != null ? yObj[parseInt(t)] : '');
+            inp.value = val;
+        });
+    }
+
+    function collectUnitCaps() {
+        const caps = {};
+        document.querySelectorAll('.cap-input').forEach(function (inp) {
+            const y = inp.getAttribute('data-y');
+            const t = inp.getAttribute('data-t');
+            if (!caps[y]) caps[y] = {};
+            const v = inp.value.trim();
+            caps[y][t] = v === '' ? null : parseInt(v, 10);
+        });
+        return caps;
+    }
+
     function collectRows(originalRows) {
         const byId = {};
         (originalRows || []).forEach(function (r) { if (r.draft_row_id) byId[r.draft_row_id] = Object.assign({}, r); });
@@ -112,10 +179,11 @@
             const code = tr.querySelector('.code').value.trim();
             const title = tr.querySelector('.title').value.trim();
             const units = tr.querySelector('.units').value.trim();
+            const category = (tr.querySelector('.category') && tr.querySelector('.category').value) ? tr.querySelector('.category').value.trim() : 'Rigid';
             const origInput = tr.querySelector('.orig_sem').value.trim();
             const yearLevel = tr.querySelector('.year_level').value.trim();
-            const rawPre = tr.querySelector('textarea').value;
-            const rawCo = tr.querySelectorAll('textarea')[1].value;
+            const rawPre = tr.querySelector('textarea.raw-pre').value;
+            const rawCo = tr.querySelector('textarea.raw-co').value;
             const draftRowId = tr.querySelector('.orig_sem').getAttribute('data-draft-row-id') || '';
             const base = draftRowId && byId[draftRowId] ? Object.assign({}, byId[draftRowId]) : {};
             base.code = code;
@@ -127,9 +195,14 @@
             } else {
                 base.orig_sem_override = parseInt(origInput, 10);
             }
-            base.year_level = yearLevel === '' ? 1 : parseInt(yearLevel, 10);
+            if (yearLevel === '') {
+                delete base.year_level;
+            } else {
+                base.year_level = parseInt(yearLevel, 10);
+            }
             base.raw_prerequisites = rawPre;
             base.raw_corequisites = rawCo;
+            base.category = (['Rigid', 'Bottleneck', 'Flexible'].indexOf(category) >= 0) ? category : 'Rigid';
             if (draftRowId) base.draft_row_id = draftRowId;
             else if (!base.draft_row_id) base.draft_row_id = '';
             out.push(base);
@@ -149,6 +222,7 @@
         }
         lastPayload = data;
         render(data);
+        renderCaps(data);
         statusEl.textContent = 'Loaded.';
     }
 
@@ -162,7 +236,7 @@
                 'Content-Type': 'application/json',
                 'X-CSRFToken': getCookie('csrftoken'),
             },
-            body: JSON.stringify({ extracted_rows: rows }),
+            body: JSON.stringify({ extracted_rows: rows, max_units_by_year_term: collectUnitCaps() }),
         });
         const data = await r.json().catch(function () { return {}; });
         if (!r.ok || !data.ok) {
@@ -171,6 +245,7 @@
         }
         lastPayload = data;
         render(data);
+        renderCaps(data);
         statusEl.innerHTML = '<span class="ok">Saved.</span>';
     });
 

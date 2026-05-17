@@ -25,6 +25,7 @@ from algorithms_and_helpers.curriculum_runtime import (
     courses,
     curriculum_context_scope,
     get_curriculum_context,
+    normalize_offering_category_value,
     resolve_curriculum_context_from_payload,
     u,
 )
@@ -45,6 +46,10 @@ try:
         ALTERNATIVE_ALGORITHM,
         ENFORCE_GRADUATION_TRIO_ONLY_SEMESTER,
     )
+    try:
+        from solver_settings import CP_SAT_CONSTRAINT_TRACE_COURSES as _TRACE_DEFAULTS
+    except ImportError:
+        _TRACE_DEFAULTS = ()
 except ModuleNotFoundError:
     _settings_path = Path(__file__).resolve().with_name("solver_settings.py")
     _settings_spec = importlib.util.spec_from_file_location("solver_settings", _settings_path)
@@ -55,6 +60,7 @@ except ModuleNotFoundError:
     CONFIGURATION = _settings_module.CONFIGURATION
     ALTERNATIVE_ALGORITHM = _settings_module.ALTERNATIVE_ALGORITHM
     ENFORCE_GRADUATION_TRIO_ONLY_SEMESTER = _settings_module.ENFORCE_GRADUATION_TRIO_ONLY_SEMESTER
+    _TRACE_DEFAULTS = getattr(_settings_module, "CP_SAT_CONSTRAINT_TRACE_COURSES", ())
 from pos_terminal_display import export_generated_pos_pdf
 from algorithms_and_helpers.discrete_opt_adapter import (
     DiscreteOptUnavailableError,
@@ -97,6 +103,80 @@ def _ab886b_log(hypothesis_id: str, location: str, message: str, data: dict, run
 # Align with Django `validate_pos`: 50%/75% rules apply per curriculum semester only when
 # the student has grades totaling at least this many units in that semester (graded courses only).
 MIN_GRADED_UNITS_PER_SEMESTER_FOR_FAIL_RATIO = 10
+
+
+def _env_trace_course_token_strings() -> list[str]:
+    raw = os.environ.get("CP_SAT_CONSTRAINT_TRACE_COURSES", "").strip()
+    if not raw:
+        return []
+    return [p.strip() for p in raw.split(",") if p.strip()]
+
+
+def _resolve_trace_course_codes(payload: dict | None, courses_dict: dict) -> frozenset[str]:
+    """
+    Map payload / solver_settings / env strings to canonical keys present in ``courses_dict``.
+    """
+    raw: list[str] = []
+    if isinstance(payload, dict):
+        v = payload.get("cp_sat_constraint_trace_courses")
+        if isinstance(v, str) and v.strip():
+            raw.extend(p.strip() for p in v.split(",") if p.strip())
+        elif isinstance(v, (list, tuple)):
+            raw.extend(str(x).strip() for x in v if str(x).strip())
+    # Accept tuple/list, or a single str from settings (``("X")`` is a str, not a 1-tuple).
+    _td = _TRACE_DEFAULTS or ()
+    if isinstance(_td, str):
+        _td = (_td,)
+    for x in _td:
+        s = str(x).strip()
+        if s:
+            raw.append(s)
+    raw.extend(_env_trace_course_token_strings())
+
+    norm_index = {_normalize_code(k): k for k in courses_dict}
+    out: list[str] = []
+    seen: set[str] = set()
+    for x in raw:
+        k = norm_index.get(_normalize_code(x))
+        if k and k not in seen:
+            seen.add(k)
+            out.append(k)
+    return frozenset(out)
+
+
+def _trace_pipeline_order_doc() -> list[str]:
+    return [
+        "1) semester IntVar per course (passed → fixed 0)",
+        "2) forced_semester_map equalities (if any)",
+        "3) offering window constraints (see CONFIGURATION.offering_fn)",
+        "4) per-semester unit-cap reified literals (all remaining courses)",
+        "5) graduation trio same-semester / exclusion (if ENFORCE_GRADUATION_TRIO_ONLY_SEMESTER)",
+        "6) prerequisites, year-standing prefix units, co-requisites",
+        "7) objective (Minimize via configuration objective_fn)",
+    ]
+
+
+def _trace_append(
+    events: list | None,
+    trace_codes: frozenset[str],
+    course: str | None,
+    event: dict,
+    *,
+    allow_global: bool = False,
+) -> None:
+    """Record one model-building step for traced courses (or allow_global summary rows)."""
+    if events is None:
+        return
+    if not allow_global:
+        if not trace_codes or course is None or course not in trace_codes:
+            return
+    elif not trace_codes:
+        return
+    row = dict(event)
+    row["seq"] = len(events) + 1
+    if course is not None:
+        row["course"] = course
+    events.append(row)
 
 
 def _int_units_for_cp_sat(raw) -> int:
@@ -305,14 +385,38 @@ def build_normalized_maps():
     return course_code_index, prereq_alias_map, year_standing_map
 
 
-def create_semester_variables(model, current_sem, passed_courses):
+def create_semester_variables(
+    model,
+    current_sem,
+    passed_courses,
+    *,
+    constraint_trace: list | None = None,
+    trace_course_codes: frozenset[str] | None = None,
+):
     """Create semester variables for all courses."""
+    tc = trace_course_codes or frozenset()
     semester = {}
     for code in courses:
         if code in passed_courses:
             semester[code] = model.NewIntVar(0, 0, f"sem_{code}")
+            _trace_append(
+                constraint_trace,
+                tc,
+                code,
+                {"phase": "semester_variable", "kind": "passed_fixed_zero"},
+            )
         else:
             semester[code] = model.NewIntVar(current_sem, u.MAX_SEMESTER, f"sem_{code}")
+            _trace_append(
+                constraint_trace,
+                tc,
+                code,
+                {
+                    "phase": "semester_variable",
+                    "kind": "remaining",
+                    "domain": [int(current_sem), int(u.MAX_SEMESTER)],
+                },
+            )
 
     return semester
 
@@ -324,9 +428,25 @@ ALTERNATIVE_ALGORITHMS = {"discrete_opt", "cpmpy_minizinc"}
 
 
 
-def add_offering_constraints(model, semester, passed_courses, current_sem, with_petition: bool):
+def add_offering_constraints(
+    model,
+    semester,
+    passed_courses,
+    current_sem,
+    with_petition: bool,
+    failed_courses=None,
+    *,
+    constraint_trace: list | None = None,
+    trace_course_codes: frozenset[str] | None = None,
+):
     """Add offering-window constraints using the selected configuration."""
+    failed_set = frozenset(failed_courses or ())
     spec = CONFIGURATIONS[CONFIGURATION]
+    trace_kw: dict = {}
+    tc = trace_course_codes or frozenset()
+    if constraint_trace is not None and tc:
+        trace_kw["constraint_trace"] = constraint_trace
+        trace_kw["trace_course_codes"] = tc
     spec.offering_fn(
         model,
         semester,
@@ -336,13 +456,22 @@ def add_offering_constraints(model, semester, passed_courses, current_sem, with_
         with_petition,
         _first_semester,
         u.MAX_SEMESTER,
+        failed_set,
+        **trace_kw,
     )
 
 
 # Graduation trio enforcement toggle is centralized in solver_settings.py.
 
 
-def add_graduation_semester_constraint(model, semester, passed_courses):
+def add_graduation_semester_constraint(
+    model,
+    semester,
+    passed_courses,
+    *,
+    constraint_trace: list | None = None,
+    trace_course_codes: frozenset[str] | None = None,
+):
     """
     Enforce that the last semester contains ONLY CpE Practice 2, Compre, and OJT.
     - The three must be in the same semester.
@@ -352,24 +481,62 @@ def add_graduation_semester_constraint(model, semester, passed_courses):
     if len(trio) < 2:
         return  # Not enough to enforce (e.g. all passed or only one left)
     ref = trio[0]
+    tc = trace_course_codes or frozenset()
     # All trio members in same semester
     for c in trio[1:]:
         model.Add(semester[c] == semester[ref])
+        if c in tc or ref in tc:
+            _trace_append(
+                constraint_trace,
+                tc,
+                c if c in tc else ref,
+                {"phase": "graduation_trio", "kind": "same_semester", "with_ref": ref},
+            )
     # No other course may share that semester
     for c, info in courses.items():
         if c in passed_courses or c in GRADUATION_TRIO:
             continue
         model.Add(semester[c] != semester[ref])
+        if c in tc:
+            _trace_append(
+                constraint_trace,
+                tc,
+                c,
+                {"phase": "graduation_trio", "kind": "exclude_non_trio_from_trio_semester", "trio_ref": ref},
+            )
 
 
-def add_unit_constraints(model, semester, passed_courses, current_sem):
+def add_unit_constraints(
+    model,
+    semester,
+    passed_courses,
+    current_sem,
+    *,
+    constraint_trace: list | None = None,
+    trace_course_codes: frozenset[str] | None = None,
+):
     """Add per-semester unit load constraints."""
+    tc = trace_course_codes or frozenset()
+    unit_logged: set[str] = set()
     for s in range(current_sem, u.MAX_SEMESTER + 1):
         active_in_sem = []
         for c, info in courses.items():
             if c in passed_courses:
                 continue
             b = model.NewBoolVar(f"{c}_in_sem_{s}")
+            if constraint_trace is not None and c in tc and c not in unit_logged:
+                unit_logged.add(c)
+                _trace_append(
+                    constraint_trace,
+                    tc,
+                    c,
+                    {
+                        "phase": "unit_cap",
+                        "kind": "reified_in_semester",
+                        "first_semester_index_logged": int(s),
+                        "note": "BoolVar per (course, semester) then summed into cap; order follows courses dict iteration",
+                    },
+                )
             model.Add(semester[c] == s).OnlyEnforceIf(b)
             model.Add(semester[c] != s).OnlyEnforceIf(b.Not())
             active_in_sem.append(b * _int_units_for_cp_sat(info.get("units", 0)))
@@ -386,8 +553,12 @@ def add_prereq_year_coreq_constraints(
     course_code_index,
     prereq_alias_map,
     year_standing_map,
+    *,
+    constraint_trace: list | None = None,
+    trace_course_codes: frozenset[str] | None = None,
 ):
     """Add prerequisite, year-standing, and co-requisite constraints."""
+    tc = trace_course_codes or frozenset()
 
     def resolve_course(code: str):
         if not isinstance(code, str):
@@ -455,8 +626,17 @@ def add_prereq_year_coreq_constraints(
             model.Add(sum(before_vars) >= remaining_needed).OnlyEnforceIf(enforce_if)
         else:
             model.Add(sum(before_vars) >= remaining_needed)
+        _trace_append(
+            constraint_trace,
+            tc,
+            course,
+            {
+                "phase": "year_standing_prefix_units",
+                "remaining_needed_units": int(remaining_needed),
+                "scoped": bool(enforce_if),
+            },
+        )
 
-    # --- C. Prerequisite & Year Standing Constraints ---
     for c, info in courses.items():
         if c in passed_courses:
             continue
@@ -483,6 +663,30 @@ def add_prereq_year_coreq_constraints(
                         choices.append(b)
                 if choices:
                     model.Add(sum(choices) >= 1)
+                    if c in tc:
+                        _trace_append(
+                            constraint_trace,
+                            tc,
+                            c,
+                            {"phase": "prerequisite", "kind": "or_group_sum_ge_1", "head_course": c},
+                        )
+                    else:
+                        for alt in prereq:
+                            if not isinstance(alt, str):
+                                continue
+                            ac = resolve_course(alt)
+                            if ac and ac in tc:
+                                _trace_append(
+                                    constraint_trace,
+                                    tc,
+                                    ac,
+                                    {
+                                        "phase": "prerequisite",
+                                        "kind": "or_group_branch_as_prereq_of",
+                                        "head_course": c,
+                                    },
+                                )
+                                break
                 else:
                     print(
                         f"Warning: {c} has prereq alternatives but none match known courses/standing."
@@ -492,6 +696,19 @@ def add_prereq_year_coreq_constraints(
                 prereq_year = resolve_year_standing(prereq)
                 if prereq_course:
                     model.Add(semester[c] > semester[prereq_course])
+                    head = c if c in tc else (prereq_course if prereq_course in tc else None)
+                    if head:
+                        _trace_append(
+                            constraint_trace,
+                            tc,
+                            head,
+                            {
+                                "phase": "prerequisite",
+                                "kind": "simple_order_gt",
+                                "head_course": c,
+                                "prereq_course": prereq_course,
+                            },
+                        )
                 elif prereq_year:
                     add_year_standing(c, prereq_year)
                 else:
@@ -507,11 +724,33 @@ def add_prereq_year_coreq_constraints(
             coreq_course = resolve_course(coreq)
             if coreq_course:
                 model.Add(semester[c] >= semester[coreq_course])
+                head = c if c in tc else (coreq_course if coreq_course in tc else None)
+                if head:
+                    _trace_append(
+                        constraint_trace,
+                        tc,
+                        head,
+                        {
+                            "phase": "corequisite",
+                            "kind": "order_ge",
+                            "head_course": c,
+                            "coreq_course": coreq_course,
+                        },
+                    )
             else:
                 print(f"Warning: {c} has unknown co-req '{coreq}'.")
 
 
-def add_objective(model, semester, passed_courses, failed_courses, current_sem):
+def add_objective(
+    model,
+    semester,
+    passed_courses,
+    failed_courses,
+    current_sem,
+    *,
+    constraint_trace: list | None = None,
+    trace_course_codes: frozenset[str] | None = None,
+):
     """Set objective using the selected configuration."""
     spec = CONFIGURATIONS[CONFIGURATION]
     spec.objective_fn(
@@ -523,9 +762,32 @@ def add_objective(model, semester, passed_courses, failed_courses, current_sem):
         u.MAX_SEMESTER,
         weights=spec.weights,
     )
+    tc = trace_course_codes or frozenset()
+    if constraint_trace is not None and tc:
+        _trace_append(
+            constraint_trace,
+            tc,
+            None,
+            {
+                "phase": "objective",
+                "configuration": CONFIGURATION,
+                "courses_traced": sorted(tc),
+                "note": "objective_fn minimizes over all remaining courses; see Configurations objective",
+            },
+            allow_global=True,
+        )
 
 
-def _solve_and_collect(model, semester, passed_courses, failed_courses, current_sem):
+def _solve_and_collect(
+    model,
+    semester,
+    passed_courses,
+    failed_courses,
+    current_sem,
+    *,
+    with_petition: bool = False,
+    constraint_trace: list | None = None,
+):
     """
     Internal helper: solve model and return a structured POS result.
 
@@ -562,7 +824,7 @@ def _solve_and_collect(model, semester, passed_courses, failed_courses, current_
                     ],
                 }
             )
-        return {"status": "ok", "message": None, "pos": pos}
+        return {"status": "ok", "message": None, "pos": pos, **({"constraint_build_trace": constraint_trace} if constraint_trace else {})}
     else:
         import io
         import contextlib
@@ -572,10 +834,33 @@ def _solve_and_collect(model, semester, passed_courses, failed_courses, current_
             _log_infeasible(
                 solver, status, current_sem, failed_courses, passed_courses, courses, u
             )
-        return {"status": "infeasible", "message": buf.getvalue().strip(), "pos": []}
+        msg = buf.getvalue().strip()
+        hint = _infeasibility_domain_hint(current_sem, passed_courses, failed_courses, with_petition)
+        if hint:
+            msg = msg + hint
+        else:
+            msg = (
+                msg
+                + "\n\nAutomated diagnosis: every remaining course has at least one allowed semester "
+                "under the offering rules, so this infeasibility is likely from **graduation trio + no other "
+                "courses in that semester**, **per-term unit caps**, **prerequisites**, or **year standing**. "
+                f"ENFORCE_GRADUATION_TRIO_ONLY_SEMESTER={ENFORCE_GRADUATION_TRIO_ONLY_SEMESTER}."
+            )
+        out = {"status": "infeasible", "message": msg, "pos": []}
+        if constraint_trace:
+            out["constraint_build_trace"] = constraint_trace
+        return out
 
 
-def _apply_forced_semester_assignments(model, semester, passed_courses, forced_semester_map):
+def _apply_forced_semester_assignments(
+    model,
+    semester,
+    passed_courses,
+    forced_semester_map,
+    *,
+    constraint_trace: list | None = None,
+    trace_course_codes: frozenset[str] | None = None,
+):
     """
     If provided, force specific courses to be scheduled in specific semesters.
 
@@ -584,6 +869,7 @@ def _apply_forced_semester_assignments(model, semester, passed_courses, forced_s
     if not forced_semester_map or not isinstance(forced_semester_map, dict):
         return
 
+    tc = trace_course_codes or frozenset()
     for code, forced_sem in forced_semester_map.items():
         if not isinstance(code, str):
             continue
@@ -596,10 +882,17 @@ def _apply_forced_semester_assignments(model, semester, passed_courses, forced_s
         except (ValueError, TypeError):
             continue
         model.Add(semester[code] == si)
+        _trace_append(
+            constraint_trace,
+            tc,
+            code,
+            {"phase": "forced_semester_map", "forced_semester": int(si)},
+        )
 
 
-def _valid_semesters_for_course(code, info, current_sem, with_petition: bool):
+def _valid_semesters_for_course(code, info, current_sem, with_petition: bool, failed_courses=None):
     """Compute allowed semesters for a course under the active configuration."""
+    failed_set = frozenset(failed_courses or ())
     max_sem = u.MAX_SEMESTER
     if CONFIGURATION == "config3_weightedtriocap":
         max_sem = min(max_sem, 14)
@@ -610,35 +903,78 @@ def _valid_semesters_for_course(code, info, current_sem, with_petition: bool):
 
     if CONFIGURATION == "config0_no_modulo3_baseline":
         orig = _first_semester(info) or 1
-        cat = info.get("category", "Rigid")
+        cat = normalize_offering_category_value(info)
         lo = max(current_sem, orig)
         strict = [s for s in range(current_sem, max_sem + 1) if s >= lo]
         if cat == "Bottleneck" and with_petition:
+            return list(range(current_sem, max_sem + 1))
+        if code in failed_set and cat in ("Rigid", "Flexible"):
             return list(range(current_sem, max_sem + 1))
         if cat == "Flexible" and with_petition:
             return list(range(current_sem, max_sem + 1))
         return strict
 
     orig = _first_semester(info) or 1
-    cat = info.get("category", "Rigid")
+    cat = normalize_offering_category_value(info)
 
     valid = []
     for s in range(current_sem, max_sem + 1):
         sem_type, orig_type = s % 3, orig % 3
-        if cat == "Rigid":
-            if sem_type == orig_type:
-                valid.append(s)
-        elif cat == "Flexible":
-            if (orig_type in [1, 2] and sem_type in [1, 2]) or (orig_type == 0 and sem_type == 0):
-                valid.append(s)
-        elif cat == "Bottleneck":
+        if cat == "Bottleneck":
             if CONFIGURATION == "config3_weightedtriocap":
                 valid.append(s)
-            elif with_petition or sem_type == orig_type:
+            elif with_petition:
                 valid.append(s)
+            elif sem_type == orig_type:
+                valid.append(s)
+        elif code in failed_set:
+            valid.append(s)
+        elif cat == "Rigid" and sem_type == orig_type:
+            valid.append(s)
+        elif cat == "Flexible" and (
+            (orig_type in [1, 2] and sem_type in [1, 2]) or (orig_type == 0 and sem_type == 0)
+        ):
+            valid.append(s)
         else:
             valid.append(s)
     return valid
+
+
+def _infeasibility_domain_hint(
+    current_sem: int,
+    passed_courses,
+    failed_courses,
+    with_petition: bool,
+) -> str:
+    """
+    When CP-SAT is infeasible, list remaining courses whose allowed-semester set is empty
+    under the same rules as `_valid_semesters_for_course` (offering windows).
+    """
+    failed_set = frozenset(failed_courses or ())
+    empty: list[tuple[str, object, object]] = []
+    for c, info in courses.items():
+        if c in passed_courses:
+            continue
+        try:
+            vs = _valid_semesters_for_course(c, info, current_sem, with_petition, failed_set)
+        except Exception:
+            continue
+        if len(vs) == 0:
+            raw_cat = info.get("category") if isinstance(info, dict) else None
+            empty.append((c, raw_cat, _first_semester(info)))
+    if not empty:
+        return ""
+    n_rem = len([c for c in courses if c not in passed_courses])
+    lines = [
+        "",
+        "Automated diagnosis (courses with 0 allowed semesters under offering rules):",
+        f"  CONFIGURATION={CONFIGURATION!r}  ENFORCE_GRADUATION_TRIO_ONLY_SEMESTER={ENFORCE_GRADUATION_TRIO_ONLY_SEMESTER}",
+        f"  current_sem={current_sem}  MAX_SEMESTER={u.MAX_SEMESTER}  remaining_courses={n_rem}",
+        "  Common fix: ensure each course `category` is the string Rigid, Flexible, or Bottleneck (not a JSON number).",
+    ]
+    for row in sorted(empty, key=lambda x: x[0])[:60]:
+        lines.append(f"    - {row[0]!r}  category_raw={row[1]!r}  orig_sem={row[2]!r}")
+    return "\n".join(lines)
 
 
 def _build_pos_from_state(state, current_sem, passed_courses):
@@ -677,6 +1013,7 @@ def _state_violation_summary(
     course_code_index: dict[str, str] | None = None,
     prereq_alias_map: dict[str, str] | None = None,
     year_standing_map: dict[str, str] | None = None,
+    failed_courses_for_domains=None,
 ):
     """
     Fast in-Python constraint check/penalty model for alternative algorithms.
@@ -698,11 +1035,11 @@ def _state_violation_summary(
             valid = valid_map_override.get(c)
             if valid is None:
                 # Fallback: should only happen if caller didn't include c.
-                valid = set(_valid_semesters_for_course(c, info, current_sem, with_petition))
+                valid = set(_valid_semesters_for_course(c, info, current_sem, with_petition, failed_courses_for_domains))
             if s not in valid:
                 violation_count += 1
         else:
-            valid = _valid_semesters_for_course(c, info, current_sem, with_petition)
+            valid = _valid_semesters_for_course(c, info, current_sem, with_petition, failed_courses_for_domains)
             if s not in valid:
                 violation_count += 1
         if s in load_by_sem:
@@ -963,10 +1300,11 @@ def _run_alternative_core(current_sem, passed_courses, failed_courses, with_peti
     if not remaining:
         return {"status": "ok", "message": None, "pos": _build_pos_from_state({}, current_sem, passed_courses)}
 
+    failed_set = frozenset(failed_courses or ())
     # Per-course allowed semesters from CONFIGURATION (modulo-3 / config0 / config3, categories,
     # petition). Heuristic search never leaves these domains — same offering reduction as CP-SAT.
     valid_map = {
-        c: tuple(_valid_semesters_for_course(c, courses[c], current_sem, with_petition))
+        c: tuple(_valid_semesters_for_course(c, courses[c], current_sem, with_petition, failed_set))
         for c in remaining
     }
     # Precompute maps once so the discrete_opt hot loop doesn't rebuild them.
@@ -993,6 +1331,7 @@ def _run_alternative_core(current_sem, passed_courses, failed_courses, with_peti
         course_code_index=course_code_index,
         prereq_alias_map=prereq_alias_map,
         year_standing_map=year_standing_map,
+        failed_courses_for_domains=failed_set,
     )
     _debug_log(
         "H2",
@@ -1045,6 +1384,7 @@ def _run_alternative_core(current_sem, passed_courses, failed_courses, with_peti
             course_code_index=course_code_index,
             prereq_alias_map=prereq_alias_map,
             year_standing_map=year_standing_map,
+            failed_courses_for_domains=failed_set,
         )
         return _last_eval_v
 
@@ -1121,6 +1461,7 @@ def _run_alternative_core(current_sem, passed_courses, failed_courses, with_peti
         course_code_index=course_code_index,
         prereq_alias_map=prereq_alias_map,
         year_standing_map=year_standing_map,
+        failed_courses_for_domains=failed_set,
     )
     changed_assignments = sum(
         1 for c in remaining if initial_state.get(c) != best_state.get(c)
@@ -1170,8 +1511,24 @@ def _run_cp_sat_configuration_core(
     failed_courses,
     with_petition: bool,
     forced_semester_map=None,
+    trace_course_codes: frozenset[str] | None = None,
 ):
     """Run the existing CP-SAT pipeline for the selected CONFIGURATION."""
+    tc = trace_course_codes or frozenset()
+    constraint_trace: list | None = [] if tc else None
+    if constraint_trace is not None:
+        _trace_append(
+            constraint_trace,
+            tc,
+            None,
+            {
+                "phase": "cp_sat_model_build",
+                "courses_traced": sorted(tc),
+                "constraint_class_order": _trace_pipeline_order_doc(),
+            },
+            allow_global=True,
+        )
+
     # 2. Model Initialization
     model = cp_model.CpModel()
     year_units, year_courses_list, earned_units_by_year = build_year_aggregates(
@@ -1180,16 +1537,51 @@ def _run_cp_sat_configuration_core(
     course_code_index, prereq_alias_map, year_standing_map = build_normalized_maps()
 
     # 3. Variable Initialization
-    semester = create_semester_variables(model, current_sem, passed_courses)
+    semester = create_semester_variables(
+        model,
+        current_sem,
+        passed_courses,
+        constraint_trace=constraint_trace,
+        trace_course_codes=tc,
+    )
 
     # Optional: force semester assignments from a user-edited POS.
-    _apply_forced_semester_assignments(model, semester, passed_courses, forced_semester_map)
+    _apply_forced_semester_assignments(
+        model,
+        semester,
+        passed_courses,
+        forced_semester_map,
+        constraint_trace=constraint_trace,
+        trace_course_codes=tc,
+    )
 
     # 4. Constraints
-    add_offering_constraints(model, semester, passed_courses, current_sem, with_petition)
-    add_unit_constraints(model, semester, passed_courses, current_sem)
+    add_offering_constraints(
+        model,
+        semester,
+        passed_courses,
+        current_sem,
+        with_petition,
+        failed_courses,
+        constraint_trace=constraint_trace,
+        trace_course_codes=tc,
+    )
+    add_unit_constraints(
+        model,
+        semester,
+        passed_courses,
+        current_sem,
+        constraint_trace=constraint_trace,
+        trace_course_codes=tc,
+    )
     if ENFORCE_GRADUATION_TRIO_ONLY_SEMESTER:
-        add_graduation_semester_constraint(model, semester, passed_courses)
+        add_graduation_semester_constraint(
+            model,
+            semester,
+            passed_courses,
+            constraint_trace=constraint_trace,
+            trace_course_codes=tc,
+        )
     add_prereq_year_coreq_constraints(
         model,
         semester,
@@ -1200,13 +1592,31 @@ def _run_cp_sat_configuration_core(
         course_code_index,
         prereq_alias_map,
         year_standing_map,
+        constraint_trace=constraint_trace,
+        trace_course_codes=tc,
     )
 
     # 5. Objective
-    add_objective(model, semester, passed_courses, failed_courses, current_sem)
+    add_objective(
+        model,
+        semester,
+        passed_courses,
+        failed_courses,
+        current_sem,
+        constraint_trace=constraint_trace,
+        trace_course_codes=tc,
+    )
 
     # 6. Solver
-    return _solve_and_collect(model, semester, passed_courses, failed_courses, current_sem)
+    return _solve_and_collect(
+        model,
+        semester,
+        passed_courses,
+        failed_courses,
+        current_sem,
+        with_petition=with_petition,
+        constraint_trace=constraint_trace,
+    )
 
 
 def _build_original_curriculum_pos(current_sem, passed_courses):
@@ -1240,7 +1650,14 @@ def _build_original_curriculum_pos(current_sem, passed_courses):
     return {"status": "ok", "message": None, "pos": pos}
 
 
-def _run_core(current_sem, passed_courses, failed_courses, with_petition: bool, forced_semester_map=None):
+def _run_core(
+    current_sem,
+    passed_courses,
+    failed_courses,
+    with_petition: bool,
+    forced_semester_map=None,
+    trace_course_codes: frozenset[str] | None = None,
+):
     """
     Internal pipeline that runs the full model and returns a structured result dict.
     Shared by CLI and external callers.
@@ -1284,6 +1701,7 @@ def _run_core(current_sem, passed_courses, failed_courses, with_petition: bool, 
         failed_courses,
         with_petition=with_petition,
         forced_semester_map=forced_semester_map,
+        trace_course_codes=trace_course_codes,
     )
 
 
@@ -1304,6 +1722,10 @@ def generate_pos(payload: dict) -> dict:
         When omitted, static ``courses.py`` + ``units_and_year_standings`` are used.
       - curriculum_version_id (optional): resolved by Django ``solver_bridge`` into
         ``curriculum_bundle`` before the solver is invoked; not read inside CP-SAT.
+      - cp_sat_constraint_trace_courses (optional): list[str] or comma-separated str;
+        when set, CP-SAT responses include ``constraint_build_trace`` (ordered model-build
+        steps touching those course codes). Also see env ``CP_SAT_CONSTRAINT_TRACE_COURSES``
+        and ``solver_settings.CP_SAT_CONSTRAINT_TRACE_COURSES``.
 
     Alternative algorithms use the same CONFIGURATION offering windows as CP-SAT
     (see _valid_semesters_for_course); returned POS is always the heuristic's own result.
@@ -1352,12 +1774,88 @@ def generate_pos(payload: dict) -> dict:
     ctx = resolve_curriculum_context_from_payload(payload)
     with curriculum_context_scope(ctx):
         try:
+            trace_codes = _resolve_trace_course_codes(payload, courses)
             return _run_core(
                 current_sem,
                 passed_courses,
                 failed_courses,
                 with_petition=with_petition,
                 forced_semester_map=forced_semester_map,
+                trace_course_codes=trace_codes,
+            )
+        finally:
+            CONFIGURATION = old_configuration
+            ALTERNATIVE_ALGORITHM = old_alternative
+            ENFORCE_GRADUATION_TRIO_ONLY_SEMESTER = old_trio_enforcement
+
+
+def compute_placement_diagnostics(payload: dict) -> dict:
+    """
+    JSON-serializable coarse placement diagnostics (capacity, terms, constrained courses).
+    Uses the same curriculum context and ``_valid_semesters_for_course`` offering domains
+    as CP-SAT; does not run the solver.
+    """
+    if payload is None or not isinstance(payload, dict):
+        raise ValueError("payload must be a dict")
+    global CONFIGURATION, ALTERNATIVE_ALGORITHM, ENFORCE_GRADUATION_TRIO_ONLY_SEMESTER
+
+    try:
+        current_sem = int(payload.get("current_sem"))
+    except (TypeError, ValueError):
+        raise ValueError("payload['current_sem'] must be an integer")
+
+    passed_courses = list(payload.get("passed_courses") or [])
+    failed_courses = list(payload.get("failed_courses") or [])
+    with_petition = bool(payload.get("with_petition", False))
+
+    requested_configuration = payload.get("configuration", CONFIGURATION)
+    requested_alternative = payload.get("alternative_algorithm", ALTERNATIVE_ALGORITHM)
+    requested_trio_enforcement = bool(
+        payload.get(
+            "enforce_graduation_trio_only_semester",
+            ENFORCE_GRADUATION_TRIO_ONLY_SEMESTER,
+        )
+    )
+
+    if requested_configuration not in CONFIGURATIONS:
+        raise ValueError(
+            f"payload['configuration'] must be one of: {', '.join(sorted(CONFIGURATIONS.keys()))}"
+        )
+    if requested_alternative is not None and requested_alternative not in ALTERNATIVE_ALGORITHMS:
+        raise ValueError(
+            "payload['alternative_algorithm'] must be one of: discrete_opt, cpmpy_minizinc, or null"
+        )
+
+    old_configuration = CONFIGURATION
+    old_alternative = ALTERNATIVE_ALGORITHM
+    old_trio_enforcement = ENFORCE_GRADUATION_TRIO_ONLY_SEMESTER
+    CONFIGURATION = requested_configuration
+    ALTERNATIVE_ALGORITHM = requested_alternative
+    ENFORCE_GRADUATION_TRIO_ONLY_SEMESTER = requested_trio_enforcement
+
+    ctx = resolve_curriculum_context_from_payload(payload)
+    with curriculum_context_scope(ctx):
+        try:
+            from algorithms_and_helpers.placement_diagnostics import run_placement_diagnostics
+
+            def _vs(code, info):
+                return _valid_semesters_for_course(code, info, current_sem, with_petition, failed_courses)
+
+            return run_placement_diagnostics(
+                courses=courses,
+                passed_courses=passed_courses,
+                failed_courses=failed_courses,
+                current_sem=current_sem,
+                with_petition=with_petition,
+                max_semester=int(u.MAX_SEMESTER),
+                max_units_for_sem=u.max_units_for_sem,
+                valid_semesters_fn=_vs,
+                first_semester_fn=_first_semester,
+                normalize_code=_normalize_code,
+                get_req_list=_get_req_list,
+                prereq_aliases=dict(PREREQ_ALIASES),
+                year_standing_rules=dict(YEAR_STANDING_RULES),
+                configuration=str(CONFIGURATION),
             )
         finally:
             CONFIGURATION = old_configuration

@@ -57,6 +57,7 @@ _SOLVER_WATCHED_FILES = [
     Path("Main-Solver") / "CP-SAT.py",
     Path("algorithms_and_helpers") / "Configurations.py",
     Path("algorithms_and_helpers") / "curriculum_runtime.py",
+    Path("algorithms_and_helpers") / "placement_diagnostics.py",
     Path("courses_and_year_standings") / "units_and_year_standings.py",
     Path("courses_and_year_standings") / "courses.py",
     Path("Main-Solver") / "solver_settings.py",
@@ -217,6 +218,20 @@ def generate_pos_via_solver(payload: dict) -> dict:
         "default_petition_mode": default_mode,
         "default_reason": _make_reason(),
     }
+
+
+def compute_placement_diagnostics_via_solver(payload: dict) -> dict:
+    """
+    Run Solver-Side ``compute_placement_diagnostics(payload)`` (no CP-SAT solve).
+    Payload must match ``generate_pos`` curriculum context keys.
+    """
+    ns = _get_solver_namespace()
+    fn = ns.get("compute_placement_diagnostics")
+    if fn is None:
+        raise RuntimeError("compute_placement_diagnostics not found in solver namespace")
+    p = dict(payload or {})
+    p = _attach_curriculum_bundle_from_version(p)
+    return fn(p)
 
 
 def validate_pos_via_solver(payload: dict, with_petition: bool, forced_semester_map: dict | None) -> dict:

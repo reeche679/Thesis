@@ -8,9 +8,12 @@ from typing import Any
 
 from pos.curriculum_draft_semesters import orig_sem_for_course_row, term_index_to_orig_sem_map
 from pos.curriculum_pdf_extract import _canonical_course_code
-
-# v1 policy: uniform semester caps until UI allows editing.
-MAX_UNITS_PER_SEMESTER_V1 = 24
+from pos.curriculum_unit_caps import (
+    OVERFLOW_SEMESTERS,
+    build_max_units_by_semester_index,
+    validate_max_units_by_year_term,
+)
+from pos.solver_course_reference import resolve_course_category
 
 
 def _float_units(row: dict[str, Any]) -> float:
@@ -30,6 +33,23 @@ def _int_year_level(row: dict[str, Any]) -> int:
         except (TypeError, ValueError):
             pass
     return 1
+
+
+def _year_level_for_approved(row: dict[str, Any], row_a: dict[str, Any] | None) -> int:
+    """Staff row override, else analyzer year_level_suggested, else legacy default."""
+    if "year_level" in row and row["year_level"] is not None and str(row["year_level"]).strip() != "":
+        try:
+            return max(1, int(row["year_level"]))
+        except (TypeError, ValueError):
+            pass
+    if row_a and row_a.get("year_level_suggested") is not None:
+        try:
+            v = int(row_a["year_level_suggested"])
+            if v >= 1:
+                return min(10, v)
+        except (TypeError, ValueError):
+            pass
+    return _int_year_level(row)
 
 
 def draft_to_approved_json(
@@ -108,14 +128,18 @@ def draft_to_approved_json(
             "course_title": title[:500],
             "units": _float_units(row),
             "orig_sem": int(orig_sem),
-            "category": "Rigid",
-            "year_level": _int_year_level(row),
+            "category": resolve_course_category(code, row.get("category")),
+            "year_level": _year_level_for_approved(row, row_a),
             "pre-requisites": pre_req_out,
             "co-requisites": co_out,
         }
 
     max_orig = max((c["orig_sem"] for c in courses.values()), default=1)
-    max_units = [MAX_UNITS_PER_SEMESTER_V1] * int(max_orig)
+    raw_caps = draft_json.get("max_units_by_year_term")
+    year_term_map = validate_max_units_by_year_term(raw_caps)
+    max_units = build_max_units_by_semester_index(
+        year_term_map, max_orig=max_orig, overflow_semesters=OVERFLOW_SEMESTERS,
+    )
 
     meta_sha: str | None
     if source_pdf_sha256 and len(str(source_pdf_sha256).strip()) == 64:

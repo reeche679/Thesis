@@ -1602,6 +1602,16 @@
         ) {
             /* Solver CP-SAT.py check_probation (unit-based); keep full text, not generic "enrolled units". */
             compactMsg = raw;
+        } else if (
+            /NO VALID SCHEDULE|Possible reasons \(check your curriculum|CpSolverResponse summary:|Unit caps by semester \(from current onward\):/i.test(
+                raw
+            )
+        ) {
+            /* CP-SAT infeasible dump mentions "75%" inside generic help bullets — not the probation rule. */
+            compactMsg =
+                'Automatic scheduling is not possible with your current grades and curriculum rules ' +
+                '(for example: where failed courses may be retaken, term placement, unit limits, or prerequisites). ' +
+                'Please consult your academic adviser so they can review your situation and approve a manual Program of Study.';
         } else if (/75%/i.test(raw)) {
             compactMsg = 'POS cannot be generated automatically because 75% or more of your enrolled units are marked as failed in one or more semesters. Under program rules, automatic generation is not allowed in this situation. Please consult your program adviser for a manual evaluation of your remaining coursework and any required approvals.';
         } else if (/50%/i.test(raw) || /manual evaluation/i.test(raw) || status === 'probation') {
@@ -1614,7 +1624,10 @@
         } else {
             compactMsg = raw.trim();
             if (compactMsg.indexOf('NO VALID SCHEDULE') !== -1 || compactMsg.indexOf('Solver status:') !== -1) {
-                compactMsg = 'Please proceed to manual evaluation. The POS has exceeded the horizon gap. Please refer to the academic adviser to proceed.';
+                compactMsg =
+                    'Automatic scheduling is not possible with your current grades and curriculum rules ' +
+                    '(for example: where failed courses may be retaken, term placement, unit limits, or prerequisites). ' +
+                    'Please consult your academic adviser so they can review your situation and approve a manual Program of Study.';
             }
             if (compactMsg.length > POS_ERROR_MSG_MAX_LEN) {
                 compactMsg = compactMsg.slice(0, POS_ERROR_MSG_MAX_LEN).trim() + '...';
@@ -2161,9 +2174,13 @@
             // If a course is both in passed and failed (retake), keep it in passed.
             passed.forEach(function(code) { if (failed.has(code)) failed.delete(code); });
 
-            // NOTE: UI uses 0-based "section index" (0=1st Yr 1st Sem).
-            // Solver uses 1-based "semester_index" (1=1st Yr 1st Sem).
-            // Therefore: solver_sem = ui_section + 1.
+            // Semester indexing (matches curriculum `orig_sem` in courses.py: 1 = 1st Year 1st Sem):
+            // - UI "section index" is 0-based (0 = first curriculum row = solver semester 1).
+            // - Solver `current_sem` is 1-based and means "earliest semester index we may assign
+            //   to not-yet-passed courses" (IntVar lower bound).
+            // "Last semester enrolled" = last row you have grades for. Planning starts in the
+            // *next* curriculum semester, so: current_sem = (last UI section index) + 2.
+            // Example: last enrolled = 1st Year 1st Sem (UI 0) -> next term is 1st Year 2nd Sem -> 2.
             var currentSemInt = 1; // default to solver sem 1
             if (IS_REGULAR) {
                 var regSel = document.getElementById('regular-current-semester');
@@ -2224,10 +2241,11 @@
         saveGradesToServer(gradesBySection, function(data) {
             if (data && data.ok) {
                 // Validate with CP-SAT first so we don't generate when prerequisites are violated.
+                var solverSlice = buildSolverPayloadFromGrades(gradesBySection);
                 fetch("{% url 'validate_pos' %}", {
                     method: "POST",
                     headers: { "Content-Type": "application/json", "X-CSRFToken": getCookie('csrftoken') },
-                    body: JSON.stringify({ grades_by_section: gradesBySection }),
+                    body: JSON.stringify(Object.assign({ grades_by_section: gradesBySection }, solverSlice)),
                     credentials: "same-origin"
                 }).then(function(r) { return r.json(); })
                   .then(function(validationRes) {

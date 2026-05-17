@@ -8,6 +8,12 @@ import re
 from datetime import datetime, timezone
 from typing import Any
 
+from pos.canonical_term_grid import (
+    orig_sem_from_term_label,
+    term_label_for_row,
+    year_level_from_orig_sem,
+    year_level_from_term_label,
+)
 from pos.curriculum_draft_semesters import orig_sem_suggested_for_row, term_index_to_orig_sem_map
 from pos.curriculum_pdf_extract import (
     _STANDING_OR_PROGRESSION,
@@ -16,7 +22,7 @@ from pos.curriculum_pdf_extract import (
     _requisite_text_is_standing_or_progression_only,
 )
 
-ANALYZER_VERSION = "phase6-v1"
+ANALYZER_VERSION = "phase6-v2"
 
 
 def _standing_year_guess(match_text: str) -> int | None:
@@ -108,8 +114,37 @@ def _analyze_row(
     if unresolved:
         conf *= 0.85
 
+    label_text = term_label_for_row(row)
+    label_orig = orig_sem_from_term_label(label_text) if label_text else None
+    ti_orig = orig_sem_suggested_for_row(row, ti_map)
+    calendar_warnings: list[str] = []
+    if label_orig is not None:
+        orig_sem_suggested = label_orig
+        orig_sem_source = "label"
+        if ti_orig != label_orig:
+            calendar_warnings.append(
+                f"orig_sem from canonical term_label ({label_orig}); term_index-only map would be {ti_orig}"
+            )
+    else:
+        orig_sem_suggested = ti_orig
+        orig_sem_source = "term_index"
+        if label_text:
+            calendar_warnings.append("term_label present but not matched to canonical EE/CpE grid; using term_index map")
+
+    yl_from_label = year_level_from_term_label(label_text) if label_text else None
+    if yl_from_label is not None:
+        year_level_suggested = max(1, min(10, int(yl_from_label)))
+    else:
+        year_level_suggested = year_level_from_orig_sem(orig_sem_suggested)
+
+    if orig_sem_source == "term_index":
+        conf *= 0.97
+
     return {
-        "orig_sem_suggested": orig_sem_suggested_for_row(row, ti_map),
+        "orig_sem_suggested": int(orig_sem_suggested),
+        "orig_sem_source": orig_sem_source,
+        "year_level_suggested": int(year_level_suggested),
+        "calendar_warnings": calendar_warnings,
         "resolved_pre": resolved_pre,
         "resolved_co": resolved_co,
         "unresolved": unresolved,
