@@ -1,0 +1,197 @@
+{% extends "pos/staff_base.html" %}
+{% load static %}
+
+{% block title %}Curriculum Versions — Staff{% endblock %}
+
+{% block staff_nav_edit_active %}active{% endblock %}
+
+{% block extra_head %}
+<style>
+    .staff-wrap { max-width: 1100px; margin: 0 auto; padding: 1.5rem 1rem 3rem; }
+    .badge-draft    { background: #0d6efd; color: #fff; }
+    .badge-approved { background: #198754; color: #fff; }
+    .badge-archived { background: #6c757d; color: #fff; }
+    .badge-default  { background: #ffc107; color: #000; }
+    .err { color: #a00; }
+    .ok  { color: #060; }
+    .filters { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: flex-end; margin-bottom: 1rem; }
+    .filters select, .filters button { font-size: 0.875rem; }
+    #tbl-body td { vertical-align: middle; font-size: 0.875rem; }
+    #empty-row td { color: #666; font-style: italic; }
+    .actions-cell { white-space: nowrap; }
+    .actions-cell .btn { margin-right: 0.25rem; }
+</style>
+{% endblock extra_head %}
+
+{% block content %}
+<div class="staff-wrap">
+    <h1 class="h4 mb-3">All curriculum versions</h1>
+    <div class="filters">
+        <div>
+            <label class="form-label mb-1 small fw-semibold" for="filter-program">Program</label>
+            <select id="filter-program" class="form-select form-select-sm" style="min-width:180px">
+                <option value="">All programs</option>
+                {% for p in programs %}
+                    <option value="{{ p.pk }}">{{ p.name }} ({{ p.slug }})</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label class="form-label mb-1 small fw-semibold" for="filter-status">Status</label>
+            <select id="filter-status" class="form-select form-select-sm">
+                <option value="">All statuses</option>
+                <option value="draft">Draft</option>
+                <option value="approved">Approved</option>
+                <option value="archived">Archived</option>
+            </select>
+        </div>
+        <button id="btn-refresh" class="btn btn-outline-secondary btn-sm align-self-end">Refresh</button>
+    </div>
+    <p id="list-status" class="small text-muted"></p>
+    <div class="table-responsive bg-white border rounded shadow-sm">
+        <table class="table table-sm table-hover mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>ID</th>
+                    <th>Program</th>
+                    <th>Version label</th>
+                    <th>Status</th>
+                    <th>Courses</th>
+                    <th>Updated</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="tbl-body">
+                <tr id="loading-row"><td colspan="7" class="text-muted small py-3">Loading…</td></tr>
+            </tbody>
+        </table>
+    </div>
+    <p class="small text-muted mt-2">Showing up to 200 versions. Use program/status filters to narrow down.</p>
+</div>
+{% endblock content %}
+
+{% block extra_scripts %}
+<script>
+const versionsUrl  = '{% url "staff_api_curriculum_versions_list" %}';
+const deleteUrlBase = '/staff/api/curriculum/version/';
+const filterProgram = document.getElementById('filter-program');
+const filterStatus  = document.getElementById('filter-status');
+const tbody   = document.getElementById('tbl-body');
+const statusEl = document.getElementById('list-status');
+
+function escapeHtml(s) {
+    return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function statusBadge(status) {
+    const cls = { draft: 'badge-draft', approved: 'badge-approved', archived: 'badge-archived' }[status] || 'bg-secondary text-white';
+    return '<span class="badge ' + escapeHtml(cls) + '">' + escapeHtml(status) + '</span>';
+}
+
+function fmtDate(iso) {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+async function loadVersions() {
+    statusEl.textContent = 'Loading…';
+    const params = new URLSearchParams();
+    if (filterProgram.value) params.set('program_id', filterProgram.value);
+    if (filterStatus.value)  params.set('status', filterStatus.value);
+    const url = versionsUrl + (params.toString() ? '?' + params.toString() : '');
+    let data;
+    try {
+        const r = await fetch(url, { credentials: 'same-origin' });
+        data = await r.json();
+        if (!r.ok || !data.ok) {
+            tbody.innerHTML = '<tr><td colspan="7" class="err small">' + escapeHtml(data.error || 'HTTP ' + r.status) + '</td></tr>';
+            statusEl.textContent = '';
+            return;
+        }
+    } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="7" class="err small">Network error: ' + escapeHtml(String(e)) + '</td></tr>';
+        statusEl.textContent = '';
+        return;
+    }
+    const versions = data.versions || [];
+    if (!versions.length) {
+        tbody.innerHTML = '<tr id="empty-row"><td colspan="7">No curriculum versions found.</td></tr>';
+        statusEl.textContent = '';
+        return;
+    }
+    tbody.innerHTML = versions.map(function (v) {
+        const defBadge = v.is_program_default
+            ? ' <span class="badge badge-default">default</span>'
+            : '';
+        let actions = '';
+        if (v.status === 'draft' || v.status === 'approved') {
+            actions = '<a class="btn btn-outline-primary btn-sm" href="' + escapeHtml(v.edit_url) + '">Edit</a>';
+        }
+        if (v.can_delete) {
+            actions += ' <button type="button" class="btn btn-outline-danger btn-sm btn-delete-version"'
+                + ' data-id="' + escapeHtml(String(v.id)) + '"'
+                + ' data-label="' + escapeHtml(v.version_label || ('id ' + v.id)) + '"'
+                + ' data-default="' + (v.is_program_default ? '1' : '0') + '"'
+                + '>Delete</button>';
+        } else if (v.status === 'archived') {
+            actions = '<span class="text-muted small">archived</span>';
+        }
+        return '<tr>'
+            + '<td>' + escapeHtml(String(v.id)) + '</td>'
+            + '<td>' + escapeHtml(v.program_name) + ' <span class="text-muted small">(' + escapeHtml(v.program_slug) + ')</span></td>'
+            + '<td>' + escapeHtml(v.version_label || '—') + defBadge + '</td>'
+            + '<td>' + statusBadge(v.status) + '</td>'
+            + '<td>' + escapeHtml(String(v.row_count)) + '</td>'
+            + '<td>' + escapeHtml(fmtDate(v.updated_at)) + '</td>'
+            + '<td class="actions-cell">' + actions + '</td>'
+            + '</tr>';
+    }).join('');
+    statusEl.textContent = versions.length + ' version' + (versions.length === 1 ? '' : 's') + '.';
+    bindDeleteButtons();
+}
+
+function getCookie(name) {
+    const v = document.cookie.match('(^|;) ?' + name + '=([^;]*)(;|$)');
+    return v ? decodeURIComponent(v[2]) : '';
+}
+
+function bindDeleteButtons() {
+    document.querySelectorAll('.btn-delete-version').forEach(function (btn) {
+        btn.onclick = async function () {
+            const id = btn.getAttribute('data-id');
+            const label = btn.getAttribute('data-label') || id;
+            const isDef = btn.getAttribute('data-default') === '1';
+            let msg = 'Permanently delete curriculum version "' + label + '" (id ' + id + ')? This cannot be undone.';
+            if (isDef) msg += ' This is the program default; the default will be cleared.';
+            if (!confirm(msg)) return;
+            btn.disabled = true;
+            statusEl.textContent = 'Deleting…';
+            try {
+                const r = await fetch(deleteUrlBase + id + '/delete/', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'X-CSRFToken': getCookie('csrftoken') },
+                });
+                const data = await r.json().catch(function () { return {}; });
+                if (!r.ok || !data.ok) {
+                    statusEl.innerHTML = '<span class="err">' + escapeHtml(data.error || 'HTTP ' + r.status) + '</span>';
+                    btn.disabled = false;
+                    return;
+                }
+                statusEl.innerHTML = '<span class="ok">Deleted version ' + escapeHtml(String(id)) + '.</span>';
+                loadVersions();
+            } catch (e) {
+                statusEl.innerHTML = '<span class="err">' + escapeHtml(String(e)) + '</span>';
+                btn.disabled = false;
+            }
+        };
+    });
+}
+
+document.getElementById('btn-refresh').addEventListener('click', loadVersions);
+filterProgram.addEventListener('change', loadVersions);
+filterStatus.addEventListener('change', loadVersions);
+loadVersions();
+</script>
+{% endblock extra_scripts %}

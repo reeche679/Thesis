@@ -14,7 +14,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import UploadedFile
 from django.http import JsonResponse
-from django.shortcuts import get_object_or_404, render
+from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_http_methods, require_POST
@@ -36,6 +36,26 @@ def _programs_for_staff(user) -> list[Program]:
     return list(
         Program.objects.filter(curriculum_managers=user, is_active=True).distinct().order_by("slug")
     )
+
+
+def _curriculum_versions_queryset(user):
+    """All CurriculumVersions the user is allowed to manage, newest first."""
+    qs = CurriculumVersion.objects.select_related("program").order_by("-updated_at")
+    if getattr(user, "is_superuser", False):
+        return qs
+    return qs.filter(program__curriculum_managers=user).distinct()
+
+
+def _require_cv_staff(request, pk: int):
+    """Auth + program access check without requiring draft status. Returns (cv, error_response)."""
+    if not request.user.is_authenticated:
+        return None, JsonResponse({"ok": False, "error": "Not authenticated."}, status=401)
+    if not user_may_use_staff_curriculum_portal(request.user):
+        return None, JsonResponse({"ok": False, "error": "Curriculum staff portal only."}, status=403)
+    cv = get_object_or_404(CurriculumVersion.objects.select_related("program"), pk=pk)
+    if not user_can_manage_program_curriculum(request.user, cv.program):
+        return None, JsonResponse({"ok": False, "error": "Not allowed for this program."}, status=403)
+    return cv, None
 
 
 def _assign_draft_row_ids(rows: list) -> None:
@@ -142,28 +162,11 @@ def staff_curriculum_upload_page(request):
     )
 
 
-@ensure_csrf_cookie
 @login_required
 @require_http_methods(["GET"])
 def staff_curriculum_review_page(request, pk: int):
-    if not user_may_use_staff_curriculum_portal(request.user):
-        return render(request, "pos/staff_curriculum_review.html", {"forbidden": True, "cv_id": pk})
-    cv = get_object_or_404(CurriculumVersion.objects.select_related("program"), pk=pk)
-    if not user_can_manage_program_curriculum(request.user, cv.program):
-        return render(request, "pos/staff_curriculum_review.html", {"forbidden": True, "cv_id": pk})
-    if cv.status != CurriculumVersion.STATUS_DRAFT:
-        return render(request, "pos/staff_curriculum_review.html", {"not_draft": True, "cv_id": pk})
-    return render(
-        request,
-        "pos/staff_curriculum_review.html",
-        {
-            "forbidden": False,
-            "not_draft": False,
-            "cv_id": pk,
-            "program_slug": cv.program.slug,
-            "version_label": cv.version_label,
-        },
-    )
+    """Legacy URL — redirect to the unified edit page."""
+    return redirect("staff_curriculum_edit_detail", pk=pk)
 
 
 @require_POST
@@ -256,6 +259,7 @@ def staff_api_upload_curriculum_pdf(request):
             "warnings": (draft_body or {}).get("warnings") or [],
             "draft_url": f"/staff/api/curriculum/version/{cv.pk}/draft/",
             "review_url": f"/staff/curriculum/version/{cv.pk}/review/",
+            "edit_url": f"/staff/curriculum/edit/{cv.pk}/",
         }
     )
 
@@ -344,5 +348,210 @@ def staff_api_curriculum_approve(request, pk: int):
             "curriculum_version_id": cv.pk,
             "status": cv.status,
             "course_count": len((approved.get("courses") or {})),
+        }
+    )
+
+
+# ---------------------------------------------------------------------------
+# Edit portal: list + detail
+# ---------------------------------------------------------------------------
+
+@ensure_csrf_cookie
+@login_required
+@require_http_methods(["GET"])
+def staff_curriculum_edit_list_page(request):
+    if not user_may_use_staff_curriculum_portal(request.user):
+        return redirect("staff_login")
+    programs = _programs_for_staff(request.user)
+    return render(
+        request,
+        "pos/staff_curriculum_edit.html",
+        {"programs": programs},
+    )
+
+
+@ensure_csrf_cookie
+@login_required
+@require_http_methods(["GET"])
+def staff_curriculum_edit_detail_page(request, pk: int):
+    if not user_may_use_staff_curriculum_portal(request.user):
+        return render(
+            request,
+            "pos/staff_curriculum_edit_detail.html",
+            {"forbidden": True, "cv_id": pk},
+        )
+    cv = get_object_or_404(CurriculumVersion.objects.select_related("program"), pk=pk)
+    if not user_can_manage_program_curriculum(request.user, cv.program):
+        return render(
+            request,
+            "pos/staff_curriculum_edit_detail.html",
+            {"forbidden": True, "cv_id": pk},
+        )
+
+    is_default = cv.program.default_curriculum_version_id == cv.pk
+
+    if cv.status == CurriculumVersion.STATUS_DRAFT:
+        ctx = {
+            "forbidden": False,
+            "cv_id": pk,
+            "program_slug": cv.program.slug,
+            "program_name": cv.program.name,
+            "version_label": cv.version_label,
+            "status": cv.status,
+            "can_edit": True,
+            "can_reopen": False,
+            "can_delete": True,
+            "is_default": is_default,
+        }
+    elif cv.status == CurriculumVersion.STATUS_APPROVED:
+        dj = cv.draft_json if isinstance(cv.draft_json, dict) else {}
+        has_draft_data = bool((dj.get("extracted_rows") or []))
+        ctx = {
+            "forbidden": False,
+            "cv_id": pk,
+            "program_slug": cv.program.slug,
+            "program_name": cv.program.name,
+            "version_label": cv.version_label,
+            "status": cv.status,
+            "can_edit": False,
+            "can_reopen": True,
+            "has_draft_data": has_draft_data,
+            "can_delete": True,
+            "is_default": is_default,
+        }
+    else:
+        ctx = {
+            "forbidden": False,
+            "cv_id": pk,
+            "program_slug": cv.program.slug,
+            "program_name": cv.program.name,
+            "version_label": cv.version_label,
+            "status": cv.status,
+            "can_edit": False,
+            "can_reopen": False,
+            "can_delete": True,
+            "is_default": is_default,
+        }
+
+    return render(request, "pos/staff_curriculum_edit_detail.html", ctx)
+
+
+@require_http_methods(["GET"])
+def staff_api_curriculum_versions_list(request):
+    if not request.user.is_authenticated:
+        return JsonResponse({"ok": False, "error": "Not authenticated."}, status=401)
+    if not user_may_use_staff_curriculum_portal(request.user):
+        return JsonResponse({"ok": False, "error": "Curriculum staff portal only."}, status=403)
+
+    qs = _curriculum_versions_queryset(request.user)
+
+    program_id = request.GET.get("program_id")
+    if program_id:
+        try:
+            qs = qs.filter(program_id=int(program_id))
+        except (TypeError, ValueError):
+            pass
+
+    status_filter = request.GET.get("status")
+    if status_filter in (
+        CurriculumVersion.STATUS_DRAFT,
+        CurriculumVersion.STATUS_APPROVED,
+        CurriculumVersion.STATUS_ARCHIVED,
+    ):
+        qs = qs.filter(status=status_filter)
+
+    default_ids = set(
+        Program.objects.filter(default_curriculum_version__isnull=False)
+        .values_list("default_curriculum_version_id", flat=True)
+    )
+
+    versions = []
+    for cv in qs.select_related("program")[:200]:
+        dj = cv.draft_json if isinstance(cv.draft_json, dict) else {}
+        row_count = len(dj.get("extracted_rows") or [])
+        versions.append(
+            {
+                "id": cv.pk,
+                "program_slug": cv.program.slug,
+                "program_name": cv.program.name,
+                "version_label": cv.version_label or "",
+                "status": cv.status,
+                "row_count": row_count,
+                "updated_at": cv.updated_at.isoformat() if cv.updated_at else None,
+                "created_at": cv.created_at.isoformat() if cv.created_at else None,
+                "is_program_default": cv.pk in default_ids,
+                "edit_url": f"/staff/curriculum/edit/{cv.pk}/",
+                "can_reopen": cv.status == CurriculumVersion.STATUS_APPROVED,
+                "can_delete": True,
+            }
+        )
+
+    return JsonResponse({"ok": True, "versions": versions})
+
+
+@require_POST
+def staff_api_curriculum_reopen(request, pk: int):
+    cv, err = _require_cv_staff(request, pk)
+    if err:
+        return err
+    assert cv is not None
+
+    if cv.status != CurriculumVersion.STATUS_APPROVED:
+        return JsonResponse(
+            {"ok": False, "error": "Only approved versions can be reopened as draft."},
+            status=400,
+        )
+
+    dj = cv.draft_json if isinstance(cv.draft_json, dict) else {}
+    if not (dj.get("extracted_rows") or []):
+        return JsonResponse(
+            {
+                "ok": False,
+                "error": "No draft data available — re-upload the PDF or edit in admin before reopening.",
+            },
+            status=400,
+        )
+
+    cv.status = CurriculumVersion.STATUS_DRAFT
+    cv.save(update_fields=["status", "updated_at"])
+
+    return JsonResponse(
+        {
+            "ok": True,
+            "curriculum_version_id": cv.pk,
+            "status": cv.status,
+            "edit_url": f"/staff/curriculum/edit/{cv.pk}/",
+        }
+    )
+
+
+@require_POST
+def staff_api_curriculum_delete(request, pk: int):
+    cv, err = _require_cv_staff(request, pk)
+    if err:
+        return err
+    assert cv is not None
+
+    program = cv.program
+    was_default = program.default_curriculum_version_id == cv.pk
+    if was_default:
+        program.default_curriculum_version = None
+        program.save(update_fields=["default_curriculum_version", "updated_at"])
+
+    cv_id = cv.pk
+    version_label = cv.version_label or ""
+    if cv.source_pdf:
+        try:
+            cv.source_pdf.delete(save=False)
+        except OSError:
+            pass
+    cv.delete()
+
+    return JsonResponse(
+        {
+            "ok": True,
+            "deleted_id": cv_id,
+            "version_label": version_label,
+            "cleared_program_default": was_default,
         }
     )

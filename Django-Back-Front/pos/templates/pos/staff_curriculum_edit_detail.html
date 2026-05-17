@@ -1,0 +1,410 @@
+{% extends "pos/staff_base.html" %}
+{% load static %}
+
+{% block title %}Edit curriculum — {{ version_label|default:cv_id }} (staff){% endblock %}
+
+{% block staff_nav_edit_active %}active{% endblock %}
+
+{% block extra_head %}
+<style>
+    .staff-wrap { max-width: 1200px; margin: 0 auto; padding: 1.25rem 1rem 2.5rem; }
+    .err { color: #a00; }
+    .ok  { color: #060; }
+    table { font-size: 0.85rem; }
+    textarea.raw-json { font-family: ui-monospace, monospace; font-size: 0.75rem; min-height: 4rem; }
+</style>
+{% endblock extra_head %}
+
+{% block content %}
+<div class="staff-wrap">
+
+{% if forbidden %}
+    <div class="alert alert-danger">
+        You are not allowed to view this curriculum version.
+        <a href="{% url 'staff_login' %}?next={{ request.path|urlencode }}">Staff sign-in</a>
+    </div>
+
+{% elif status == 'archived' %}
+    <div class="alert alert-secondary">
+        <strong>Archived</strong> — This curriculum version cannot be edited or reopened. You may still delete it below.
+    </div>
+    <p class="text-muted small">Program <strong>{{ program_slug }}</strong> — {{ version_label }}</p>
+
+{% elif can_reopen %}
+    <p class="text-muted small mb-2">Program <strong>{{ program_slug }}</strong> — {{ version_label }}
+        <span class="badge bg-success">approved</span>
+        {% if is_default %}<span class="badge bg-warning text-dark ms-1">program default</span>{% endif %}
+    </p>
+
+    {% if is_default %}
+    <div class="alert alert-warning">
+        <strong>Warning:</strong> This is the program's default curriculum. Students who have selected it
+        will continue using it until a new default is set. You can still reopen it for editing.
+    </div>
+    {% endif %}
+
+    {% if not has_draft_data %}
+    <div class="alert alert-danger">
+        <strong>No draft data available.</strong> This approved version has no extracted course rows
+        stored in its draft. To edit it you would need to re-upload the original PDF, which will
+        create a new version. Alternatively, use Django admin to modify <code>draft_json</code>
+        directly before reopening.
+    </div>
+    {% else %}
+    <div class="alert alert-info">
+        <strong>This version is approved.</strong> To make changes, reopen it as a draft, edit the
+        course grid, then re-approve. The approved bundle will remain active until you approve again.
+    </div>
+    <button type="button" class="btn btn-warning" id="btn-reopen">Reopen as draft</button>
+    <p id="reopen-status" class="mt-2 small"></p>
+    {% endif %}
+
+{% elif can_edit %}
+    <p class="text-muted small mb-2">Program <strong>{{ program_slug }}</strong> — {{ version_label }}
+        <span class="badge bg-primary">draft</span>
+        {% if is_default %}<span class="badge bg-warning text-dark ms-1">program default</span>{% endif %}
+    </p>
+    <div class="d-flex flex-wrap gap-2 mb-3">
+        <button type="button" class="btn btn-primary btn-sm" id="btn-save">Save draft</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" id="btn-analyze">Re-analyze</button>
+        <button type="button" class="btn btn-success btn-sm" id="btn-approve">Approve</button>
+    </div>
+    <p id="status" class="small"></p>
+
+    <div class="bg-white border rounded shadow-sm p-3 mb-3" id="caps-section">
+        <h6 class="mb-2">Max units per semester <span class="text-danger">(required)</span></h6>
+        <p class="small text-muted mb-2">
+            Set the maximum allowed unit load for each term. These are <strong>not</strong> read from the PDF.
+            Overflow semesters beyond Year 6 reuse Year 6 values.
+        </p>
+        <table class="table table-sm table-bordered mb-0" style="max-width:520px">
+            <thead class="table-light">
+                <tr><th>Year</th><th>1st Sem</th><th>2nd Sem</th><th>Summer</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>1</td><td><input type="number" min="0" class="form-control form-control-sm cap-input" data-y="1" data-t="1"></td><td><input type="number" min="0" class="form-control form-control-sm cap-input" data-y="1" data-t="2"></td><td><input type="number" min="0" class="form-control form-control-sm cap-input" data-y="1" data-t="3"></td></tr>
+                <tr><td>2</td><td><input type="number" min="0" class="form-control form-control-sm cap-input" data-y="2" data-t="1"></td><td><input type="number" min="0" class="form-control form-control-sm cap-input" data-y="2" data-t="2"></td><td><input type="number" min="0" class="form-control form-control-sm cap-input" data-y="2" data-t="3"></td></tr>
+                <tr><td>3</td><td><input type="number" min="0" class="form-control form-control-sm cap-input" data-y="3" data-t="1"></td><td><input type="number" min="0" class="form-control form-control-sm cap-input" data-y="3" data-t="2"></td><td><input type="number" min="0" class="form-control form-control-sm cap-input" data-y="3" data-t="3"></td></tr>
+                <tr><td>4</td><td><input type="number" min="0" class="form-control form-control-sm cap-input" data-y="4" data-t="1"></td><td><input type="number" min="0" class="form-control form-control-sm cap-input" data-y="4" data-t="2"></td><td><input type="number" min="0" class="form-control form-control-sm cap-input" data-y="4" data-t="3"></td></tr>
+                <tr><td>5</td><td><input type="number" min="0" class="form-control form-control-sm cap-input" data-y="5" data-t="1"></td><td><input type="number" min="0" class="form-control form-control-sm cap-input" data-y="5" data-t="2"></td><td><input type="number" min="0" class="form-control form-control-sm cap-input" data-y="5" data-t="3"></td></tr>
+                <tr><td>6</td><td><input type="number" min="0" class="form-control form-control-sm cap-input" data-y="6" data-t="1"></td><td><input type="number" min="0" class="form-control form-control-sm cap-input" data-y="6" data-t="2"></td><td><input type="number" min="0" class="form-control form-control-sm cap-input" data-y="6" data-t="3"></td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <p class="small text-muted mb-2">
+        <strong>Category</strong> (Rigid / Bottleneck / Flexible) controls solver offering windows; it defaults to <strong>Rigid</strong>.
+        Leave <strong>orig_sem</strong> and <strong>year_level</strong> empty to use analyzer suggestions.
+        When <code>term_label</code> matches the EE/CpE grid, <code>orig_sem</code> follows the same slot order as Generate POS.
+    </p>
+
+    <div class="table-responsive bg-white border rounded shadow-sm">
+        <table class="table table-sm table-striped mb-0" id="grid">
+            <thead class="table-light">
+                <tr>
+                    <th>Code</th>
+                    <th>Title</th>
+                    <th>Units</th>
+                    <th>Category</th>
+                    <th>orig_sem</th>
+                    <th>year_level</th>
+                    <th>Prereq (raw)</th>
+                    <th>Coreq (raw)</th>
+                    <th>Analyzer</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+
+{% else %}
+    <div class="alert alert-secondary">
+        Unknown status for version {{ cv_id }}.
+        <a href="{% url 'staff_curriculum_edit' %}">Back to all curricula</a>
+    </div>
+{% endif %}
+
+{% if can_delete and not forbidden %}
+<div class="mt-4 pt-3 border-top">
+    <button type="button" class="btn btn-outline-danger btn-sm" id="btn-delete-version">Delete this version</button>
+    <p id="delete-status" class="small mt-2"></p>
+</div>
+{% endif %}
+
+</div>{# /staff-wrap #}
+{% endblock content %}
+
+{% block extra_scripts %}
+{% if can_delete and not forbidden %}
+<script>
+(function () {
+    const CV_ID = {{ cv_id }};
+    const IS_DEFAULT = {% if is_default %}true{% else %}false{% endif %};
+    const deleteUrl = '/staff/api/curriculum/version/' + CV_ID + '/delete/';
+    const deleteBtn = document.getElementById('btn-delete-version');
+    const deleteStatus = document.getElementById('delete-status');
+    if (!deleteBtn) return;
+    function getCookie(name) {
+        const v = document.cookie.match('(^|;) ?' + name + '=([^;]*)(;|$)');
+        return v ? decodeURIComponent(v[2]) : '';
+    }
+    deleteBtn.addEventListener('click', async function () {
+        let msg = 'Permanently delete this curriculum version? This cannot be undone.';
+        if (IS_DEFAULT) msg += ' This is the program default; the default will be cleared.';
+        if (!confirm(msg)) return;
+        deleteBtn.disabled = true;
+        deleteStatus.textContent = 'Deleting…';
+        const r = await fetch(deleteUrl, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'X-CSRFToken': getCookie('csrftoken') },
+        });
+        const data = await r.json().catch(function () { return {}; });
+        if (!r.ok || !data.ok) {
+            deleteStatus.innerHTML = '<span class="err">' + (data.error || 'HTTP ' + r.status) + '</span>';
+            deleteBtn.disabled = false;
+            return;
+        }
+        deleteStatus.innerHTML = '<span class="ok">Deleted. Redirecting…</span>';
+        setTimeout(function () { window.location.href = '{% url "staff_curriculum_edit" %}'; }, 600);
+    });
+})();
+</script>
+{% endif %}
+
+{% if can_reopen and has_draft_data %}
+<script>
+(function () {
+    const CV_ID = {{ cv_id }};
+    const reopenUrl = '/staff/api/curriculum/version/' + CV_ID + '/reopen/';
+    function getCookie(name) {
+        const v = document.cookie.match('(^|;) ?' + name + '=([^;]*)(;|$)');
+        return v ? decodeURIComponent(v[2]) : '';
+    }
+    document.getElementById('btn-reopen').addEventListener('click', async function () {
+        if (!confirm('Reopen this approved curriculum as a draft? The approved bundle stays active until you re-approve.')) return;
+        this.disabled = true;
+        const statusEl = document.getElementById('reopen-status');
+        statusEl.textContent = 'Reopening…';
+        const r = await fetch(reopenUrl, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'X-CSRFToken': getCookie('csrftoken') },
+        });
+        const data = await r.json().catch(function () { return {}; });
+        if (!r.ok || !data.ok) {
+            statusEl.innerHTML = '<span class="err">' + (data.error || 'HTTP ' + r.status) + '</span>';
+            this.disabled = false;
+            return;
+        }
+        statusEl.innerHTML = '<span class="ok">Reopened as draft. Redirecting to editor…</span>';
+        setTimeout(function () { window.location.href = data.edit_url || window.location.href; }, 800);
+    });
+})();
+</script>
+{% endif %}
+
+{% if can_edit %}
+<script>
+(function () {
+const CV_ID = {{ cv_id }};
+function getCookie(name) {
+    const v = document.cookie.match('(^|;) ?' + name + '=([^;]*)(;|$)');
+    return v ? decodeURIComponent(v[2]) : '';
+}
+const draftUrl   = '/staff/api/curriculum/version/' + CV_ID + '/draft/';
+const analyzeUrl = '/staff/api/curriculum/version/' + CV_ID + '/analyze/';
+const approveUrl = '/staff/api/curriculum/version/' + CV_ID + '/approve/';
+const statusEl   = document.getElementById('status');
+const tbody      = document.querySelector('#grid tbody');
+
+function escapeHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function analysisCell(row, analysisById) {
+    const rid = row.draft_row_id;
+    const a = rid && analysisById ? analysisById[rid] : null;
+    if (!a) return '—';
+    const u = (a.unresolved && a.unresolved.length)
+        ? ('<span class="err">unresolved: ' + a.unresolved.map(escapeHtml).join('; ') + '</span>')
+        : '';
+    const cw = (a.calendar_warnings && a.calendar_warnings.length)
+        ? ('<br><span class="text-warning small">' + a.calendar_warnings.map(escapeHtml).join('<br>') + '</span>')
+        : '';
+    const src = a.orig_sem_source
+        ? ('<br><span class="text-muted small">sem source: ' + escapeHtml(String(a.orig_sem_source)) + '</span>')
+        : '';
+    const yl = (a.year_level_suggested != null && a.year_level_suggested !== '')
+        ? ('<br><span class="text-muted small">suggested year_level: ' + escapeHtml(String(a.year_level_suggested)) + '</span>')
+        : '';
+    return 'suggested sem ' + escapeHtml(String(a.orig_sem_suggested != null ? a.orig_sem_suggested : '?')) + yl + src + (u ? '<br>' + u : '') + cw;
+}
+
+function render(data) {
+    const rows = data.extracted_rows || data.rows || [];
+    const analysis = (data.draft_analysis && data.draft_analysis.rows) || {};
+    tbody.innerHTML = '';
+    rows.forEach(function (row, idx) {
+        const tr = document.createElement('tr');
+        tr.dataset.index = String(idx);
+        const catRaw = (row.category != null && String(row.category).trim()) ? String(row.category).trim() : 'Rigid';
+        const catVal = (['Rigid', 'Bottleneck', 'Flexible'].indexOf(catRaw) >= 0) ? catRaw : 'Rigid';
+        tr.innerHTML =
+            '<td><input class="form-control form-control-sm code" type="text" value="' + escapeHtml(row.code || '') + '"></td>' +
+            '<td><input class="form-control form-control-sm title" type="text" value="' + escapeHtml(row.title || '') + '"></td>' +
+            '<td><input class="form-control form-control-sm units" type="text" value="' + escapeHtml(String(row.units != null ? row.units : '')) + '" style="width:4rem"></td>' +
+            '<td><select class="form-select form-select-sm category">' +
+                '<option value="Rigid"'      + (catVal === 'Rigid'      ? ' selected' : '') + '>Rigid</option>' +
+                '<option value="Bottleneck"' + (catVal === 'Bottleneck' ? ' selected' : '') + '>Bottleneck</option>' +
+                '<option value="Flexible"'   + (catVal === 'Flexible'   ? ' selected' : '') + '>Flexible</option>' +
+            '</select></td>' +
+            '<td><input class="form-control form-control-sm orig_sem" type="number" min="1" step="1" value="' + escapeHtml(String(row.orig_sem_override != null ? row.orig_sem_override : (row.orig_sem != null ? row.orig_sem : ''))) + '" placeholder="auto" data-draft-row-id="' + escapeHtml(row.draft_row_id || '') + '" style="width:5rem"></td>' +
+            '<td><input class="form-control form-control-sm year_level" type="number" min="1" step="1" placeholder="auto" value="' + escapeHtml((row.year_level != null && row.year_level !== '') ? String(row.year_level) : '') + '" style="width:5rem"></td>' +
+            '<td><textarea class="form-control raw-json raw-pre">' + escapeHtml(row.raw_prerequisites || '') + '</textarea></td>' +
+            '<td><textarea class="form-control raw-json raw-co">' + escapeHtml(row.raw_corequisites || '') + '</textarea></td>' +
+            '<td class="small">' + analysisCell(row, analysis) + '</td>';
+        tr.querySelector('.orig_sem').dataset.draftRowId = row.draft_row_id || '';
+        tbody.appendChild(tr);
+    });
+}
+
+function renderCaps(data) {
+    const caps = data.max_units_by_year_term || {};
+    document.querySelectorAll('.cap-input').forEach(function (inp) {
+        const y = inp.getAttribute('data-y');
+        const t = inp.getAttribute('data-t');
+        const yObj = caps[y] || caps[parseInt(y)] || {};
+        const val = yObj[t] != null ? yObj[t] : (yObj[parseInt(t)] != null ? yObj[parseInt(t)] : '');
+        inp.value = val;
+    });
+}
+
+function collectUnitCaps() {
+    const caps = {};
+    document.querySelectorAll('.cap-input').forEach(function (inp) {
+        const y = inp.getAttribute('data-y');
+        const t = inp.getAttribute('data-t');
+        if (!caps[y]) caps[y] = {};
+        const v = inp.value.trim();
+        caps[y][t] = v === '' ? null : parseInt(v, 10);
+    });
+    return caps;
+}
+
+function collectRows(originalRows) {
+    const byId = {};
+    (originalRows || []).forEach(function (r) { if (r.draft_row_id) byId[r.draft_row_id] = Object.assign({}, r); });
+    const out = [];
+    tbody.querySelectorAll('tr').forEach(function (tr) {
+        const code = tr.querySelector('.code').value.trim();
+        const title = tr.querySelector('.title').value.trim();
+        const units = tr.querySelector('.units').value.trim();
+        const category = (tr.querySelector('.category') && tr.querySelector('.category').value) ? tr.querySelector('.category').value.trim() : 'Rigid';
+        const origInput = tr.querySelector('.orig_sem').value.trim();
+        const yearLevel = tr.querySelector('.year_level').value.trim();
+        const rawPre = tr.querySelector('textarea.raw-pre').value;
+        const rawCo  = tr.querySelector('textarea.raw-co').value;
+        const draftRowId = tr.querySelector('.orig_sem').getAttribute('data-draft-row-id') || '';
+        const base = draftRowId && byId[draftRowId] ? Object.assign({}, byId[draftRowId]) : {};
+        base.code  = code;
+        base.title = title;
+        base.units = units;
+        if (origInput === '') {
+            delete base.orig_sem;
+            delete base.orig_sem_override;
+        } else {
+            base.orig_sem_override = parseInt(origInput, 10);
+        }
+        if (yearLevel === '') {
+            delete base.year_level;
+        } else {
+            base.year_level = parseInt(yearLevel, 10);
+        }
+        base.raw_prerequisites = rawPre;
+        base.raw_corequisites  = rawCo;
+        base.category = (['Rigid', 'Bottleneck', 'Flexible'].indexOf(category) >= 0) ? category : 'Rigid';
+        if (draftRowId) base.draft_row_id = draftRowId;
+        else if (!base.draft_row_id) base.draft_row_id = '';
+        out.push(base);
+    });
+    return out;
+}
+
+let lastPayload = null;
+
+async function loadDraft() {
+    statusEl.textContent = 'Loading…';
+    const r = await fetch(draftUrl, { credentials: 'same-origin' });
+    const data = await r.json().catch(function () { return {}; });
+    if (!r.ok || !data.ok) {
+        statusEl.innerHTML = '<span class="err">' + (data.error || ('HTTP ' + r.status)) + '</span>';
+        return;
+    }
+    lastPayload = data;
+    render(data);
+    renderCaps(data);
+    statusEl.textContent = 'Loaded.';
+}
+
+document.getElementById('btn-save').addEventListener('click', async function () {
+    const rows = collectRows((lastPayload && (lastPayload.extracted_rows || lastPayload.rows)) || []);
+    statusEl.textContent = 'Saving…';
+    const r = await fetch(draftUrl, {
+        method: 'PATCH',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+        body: JSON.stringify({ extracted_rows: rows, max_units_by_year_term: collectUnitCaps() }),
+    });
+    const data = await r.json().catch(function () { return {}; });
+    if (!r.ok || !data.ok) {
+        statusEl.innerHTML = '<span class="err">' + (data.error || ('HTTP ' + r.status)) + '</span>';
+        return;
+    }
+    lastPayload = data;
+    render(data);
+    renderCaps(data);
+    statusEl.innerHTML = '<span class="ok">Saved.</span>';
+});
+
+document.getElementById('btn-analyze').addEventListener('click', async function () {
+    statusEl.textContent = 'Analyzing…';
+    const r = await fetch(analyzeUrl, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'X-CSRFToken': getCookie('csrftoken') },
+    });
+    const data = await r.json().catch(function () { return {}; });
+    if (!r.ok || !data.ok) {
+        statusEl.innerHTML = '<span class="err">' + (data.error || ('HTTP ' + r.status)) + '</span>';
+        return;
+    }
+    lastPayload = data;
+    render(data);
+    statusEl.innerHTML = '<span class="ok">Analysis updated.</span>';
+});
+
+document.getElementById('btn-approve').addEventListener('click', async function () {
+    if (!confirm('Approve this draft? This will validate against the curriculum schema and mark the version approved.')) return;
+    statusEl.textContent = 'Approving…';
+    const r = await fetch(approveUrl, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'X-CSRFToken': getCookie('csrftoken') },
+    });
+    const data = await r.json().catch(function () { return {}; });
+    if (!r.ok || !data.ok) {
+        statusEl.innerHTML = '<span class="err">' + (data.error || ('HTTP ' + r.status)) + '</span>';
+        return;
+    }
+    statusEl.innerHTML = '<span class="ok">Approved (' + (data.course_count || 0) + ' courses). '
+        + '<a href="{% url "staff_curriculum_edit" %}">Back to all curricula</a></span>';
+    document.querySelectorAll('#btn-save, #btn-analyze, #btn-approve, .cap-input, #grid input, #grid select, #grid textarea')
+        .forEach(function (el) { el.disabled = true; });
+});
+
+loadDraft();
+})();
+</script>
+{% endif %}
+{% endblock extra_scripts %}

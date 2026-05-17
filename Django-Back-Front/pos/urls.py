@@ -38,13 +38,24 @@ from .views import (
     save_tuned_pos,
 )
 from .staff_auth_views import staff_login_view, staff_logout_view
+from .staff_portal_views import (
+    staff_home_page,
+    staff_api_students_list,
+    staff_api_student_patch,
+    staff_api_programs_list,
+)
 from .staff_curriculum_views import (
     staff_curriculum_upload_page,
     staff_curriculum_review_page,
+    staff_curriculum_edit_list_page,
+    staff_curriculum_edit_detail_page,
     staff_api_upload_curriculum_pdf,
     staff_api_curriculum_draft,
     staff_api_curriculum_analyze,
     staff_api_curriculum_approve,
+    staff_api_curriculum_versions_list,
+    staff_api_curriculum_reopen,
+    staff_api_curriculum_delete,
 )
 
 urlpatterns = [
@@ -60,9 +71,19 @@ urlpatterns = [
     path("api/curriculum/me/", api_curriculum_me, name="api_curriculum_me"),
     path("api/curriculum/set-active/", api_curriculum_set_active, name="api_curriculum_set_active"),
 
+    path("staff/", staff_home_page, name="staff_home"),
     path("staff/login/", staff_login_view, name="staff_login"),
     path("staff/logout/", staff_logout_view, name="staff_logout"),
+    path("staff/api/students/", staff_api_students_list, name="staff_api_students_list"),
+    path("staff/api/students/<int:pk>/", staff_api_student_patch, name="staff_api_student_patch"),
+    path("staff/api/programs/", staff_api_programs_list, name="staff_api_programs_list"),
     path("staff/curriculum/upload/", staff_curriculum_upload_page, name="staff_curriculum_upload"),
+    path("staff/curriculum/edit/", staff_curriculum_edit_list_page, name="staff_curriculum_edit"),
+    path(
+        "staff/curriculum/edit/<int:pk>/",
+        staff_curriculum_edit_detail_page,
+        name="staff_curriculum_edit_detail",
+    ),
     path(
         "staff/curriculum/version/<int:pk>/review/",
         staff_curriculum_review_page,
@@ -87,6 +108,21 @@ urlpatterns = [
         "staff/api/curriculum/version/<int:pk>/approve/",
         staff_api_curriculum_approve,
         name="staff_api_curriculum_approve",
+    ),
+    path(
+        "staff/api/curriculum/versions/",
+        staff_api_curriculum_versions_list,
+        name="staff_api_curriculum_versions_list",
+    ),
+    path(
+        "staff/api/curriculum/version/<int:pk>/reopen/",
+        staff_api_curriculum_reopen,
+        name="staff_api_curriculum_reopen",
+    ),
+    path(
+        "staff/api/curriculum/version/<int:pk>/delete/",
+        staff_api_curriculum_delete,
+        name="staff_api_curriculum_delete",
     ),
 
     path("generate/", pos_generate, name="pos_generate"),

@@ -29,7 +29,7 @@ def staff_login_view(request):
         nxt = (request.GET.get("next") or request.POST.get("next") or "").strip()
         if nxt.startswith("/") and not nxt.startswith("//"):
             return redirect(nxt)
-        return redirect("staff_curriculum_upload")
+        return redirect("staff_home")
 
     if request.user.is_authenticated and not user_may_use_staff_curriculum_portal(request.user):
         messages.info(request, "Signed out — this portal is only for curriculum managers or superusers.")
@@ -54,7 +54,7 @@ def staff_login_view(request):
             login(request, user)
             if next_value.startswith("/") and not next_value.startswith("//"):
                 return redirect(next_value)
-            return redirect("staff_curriculum_upload")
+            return redirect("staff_home")
 
     return render(
         request,

@@ -1,103 +1,99 @@
+{% extends "pos/staff_base.html" %}
 {% load static %}
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Curriculum PDF upload (staff)</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="icon" type="image/png" href="{% static 'img/BSU_Logo.png' %}">
-    <style>
-        body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: #f5f2f2; min-height: 100vh; margin: 0; }
-        .staff-topbar { background: linear-gradient(90deg, #a0161c, #8b1218); color: #fff; padding: 0.65rem 1.25rem; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.75rem; }
-        .staff-topbar a { color: #fff; text-decoration: underline; font-size: 0.9rem; }
-        .staff-wrap { max-width: 640px; margin: 0 auto; padding: 1.75rem 1rem 2.5rem; }
-        label { display: block; margin-top: 1rem; font-weight: 600; }
-        .hint { font-size: 0.85rem; color: #555; margin-top: 0.25rem; }
-        button.btn-primary { background-color: #a0161c; border-color: #a0161c; margin-top: 1.25rem; font-weight: 600; }
-        button.btn-primary:hover { background-color: #8b1218; border-color: #8b1218; }
-        pre { background: #f0f0f0; padding: 1rem; overflow: auto; font-size: 0.8rem; border-radius: 6px; border: 1px solid #ddd; }
-        .err { color: #a00; }
-        .ok { color: #060; }
-    </style>
-</head>
-<body>
-    <header class="staff-topbar">
-        <span><strong>Curriculum staff</strong> — signed in as {{ user.username }}</span>
-        <span>
-            <a href="{% url 'staff_logout' %}">Sign out</a>
-            · <a href="/admin/">Django admin</a>
-        </span>
-    </header>
-    <div class="staff-wrap">
-        <h1 class="h3 mb-2">PDF → draft extraction</h1>
-        <p class="hint mb-4">Use <a href="{% url 'staff_login' %}">staff sign-in</a> if you are not logged in. Superusers see every program; managers see assigned programs only.</p>
 
-        {% if not programs %}
-            <p class="err">You have no managed programs (and you are not a superuser). Ask an admin to add you to <strong>Program → curriculum managers</strong>.</p>
-        {% else %}
-        <form id="upload-form" class="bg-white p-4 rounded shadow-sm border">
-            {% csrf_token %}
-            <label for="program_id">Program</label>
-            <select id="program_id" name="program_id" class="form-select" required>
-                {% for p in programs %}
-                    <option value="{{ p.pk }}">{{ p.name }} ({{ p.slug }})</option>
-                {% endfor %}
-            </select>
+{% block title %}Upload Curriculum PDF — Staff{% endblock %}
 
-            <label for="file">PDF file</label>
-            <input id="file" name="file" class="form-control" type="file" accept="application/pdf,.pdf" required>
+{% block staff_nav_upload_active %}active{% endblock %}
 
-            <label for="version_label">Version label (optional)</label>
-            <input id="version_label" name="version_label" class="form-control" type="text" maxlength="128" placeholder="defaults to pdf-import-… timestamp">
-            <div class="hint">Creates a <strong>draft</strong> <code>CurriculumVersion</code> with <code>draft_json</code> (pdfplumber + Tesseract OCR when needed). Scanned PDFs need <a href="https://github.com/tesseract-ocr/tesseract" target="_blank" rel="noopener">Tesseract</a> on the server PATH.</div>
+{% block extra_head %}
+<style>
+    .staff-wrap { max-width: 640px; margin: 0 auto; padding: 1.75rem 1rem 2.5rem; }
+    label { display: block; margin-top: 1rem; font-weight: 600; }
+    .hint { font-size: 0.85rem; color: #555; margin-top: 0.25rem; }
+    .btn-staff-primary { background-color: #a0161c; border-color: #a0161c; font-weight: 600; color: #fff; }
+    .btn-staff-primary:hover { background-color: #8b1218; border-color: #8b1218; color: #fff; }
+    pre { background: #f0f0f0; padding: 1rem; overflow: auto; font-size: 0.8rem; border-radius: 6px; border: 1px solid #ddd; }
+    .err { color: #a00; }
+    .ok  { color: #060; }
+</style>
+{% endblock extra_head %}
 
-            <button type="submit" class="btn btn-primary text-white">Upload &amp; extract</button>
-        </form>
-        <p id="status" class="mt-3"></p>
-        <pre id="out" hidden></pre>
-        {% endif %}
-    </div>
+{% block content %}
+<div class="staff-wrap">
+    <h1 class="h3 mb-2">PDF → draft extraction</h1>
+    <p class="hint mb-4">
+        Superusers see every program; managers see assigned programs only.
+        Need access? Ask an admin to add you to <strong>Program → curriculum managers</strong>.
+    </p>
 
-    <script>
-    function getCookie(name) {
-        const v = document.cookie.match('(^|;) ?' + name + '=([^;]*)(;|$)');
-        return v ? decodeURIComponent(v[2]) : '';
-    }
-    const form = document.getElementById('upload-form');
-    if (form) {
-        form.addEventListener('submit', async function (e) {
-            e.preventDefault();
-            const status = document.getElementById('status');
-            const out = document.getElementById('out');
-            status.textContent = 'Uploading…';
-            out.hidden = true;
-            const fd = new FormData(form);
-            try {
-                const r = await fetch('{% url "staff_api_upload_curriculum_pdf" %}', {
-                    method: 'POST',
-                    headers: { 'X-CSRFToken': getCookie('csrftoken') },
-                    body: fd,
-                    credentials: 'same-origin',
-                });
-                const data = await r.json().catch(() => ({}));
-                if (r.status === 401 || r.status === 403) {
-                    status.innerHTML = '<span class="err">' + (data.error || 'Forbidden — try signing in again.') + ' <a href="{% url "staff_login" %}?next=' + encodeURIComponent(window.location.pathname) + '">Staff sign-in</a></span>';
-                    return;
-                }
-                if (!r.ok || !data.ok) {
-                    status.innerHTML = '<span class="err">' + (data.error || ('HTTP ' + r.status)) + '</span>';
-                    return;
-                }
-                var review = data.review_url ? (' <a href="' + data.review_url + '">Open review</a>') : '';
-                status.innerHTML = '<span class="ok">Saved draft id ' + data.curriculum_version_id + ' — ' + data.row_count + ' row(s).' + review + '</span>';
-                out.textContent = JSON.stringify(data, null, 2);
-                out.hidden = false;
-            } catch (err) {
-                status.innerHTML = '<span class="err">' + err + '</span>';
+    {% if not programs %}
+        <p class="err">You have no managed programs (and you are not a superuser). Ask an admin to add you to <strong>Program → curriculum managers</strong>.</p>
+    {% else %}
+    <form id="upload-form" class="bg-white p-4 rounded shadow-sm border">
+        {% csrf_token %}
+        <label for="program_id">Program</label>
+        <select id="program_id" name="program_id" class="form-select" required>
+            {% for p in programs %}
+                <option value="{{ p.pk }}">{{ p.name }} ({{ p.slug }})</option>
+            {% endfor %}
+        </select>
+
+        <label for="file">PDF file</label>
+        <input id="file" name="file" class="form-control" type="file" accept="application/pdf,.pdf" required>
+
+        <label for="version_label">Version label (optional)</label>
+        <input id="version_label" name="version_label" class="form-control" type="text" maxlength="128" placeholder="defaults to pdf-import-… timestamp">
+        <div class="hint">Creates a <strong>draft</strong> <code>CurriculumVersion</code> with <code>draft_json</code> (pdfplumber + Tesseract OCR when needed). Scanned PDFs need <a href="https://github.com/tesseract-ocr/tesseract" target="_blank" rel="noopener">Tesseract</a> on the server PATH.</div>
+
+        <button type="submit" class="btn btn-staff-primary text-white mt-3">Upload &amp; extract</button>
+    </form>
+    <p id="status" class="mt-3"></p>
+    <pre id="out" hidden></pre>
+    {% endif %}
+</div>
+{% endblock content %}
+
+{% block extra_scripts %}
+<script>
+function getCookie(name) {
+    const v = document.cookie.match('(^|;) ?' + name + '=([^;]*)(;|$)');
+    return v ? decodeURIComponent(v[2]) : '';
+}
+const form = document.getElementById('upload-form');
+if (form) {
+    form.addEventListener('submit', async function (e) {
+        e.preventDefault();
+        const status = document.getElementById('status');
+        const out = document.getElementById('out');
+        status.textContent = 'Uploading…';
+        out.hidden = true;
+        const fd = new FormData(form);
+        try {
+            const r = await fetch('{% url "staff_api_upload_curriculum_pdf" %}', {
+                method: 'POST',
+                headers: { 'X-CSRFToken': getCookie('csrftoken') },
+                body: fd,
+                credentials: 'same-origin',
+            });
+            const data = await r.json().catch(() => ({}));
+            if (r.status === 401 || r.status === 403) {
+                status.innerHTML = '<span class="err">' + (data.error || 'Forbidden — try signing in again.') + ' <a href="{% url "staff_login" %}?next=' + encodeURIComponent(window.location.pathname) + '">Staff sign-in</a></span>';
+                return;
             }
-        });
-    }
-    </script>
-</body>
-</html>
+            if (!r.ok || !data.ok) {
+                status.innerHTML = '<span class="err">' + (data.error || ('HTTP ' + r.status)) + '</span>';
+                return;
+            }
+            const editLink = (data.edit_url || data.review_url)
+                ? (' <a href="' + (data.edit_url || data.review_url) + '">Open editor</a>')
+                : '';
+            status.innerHTML = '<span class="ok">Saved draft id ' + data.curriculum_version_id + ' — ' + data.row_count + ' row(s).' + editLink + '</span>';
+            out.textContent = JSON.stringify(data, null, 2);
+            out.hidden = false;
+        } catch (err) {
+            status.innerHTML = '<span class="err">' + err + '</span>';
+        }
+    });
+}
+</script>
+{% endblock extra_scripts %}

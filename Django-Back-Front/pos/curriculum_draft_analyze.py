@@ -15,6 +15,7 @@ from pos.canonical_term_grid import (
     year_level_from_term_label,
 )
 from pos.curriculum_draft_semesters import orig_sem_suggested_for_row, term_index_to_orig_sem_map
+from pos.curriculum_pdf_profiles import normalize_term_label, profile_from_draft_json
 from pos.curriculum_pdf_extract import (
     _STANDING_OR_PROGRESSION,
     _canonical_course_code,
@@ -22,7 +23,7 @@ from pos.curriculum_pdf_extract import (
     _requisite_text_is_standing_or_progression_only,
 )
 
-ANALYZER_VERSION = "phase6-v2"
+ANALYZER_VERSION = "phase6-v3"
 
 
 def _standing_year_guess(match_text: str) -> int | None:
@@ -67,6 +68,8 @@ def _analyze_row(
     *,
     all_codes: set[str],
     ti_map: dict[int, int],
+    template_profile: str,
+    term_labels_normalized: bool,
 ) -> dict[str, Any]:
     code = str(row.get("code") or "").strip()
     raw_pre = str(row.get("raw_prerequisites") or "")
@@ -115,7 +118,8 @@ def _analyze_row(
         conf *= 0.85
 
     label_text = term_label_for_row(row)
-    label_orig = orig_sem_from_term_label(label_text) if label_text else None
+    effective_label = normalize_term_label(label_text, template_profile) if label_text else ""
+    label_orig = orig_sem_from_term_label(effective_label) if effective_label else None
     ti_orig = orig_sem_suggested_for_row(row, ti_map)
     calendar_warnings: list[str] = []
     if label_orig is not None:
@@ -128,10 +132,10 @@ def _analyze_row(
     else:
         orig_sem_suggested = ti_orig
         orig_sem_source = "term_index"
-        if label_text:
+        if label_text and not term_labels_normalized:
             calendar_warnings.append("term_label present but not matched to canonical EE/CpE grid; using term_index map")
 
-    yl_from_label = year_level_from_term_label(label_text) if label_text else None
+    yl_from_label = year_level_from_term_label(effective_label or label_text) if label_text else None
     if yl_from_label is not None:
         year_level_suggested = max(1, min(10, int(yl_from_label)))
     else:
@@ -172,19 +176,29 @@ def analyze_draft_json(draft_json: dict[str, Any]) -> dict[str, Any]:
     all_codes = {str(r.get("code") or "").strip() for r in rows if r.get("code")}
     all_codes = {_canonical_course_code(c) for c in all_codes if c}
     ti_map = term_index_to_orig_sem_map(rows)
+    template_profile = profile_from_draft_json(draft_json)
+    meta = draft_json.get("extraction_meta") or {}
+    term_labels_normalized = bool(meta.get("term_labels_normalized"))
 
     per_row: dict[str, Any] = {}
     for row in rows:
         rid = str(row.get("draft_row_id") or "").strip()
         if not rid:
             continue
-        per_row[rid] = _analyze_row(row, all_codes=all_codes, ti_map=ti_map)
+        per_row[rid] = _analyze_row(
+            row,
+            all_codes=all_codes,
+            ti_map=ti_map,
+            template_profile=template_profile,
+            term_labels_normalized=term_labels_normalized,
+        )
 
     ystand, _aliases = _bundle_suggestions(per_row)
 
     return {
         "run_at": datetime.now(timezone.utc).isoformat(),
         "analyzer_version": ANALYZER_VERSION,
+        "template_profile": template_profile,
         "rows": per_row,
         "year_standing_rules_suggested": ystand,
         "prereq_aliases_suggested": {},

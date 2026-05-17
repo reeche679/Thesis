@@ -1,0 +1,431 @@
+{% extends "pos/staff_base.html" %}
+{% load static %}
+
+{% block title %}Staff Portal | Curriculum Management{% endblock %}
+
+{% block staff_nav_home_active %}active{% endblock %}
+
+{% block extra_head %}
+<style>
+    .staff-home-outer {
+        background-color: rgba(255, 255, 255, 0.655);
+        border-radius: 0.5rem;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+        padding: clamp(1rem, 4vw, 1.75rem) clamp(1rem, 4vw, 2rem);
+        max-width: min(1200px, 100%);
+        margin: 0 auto;
+        width: 100%;
+    }
+
+    .staff-section-title {
+        font-size: clamp(0.75rem, 2vw, 0.85rem);
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: #a0161c;
+        border-bottom: 2px solid #a0161c;
+        padding-bottom: 0.35rem;
+        margin-bottom: 1.25rem;
+    }
+    .staff-section-title.staff-section-title-lg {
+        font-size: clamp(1.3rem, 4vw, 1.5rem);
+        padding-bottom: 0.5rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .staff-pos-card {
+        background: rgba(255, 255, 255, 0.72);
+        border-radius: 0.5rem;
+        border: 1px solid #dee2e6;
+        padding: 1.25rem 1.5rem 1.5rem;
+    }
+
+    /* --- Action cards (Upload / Edit) --- */
+    .staff-action-card {
+        background: rgba(255, 255, 255, 0.72);
+        border-radius: 0.5rem;
+        border: 1px solid #dee2e6;
+        padding: 1.5rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.6rem;
+    }
+    .staff-action-card .action-icon {
+        font-size: 2rem;
+        color: #a0161c;
+        line-height: 1;
+    }
+    .staff-action-card h3 {
+        font-size: 1rem;
+        font-weight: 700;
+        margin: 0;
+    }
+    .staff-action-card p {
+        font-size: 0.875rem;
+        color: #555;
+        margin: 0;
+        flex: 1;
+    }
+    .btn-staff-primary {
+        background-color: #a0161c;
+        border-color: #a0161c;
+        color: #fff;
+        font-weight: 600;
+        font-size: 0.875rem;
+    }
+    .btn-staff-primary:hover, .btn-staff-primary:focus {
+        background-color: #8b1218;
+        border-color: #8b1218;
+        color: #fff;
+    }
+    .btn-staff-outline {
+        border-color: #a0161c;
+        color: #a0161c;
+        font-weight: 600;
+        font-size: 0.875rem;
+    }
+    .btn-staff-outline:hover, .btn-staff-outline:focus {
+        background-color: #a0161c;
+        color: #fff;
+    }
+
+    /* --- Students table --- */
+    #students-status { font-size: 0.8rem; color: #555; min-height: 1.2em; }
+    .student-search-wrap {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        align-items: center;
+        margin-bottom: 0.9rem;
+    }
+    .student-search-wrap input[type="search"] {
+        flex: 1;
+        min-width: 160px;
+        max-width: 340px;
+    }
+    #students-table { font-size: 0.82rem; }
+    #students-table thead th { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap; }
+    #students-table tbody td { vertical-align: middle; }
+    #students-table select.prog-select,
+    #students-table select.ver-select { font-size: 0.8rem; min-width: 130px; max-width: 220px; }
+    .save-btn { font-size: 0.75rem; padding: 0.2rem 0.55rem; }
+    .row-status { font-size: 0.72rem; white-space: nowrap; }
+    .row-status.ok  { color: #197a4a; }
+    .row-status.err { color: #a0161c; }
+    @media (max-width: 767px) {
+        #students-table select.prog-select,
+        #students-table select.ver-select { min-width: 100px; }
+    }
+</style>
+{% endblock extra_head %}
+
+{% block content %}
+<div class="py-4">
+<div class="staff-home-outer">
+
+    {# ─────────────── STUDENTS ─────────────── #}
+    <div class="staff-section-title staff-section-title-lg">Students</div>
+    <div class="staff-pos-card mb-4">
+        <p class="small text-muted mb-3">
+            Assign each student's <strong>Department (Program)</strong> and the
+            <strong>POS version</strong> they will use. Changes save automatically when you
+            click <em>Save</em> on the row.
+        </p>
+
+        <div class="student-search-wrap">
+            <input id="student-search" type="search" class="form-control form-control-sm"
+                   placeholder="Search by SR-code, name, or email…" autocomplete="off">
+            <select id="student-prog-filter" class="form-select form-select-sm" style="max-width:220px">
+                <option value="">All programs</option>
+                {% for p in programs %}
+                    <option value="{{ p.pk }}">{{ p.name }}</option>
+                {% endfor %}
+            </select>
+            <button id="btn-refresh-students" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-arrow-clockwise"></i> Refresh
+            </button>
+        </div>
+
+        <p id="students-status"></p>
+
+        <div class="table-responsive">
+            <table id="students-table" class="table table-sm table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>SR-Code</th>
+                        <th>Name</th>
+                        <th>Year</th>
+                        <th>Department (Program)</th>
+                        <th>POS Version</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody id="students-tbody">
+                    <tr><td colspan="6" class="text-muted small py-3">Loading…</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <p class="small text-muted mt-2 mb-0">Showing up to 500 students. Use search or program filter to narrow down.</p>
+    </div>
+
+    {# ─────────────── UPLOAD NEW POS ─────────────── #}
+    <div class="staff-section-title staff-section-title-lg">Upload New POS</div>
+    <div class="row g-3 mb-4">
+        <div class="col-12 col-md-6">
+            <div class="staff-action-card h-100">
+                <div class="action-icon"><i class="bi bi-cloud-upload-fill"></i></div>
+                <h3>Upload a New Curriculum PDF</h3>
+                <p>
+                    Import a curriculum from a PDF (Catalog or Evaluation POS format).
+                    The system will extract courses into a draft that you can review, edit, and approve.
+                </p>
+                <div>
+                    <a href="{% url 'staff_curriculum_upload' %}" class="btn btn-staff-primary">
+                        <i class="bi bi-cloud-upload me-1"></i>Upload PDF
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {# ─────────────── EDIT EXISTING POS ─────────────── #}
+    <div class="staff-section-title">Edit Existing POS</div>
+    <div class="row g-3">
+        <div class="col-12 col-md-6">
+            <div class="staff-action-card h-100">
+                <div class="action-icon"><i class="bi bi-pencil-square"></i></div>
+                <h3>Manage Curriculum Versions</h3>
+                <p>
+                    View, edit, approve, reopen, or delete existing curriculum versions.
+                    Approved curricula can be reopened as drafts for revision.
+                </p>
+                <div>
+                    <a href="{% url 'staff_curriculum_edit' %}" class="btn btn-staff-primary">
+                        <i class="bi bi-pencil me-1"></i>Manage curricula
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>{# /staff-home-outer #}
+</div>
+{% endblock content %}
+
+{% block extra_scripts %}
+<script>
+(function () {
+"use strict";
+
+const studentsListUrl = '{% url "staff_api_students_list" %}';
+const studentPatchBase = '{% url "staff_api_student_patch" pk=0 %}'.replace('/0/', '/');
+const versionsUrl     = '{% url "staff_api_curriculum_versions_list" %}';
+
+const tbody     = document.getElementById('students-tbody');
+const statusEl  = document.getElementById('students-status');
+const searchEl  = document.getElementById('student-search');
+const progFilter= document.getElementById('student-prog-filter');
+
+let allPrograms = [];
+let approvedVersionsByProgram = {};  // keyed by program_id (or '' for none)
+let debounceTimer;
+
+function getCookie(name) {
+    const v = document.cookie.match('(^|;) ?' + name + '=([^;]*)(;|$)');
+    return v ? decodeURIComponent(v[2]) : '';
+}
+
+function escHtml(s) {
+    return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// Fetch approved versions for a given program_id (empty string = no program)
+async function fetchVersionsForProgram(programId) {
+    const key = programId ? String(programId) : '';
+    if (key in approvedVersionsByProgram) return approvedVersionsByProgram[key];
+    if (!programId) {
+        approvedVersionsByProgram[key] = [];
+        return [];
+    }
+    try {
+        const r = await fetch(versionsUrl + '?program_id=' + encodeURIComponent(programId) + '&status=approved', { credentials: 'same-origin' });
+        const data = await r.json().catch(() => ({}));
+        const list = (data.versions || []).filter(v => v.status === 'approved');
+        approvedVersionsByProgram[key] = list;
+        return list;
+    } catch (_) {
+        approvedVersionsByProgram[key] = [];
+        return [];
+    }
+}
+
+function buildProgramSelect(row) {
+    let html = '<select class="form-select form-select-sm prog-select" data-id="' + escHtml(String(row.id)) + '">';
+    html += '<option value="">— none —</option>';
+    allPrograms.forEach(function (p) {
+        const sel = (row.program_id && p.id === row.program_id) ? ' selected' : '';
+        html += '<option value="' + escHtml(String(p.id)) + '"' + sel + '>' + escHtml(p.name) + '</option>';
+    });
+    html += '</select>';
+    return html;
+}
+
+async function buildVersionSelect(row, versions) {
+    let html = '<select class="form-select form-select-sm ver-select" data-id="' + escHtml(String(row.id)) + '"';
+    if (!row.program_id) html += ' disabled';
+    html += '>';
+    html += '<option value="">— none —</option>';
+    versions.forEach(function (v) {
+        const sel = (row.curriculum_version_id && v.id === row.curriculum_version_id) ? ' selected' : '';
+        html += '<option value="' + escHtml(String(v.id)) + '"' + sel + '>' + escHtml(v.version_label || 'version ' + v.id) + '</option>';
+    });
+    // If current version isn't in list (different program or archived), add a disabled placeholder
+    if (row.curriculum_version_id && !versions.find(v => v.id === row.curriculum_version_id)) {
+        html += '<option value="' + escHtml(String(row.curriculum_version_id)) + '" selected disabled>'
+             + escHtml(row.curriculum_version_label || 'version ' + row.curriculum_version_id) + ' (not in program)</option>';
+    }
+    html += '</select>';
+    return html;
+}
+
+async function renderStudents(students) {
+    if (!students.length) {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-muted small py-3">No students found.</td></tr>';
+        return;
+    }
+
+    // Pre-fetch versions for all unique programs present
+    const programIds = [...new Set(students.map(s => s.program_id).filter(Boolean))];
+    await Promise.all(programIds.map(pid => fetchVersionsForProgram(pid)));
+
+    const rows = await Promise.all(students.map(async function (row) {
+        const versions = row.program_id ? (approvedVersionsByProgram[String(row.program_id)] || []) : [];
+        const progSel = buildProgramSelect(row);
+        const verSel  = await buildVersionSelect(row, versions);
+        return '<tr data-student-id="' + escHtml(String(row.id)) + '">'
+            + '<td class="text-nowrap">' + escHtml(row.sr_code) + '</td>'
+            + '<td>' + escHtml(row.name) + '</td>'
+            + '<td class="text-nowrap small">' + escHtml(row.year_level || '—') + '</td>'
+            + '<td>' + progSel + '</td>'
+            + '<td>' + verSel + '</td>'
+            + '<td class="text-nowrap">'
+            +   '<button class="btn btn-sm btn-staff-primary save-btn" data-id="' + escHtml(String(row.id)) + '">Save</button>'
+            +   ' <span class="row-status" id="status-' + escHtml(String(row.id)) + '"></span>'
+            + '</td>'
+            + '</tr>';
+    }));
+    tbody.innerHTML = rows.join('');
+    bindStudentHandlers();
+}
+
+function bindStudentHandlers() {
+    // Program change → reload versions dropdown
+    tbody.querySelectorAll('.prog-select').forEach(function (sel) {
+        sel.addEventListener('change', async function () {
+            const studentId = sel.getAttribute('data-id');
+            const programId = sel.value;
+            const tr = sel.closest('tr');
+            const verSel = tr.querySelector('.ver-select');
+            // Invalidate cache for this program if not yet loaded
+            const versions = programId ? await fetchVersionsForProgram(programId) : [];
+            // Rebuild version select
+            verSel.disabled = !programId;
+            verSel.innerHTML = '<option value="">— none —</option>';
+            versions.forEach(function (v) {
+                const opt = document.createElement('option');
+                opt.value = v.id;
+                opt.textContent = v.version_label || 'version ' + v.id;
+                verSel.appendChild(opt);
+            });
+        });
+    });
+
+    // Save button
+    tbody.querySelectorAll('.save-btn').forEach(function (btn) {
+        btn.addEventListener('click', async function () {
+            const studentId = btn.getAttribute('data-id');
+            const tr = btn.closest('tr');
+            const progSel = tr.querySelector('.prog-select');
+            const verSel  = tr.querySelector('.ver-select');
+            const rowStatus = document.getElementById('status-' + studentId);
+
+            const payload = {
+                program_id: progSel.value ? parseInt(progSel.value, 10) : null,
+                curriculum_version_id: verSel.value ? parseInt(verSel.value, 10) : null,
+            };
+
+            btn.disabled = true;
+            if (rowStatus) { rowStatus.className = 'row-status'; rowStatus.textContent = 'Saving…'; }
+
+            try {
+                const r = await fetch(studentPatchBase + studentId + '/', {
+                    method: 'PATCH',
+                    credentials: 'same-origin',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken'),
+                    },
+                    body: JSON.stringify(payload),
+                });
+                const data = await r.json().catch(() => ({}));
+                if (!r.ok || !data.ok) {
+                    if (rowStatus) { rowStatus.className = 'row-status err'; rowStatus.textContent = data.error || 'Error'; }
+                } else {
+                    if (rowStatus) { rowStatus.className = 'row-status ok'; rowStatus.textContent = 'Saved'; }
+                    setTimeout(function () {
+                        if (rowStatus) rowStatus.textContent = '';
+                    }, 2500);
+                }
+            } catch (e) {
+                if (rowStatus) { rowStatus.className = 'row-status err'; rowStatus.textContent = String(e); }
+            } finally {
+                btn.disabled = false;
+            }
+        });
+    });
+}
+
+async function loadStudents() {
+    statusEl.textContent = 'Loading…';
+    tbody.innerHTML = '<tr><td colspan="6" class="text-muted small py-3">Loading…</td></tr>';
+    const params = new URLSearchParams();
+    const q = searchEl.value.trim();
+    const pid = progFilter.value;
+    if (q) params.set('q', q);
+    if (pid) params.set('program_id', pid);
+
+    try {
+        const r = await fetch(studentsListUrl + (params.toString() ? '?' + params.toString() : ''), { credentials: 'same-origin' });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok || !data.ok) {
+            tbody.innerHTML = '<tr><td colspan="6" class="text-danger small">' + escHtml(data.error || 'HTTP ' + r.status) + '</td></tr>';
+            statusEl.textContent = '';
+            return;
+        }
+        // Cache programs from list response
+        if (data.programs && data.programs.length) {
+            allPrograms = data.programs;
+        }
+        const students = data.students || [];
+        statusEl.textContent = students.length + ' student' + (students.length === 1 ? '' : 's') + '.';
+        await renderStudents(students);
+    } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-danger small">Network error: ' + escHtml(String(e)) + '</td></tr>';
+        statusEl.textContent = '';
+    }
+}
+
+searchEl.addEventListener('input', function () {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(loadStudents, 350);
+});
+progFilter.addEventListener('change', loadStudents);
+document.getElementById('btn-refresh-students').addEventListener('click', function () {
+    approvedVersionsByProgram = {};
+    loadStudents();
+});
+
+loadStudents();
+})();
+</script>
+{% endblock extra_scripts %}

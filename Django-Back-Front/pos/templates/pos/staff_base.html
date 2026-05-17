@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Staff Portal — Curriculum Management{% endblock %}
+
+{# Override header subtitle for staff context #}
+{% block header %}
+<header class="pos-header-bar">
+    <div class="container pos-container-wide d-flex align-items-center">
+        <button type="button" class="pos-header-menu-trigger" id="pos-mobile-menu-btn" aria-label="Open navigation menu">
+            <i class="bi bi-list" aria-hidden="true"></i>
+        </button>
+        <div class="d-flex align-items-center pos-header-brand">
+            <button type="button" class="pos-header-logo-trigger me-3" aria-label="Batangas State University Logo">
+                <img src="{% static 'img/BSU_Logo.png' %}" alt="Batangas State University Logo" class="pos-header-logo">
+            </button>
+            <div>
+                <div class="pos-header-title">
+                    <span class="pos-header-title-full">Batangas State University – The National Engineering University</span>
+                    <span class="pos-header-title-mobile">Batangas State University - TNEU</span>
+                </div>
+                <div class="pos-header-subtitle">Staff — Curriculum Management</div>
+            </div>
+        </div>
+    </div>
+</header>
+{% endblock header %}
+
+{% block navbar %}
+<nav class="navbar navbar-expand pos-navbar">
+    <div class="container pos-container-wide">
+        <div class="navbar-collapse d-flex align-items-center flex-nowrap" id="mainNavbar">
+            <ul class="navbar-nav me-auto mb-2 mb-lg-0 flex-nowrap">
+                <li class="nav-item">
+                    <a class="nav-link {% block staff_nav_home_active %}{% endblock %}" href="{% url 'staff_home' %}" title="Staff Home">
+                        <i class="bi bi-house-door-fill"></i><span class="nav-link-text">Home</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {% block staff_nav_upload_active %}{% endblock %}" href="{% url 'staff_curriculum_upload' %}" title="Upload POS">
+                        <i class="bi bi-cloud-upload-fill"></i><span class="nav-link-text">Upload POS</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {% block staff_nav_edit_active %}{% endblock %}" href="{% url 'staff_curriculum_edit' %}" title="Edit POS">
+                        <i class="bi bi-pencil-square"></i><span class="nav-link-text">Edit POS</span>
+                    </a>
+                </li>
+            </ul>
+            <ul class="navbar-nav mb-2 mb-lg-0 ms-auto flex-shrink-0">
+                {% if user.is_authenticated %}
+                <li class="nav-item">
+                    <span class="nav-link pe-none text-muted small" style="padding-top:0.55rem;padding-bottom:0.55rem;">
+                        <i class="bi bi-person-fill me-1"></i>{{ user.username }}
+                    </span>
+                </li>
+                {% endif %}
+                <li class="nav-item">
+                    <a class="nav-link pos-nav-signout" href="{% url 'staff_logout' %}" title="Sign Out">
+                        <i class="bi bi-box-arrow-right"></i><span class="nav-link-text">Sign Out</span>
+                    </a>
+                </li>
+            </ul>
+        </div>
+    </div>
+</nav>
+{% endblock navbar %}

@@ -282,7 +282,7 @@ class ParseTableSplitTitleTests(SimpleTestCase):
         state.term_index = 1
         state.term_label = "THIRD YEAR SECOND SEMESTER"
         w: list[str] = []
-        rows = _parse_table_rows(table, state, w, page=3, table_idx=1)
+        rows, _profile = _parse_table_rows(table, state, w, page=3, table_idx=1)
         by_code = {r["code"]: r for r in rows}
         self.assertIn("EE 305", by_code)
         self.assertIn("Electrical Standards and Practices", by_code["EE 305"]["title"])

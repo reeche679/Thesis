@@ -20,6 +20,11 @@ from pos.staff_curriculum_views import (
     staff_api_curriculum_analyze,
     staff_api_curriculum_approve,
     staff_api_curriculum_draft,
+    staff_api_curriculum_versions_list,
+    staff_api_curriculum_reopen,
+    staff_api_curriculum_delete,
+    staff_curriculum_edit_list_page,
+    staff_curriculum_edit_detail_page,
 )
 
 
@@ -471,3 +476,238 @@ class UnitCapsModuleTests(TestCase):
         self.assertEqual(result[18], 30)
         self.assertEqual(result[19], 32)
         self.assertEqual(result[20], 15)
+
+
+class StaffCurriculumEditTests(TestCase):
+    """Tests for the edit list page, versions list API, reopen API, and detail page."""
+
+    def setUp(self) -> None:
+        self.factory = RequestFactory()
+        self.program = Program.objects.create(slug="eprog", name="Edit Program")
+        self.superuser = User.objects.create_user("su_edit", password="pw", is_superuser=True)
+        self.manager = User.objects.create_user("mgr_edit", password="pw")
+        self.manager.user_permissions.add(
+            *list(
+                __import__("django.contrib.auth.models", fromlist=["Permission"])
+                .Permission.objects.filter(codename="manage_curriculum_versions")
+            )
+        )
+        self.program.curriculum_managers.add(self.manager)
+
+        self.draft_cv = CurriculumVersion.objects.create(
+            program=self.program,
+            status=CurriculumVersion.STATUS_DRAFT,
+            version_label="edit-draft",
+            draft_json={
+                "phase": 5,
+                "extracted_rows": [
+                    {
+                        "draft_row_id": str(uuid.uuid4()),
+                        "code": "E 101",
+                        "title": "Edit Course",
+                        "units": "3",
+                        "term_index": 1,
+                        "year_level": 1,
+                        "raw_prerequisites": "",
+                        "raw_corequisites": "",
+                        "prerequisite_codes": [],
+                        "corequisite_codes": [],
+                        "source": {"page": 1, "table": 0, "row_index": 0},
+                    }
+                ],
+                "max_units_by_year_term": _default_caps(),
+                "warnings": [],
+                "extraction_meta": {},
+                "suggested_graph": None,
+            },
+        )
+        self.approved_cv = CurriculumVersion.objects.create(
+            program=self.program,
+            status=CurriculumVersion.STATUS_APPROVED,
+            version_label="edit-approved",
+            draft_json=self.draft_cv.draft_json,
+            approved_json={"courses": {}, "metadata": {}},
+        )
+        self.no_rows_cv = CurriculumVersion.objects.create(
+            program=self.program,
+            status=CurriculumVersion.STATUS_APPROVED,
+            version_label="no-rows",
+            draft_json={"extracted_rows": [], "warnings": []},
+            approved_json={"courses": {}, "metadata": {}},
+        )
+
+    # --- versions list API ---
+
+    def _list_req(self, user, **params):
+        from urllib.parse import urlencode
+        url = "/staff/api/curriculum/versions/"
+        if params:
+            url += "?" + urlencode(params)
+        req = self.factory.get(url)
+        req.user = user
+        return staff_api_curriculum_versions_list(req)
+
+    def test_versions_list_returns_managed_versions(self) -> None:
+        r = self._list_req(self.superuser)
+        self.assertEqual(r.status_code, 200)
+        data = _json(r)
+        self.assertTrue(data["ok"])
+        ids = [v["id"] for v in data["versions"]]
+        self.assertIn(self.draft_cv.pk, ids)
+        self.assertIn(self.approved_cv.pk, ids)
+
+    def test_versions_list_status_filter(self) -> None:
+        r = self._list_req(self.superuser, status="draft")
+        ids = [v["id"] for v in _json(r)["versions"]]
+        self.assertIn(self.draft_cv.pk, ids)
+        self.assertNotIn(self.approved_cv.pk, ids)
+
+    def test_versions_list_non_manager_403(self) -> None:
+        other = User.objects.create_user("nobody_edit", password="pw")
+        r = self._list_req(other)
+        self.assertEqual(r.status_code, 403)
+
+    def test_versions_list_unauthenticated_401(self) -> None:
+        from django.contrib.auth.models import AnonymousUser
+        req = self.factory.get("/staff/api/curriculum/versions/")
+        req.user = AnonymousUser()
+        r = staff_api_curriculum_versions_list(req)
+        self.assertEqual(r.status_code, 401)
+
+    def test_versions_list_row_has_edit_url(self) -> None:
+        r = self._list_req(self.superuser)
+        version_map = {v["id"]: v for v in _json(r)["versions"]}
+        self.assertIn("edit_url", version_map[self.draft_cv.pk])
+        self.assertEqual(
+            version_map[self.draft_cv.pk]["edit_url"],
+            f"/staff/curriculum/edit/{self.draft_cv.pk}/",
+        )
+
+    # --- reopen API ---
+
+    def _reopen_req(self, user, pk):
+        req = self.factory.post(f"/staff/api/curriculum/version/{pk}/reopen/")
+        req.user = user
+        return staff_api_curriculum_reopen(req, pk=pk)
+
+    def test_reopen_approved_to_draft(self) -> None:
+        r = self._reopen_req(self.superuser, self.approved_cv.pk)
+        self.assertEqual(r.status_code, 200)
+        data = _json(r)
+        self.assertTrue(data["ok"])
+        self.assertEqual(data["status"], CurriculumVersion.STATUS_DRAFT)
+        self.approved_cv.refresh_from_db()
+        self.assertEqual(self.approved_cv.status, CurriculumVersion.STATUS_DRAFT)
+
+    def test_reopen_already_draft_returns_400(self) -> None:
+        r = self._reopen_req(self.superuser, self.draft_cv.pk)
+        self.assertEqual(r.status_code, 400)
+
+    def test_reopen_blocked_when_no_rows(self) -> None:
+        r = self._reopen_req(self.superuser, self.no_rows_cv.pk)
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("No draft data", _json(r)["error"])
+
+    def test_reopen_non_manager_403(self) -> None:
+        other = User.objects.create_user("noone_reopen", password="pw")
+        r = self._reopen_req(other, self.approved_cv.pk)
+        self.assertEqual(r.status_code, 403)
+
+    def test_draft_patch_works_after_reopen(self) -> None:
+        self._reopen_req(self.superuser, self.approved_cv.pk)
+        self.approved_cv.refresh_from_db()
+        self.assertEqual(self.approved_cv.status, CurriculumVersion.STATUS_DRAFT)
+
+        rows = list(self.approved_cv.draft_json.get("extracted_rows") or [])
+        req = self.factory.patch(
+            f"/staff/api/curriculum/version/{self.approved_cv.pk}/draft/",
+            data=json.dumps({"extracted_rows": rows, "max_units_by_year_term": _default_caps()}),
+            content_type="application/json",
+        )
+        req.user = self.superuser
+        r = staff_api_curriculum_draft(req, pk=self.approved_cv.pk)
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertTrue(_json(r)["ok"])
+
+    # --- upload response includes edit_url ---
+
+    def test_upload_response_edit_url_present(self) -> None:
+        from pos.staff_curriculum_views import _draft_json_response
+        self.draft_cv.refresh_from_db()
+        resp = _draft_json_response(self.draft_cv)
+        self.assertIn("rows", resp)
+
+    # --- detail page context ---
+
+    def _detail_req(self, user, pk):
+        from unittest.mock import MagicMock
+        req = self.factory.get(f"/staff/curriculum/edit/{pk}/")
+        req.user = user
+        req.session = MagicMock()
+        req.session.get.return_value = None
+        return staff_curriculum_edit_detail_page(req, pk=pk)
+
+    def test_detail_page_draft_can_edit(self) -> None:
+        r = self._detail_req(self.superuser, self.draft_cv.pk)
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, "btn-save")
+
+    def test_detail_page_approved_can_reopen(self) -> None:
+        r = self._detail_req(self.superuser, self.approved_cv.pk)
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, "btn-reopen")
+
+    def test_detail_page_forbidden_for_non_manager(self) -> None:
+        other = User.objects.create_user("forbidden_edit", password="pw")
+        r = self._detail_req(other, self.draft_cv.pk)
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, "not allowed")
+
+    # --- delete API ---
+
+    def _delete_req(self, user, pk):
+        req = self.factory.post(f"/staff/api/curriculum/version/{pk}/delete/")
+        req.user = user
+        return staff_api_curriculum_delete(req, pk=pk)
+
+    def test_delete_draft_version(self) -> None:
+        cv = CurriculumVersion.objects.create(
+            program=self.program,
+            status=CurriculumVersion.STATUS_DRAFT,
+            version_label="to-delete",
+            draft_json={"extracted_rows": [{"draft_row_id": str(uuid.uuid4()), "code": "Z 999", "title": "x", "units": "1"}]},
+        )
+        r = self._delete_req(self.superuser, cv.pk)
+        self.assertEqual(r.status_code, 200)
+        data = _json(r)
+        self.assertTrue(data["ok"])
+        self.assertEqual(data["deleted_id"], cv.pk)
+        self.assertFalse(CurriculumVersion.objects.filter(pk=cv.pk).exists())
+
+    def test_delete_clears_program_default(self) -> None:
+        self.program.default_curriculum_version = self.approved_cv
+        self.program.save(update_fields=["default_curriculum_version"])
+        pk = self.approved_cv.pk
+        r = self._delete_req(self.superuser, pk)
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(_json(r)["cleared_program_default"])
+        self.program.refresh_from_db()
+        self.assertIsNone(self.program.default_curriculum_version_id)
+        self.assertFalse(CurriculumVersion.objects.filter(pk=pk).exists())
+
+    def test_delete_non_manager_403(self) -> None:
+        cv = CurriculumVersion.objects.create(
+            program=self.program,
+            status=CurriculumVersion.STATUS_DRAFT,
+            version_label="no-delete-me",
+            draft_json={"extracted_rows": []},
+        )
+        other = User.objects.create_user("no_delete", password="pw")
+        r = self._delete_req(other, cv.pk)
+        self.assertEqual(r.status_code, 403)
+        self.assertTrue(CurriculumVersion.objects.filter(pk=cv.pk).exists())
+
+    def test_versions_list_includes_can_delete(self) -> None:
+        r = self._list_req(self.superuser)
+        version_map = {v["id"]: v for v in _json(r)["versions"]}
+        self.assertTrue(version_map[self.approved_cv.pk].get("can_delete"))

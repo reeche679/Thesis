@@ -61,6 +61,8 @@ _SUBJECT_CANONICAL_BY_LOWER: dict[str, str] = {
     "rel": "REL",
     "engl": "ENGL",
     "drmath": "DRMATH",
+    "sci": "SCI",
+    "scl": "SCI",
 }
 
 
@@ -147,9 +149,10 @@ _HEADER_SYNONYMS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("course", ("course", "code", "subject", "crs", "course no", "course no.", "course\nno")),
     ("lec", ("lec", "lecture", "lec h", "lec\n")),
     ("lab", ("lab", "laboratory", "lab\n")),
-    ("units", ("units", "unit", "credit", "credits", "credit units", "total units", "cr", "cu", "hrs/wk")),
-    ("prereq", ("prereq", "pre-req", "prerequisite", "pre req", "pre-requisite")),
+    ("units", ("units", "unit", "unit/s", "unit(s)", "credit", "credits", "credit units", "total units", "cr", "cu", "hrs/wk", "no. of hour")),
+    ("prereq", ("prereq", "pre-req", "prerequisite", "pre req", "pre-requisite", "pre-requisite / co-requisite", "pre-requisite/co-requisite")),
     ("coreq", ("coreq", "co-req", "corequisite", "co req", "co-requisite")),
+    ("grade", ("grade", "final grade")),
     ("max", ("max", "maximum", "load", "max load")),
 )
 
@@ -266,10 +269,23 @@ def _infer_pos_grid_col_map(n_cols: int) -> dict[str, int]:
     return m
 
 
-def _build_col_map(table: list[list[Any | None]], warnings: list[str]) -> dict[str, int]:
-    """Map logical field → column index from the best header row."""
+def _build_col_map(
+    table: list[list[Any | None]],
+    warnings: list[str],
+    *,
+    profile: str | None = None,
+) -> tuple[dict[str, int], str]:
+    """Map logical field → column index from the best header row; return (col_map, profile)."""
+    from pos.curriculum_pdf_profiles import (
+        DEFAULT_PROFILE,
+        PROFILE_EVALUATION_5COL,
+        detect_table_profile,
+        infer_evaluation_col_map,
+    )
+
     if not table:
-        return {}
+        return {}, profile or DEFAULT_PROFILE
+    resolved_profile = profile or detect_table_profile(table)
     w = _table_width(table)
     hri, header_score = _detect_header_row_index_and_score(table)
     col_map: dict[str, int] = {}
@@ -281,9 +297,12 @@ def _build_col_map(table: list[list[Any | None]], warnings: list[str]) -> dict[s
             if cat and cat not in col_map:
                 col_map[cat] = j
     elif _first_row_looks_like_pos_course_grid_data(table[0]):
-        inferred = _infer_pos_grid_col_map(w)
+        if resolved_profile == PROFILE_EVALUATION_5COL:
+            inferred = infer_evaluation_col_map(w)
+        else:
+            inferred = _infer_pos_grid_col_map(w)
         if inferred:
-            return inferred
+            return inferred, resolved_profile
         row = table[0] if table else []
         for j in range(w):
             cell = _norm_cell(row[j]) if j < len(row) else ""
@@ -297,9 +316,11 @@ def _build_col_map(table: list[list[Any | None]], warnings: list[str]) -> dict[s
             cat = _header_cell_category(cell)
             if cat and cat not in col_map:
                 col_map[cat] = j
+    if resolved_profile == PROFILE_EVALUATION_5COL and not col_map and w >= 4:
+        col_map = infer_evaluation_col_map(w)
     if "units" not in col_map:
         warnings.append("Table header: no UNITS column detected; units may use fallback heuristics.")
-    return col_map
+    return col_map, resolved_profile
 
 
 def _get_cell(row: list[Any | None] | None, j: int | None) -> str:
@@ -543,19 +564,33 @@ def _pick_units_fallback(
     col_map: dict[str, int],
     warnings: list[str],
     code: str,
+    *,
+    profile: str | None = None,
 ) -> tuple[str, bool]:
     """If no units column, prefer small numeric in columns after LEC/LAB."""
+    from pos.curriculum_pdf_profiles import looks_like_grade_not_units
+
     lec_j = col_map.get("lec")
     lab_j = col_map.get("lab")
+    grade_j = col_map.get("grade")
     tail_start = 0
     if lab_j is not None:
         tail_start = lab_j + 1
     elif lec_j is not None:
         tail_start = lec_j + 1
+    skip = {
+        col_map.get("prereq"),
+        col_map.get("coreq"),
+        col_map.get("course"),
+        col_map.get("title"),
+        grade_j,
+    }
     for j in range(tail_start, len(cells)):
-        if j in (col_map.get("prereq"), col_map.get("coreq"), col_map.get("course"), col_map.get("title")):
+        if j in skip:
             continue
         c = cells[j].strip()
+        if looks_like_grade_not_units(c, profile=profile or ""):
+            continue
         if re.fullmatch(r"\d+(?:\.\d+)?", c):
             v = float(c)
             if v <= 24:
@@ -735,14 +770,26 @@ def _parse_table_rows(
     *,
     page: int,
     table_idx: int,
-) -> list[dict[str, Any]]:
+    doc_profile: str | None = None,
+) -> tuple[list[dict[str, Any]], str]:
+    from pos.curriculum_pdf_profiles import (
+        DEFAULT_PROFILE,
+        PROFILE_EVALUATION_5COL,
+        is_footer_or_signature_row,
+        is_semester_total_only_row,
+        looks_like_grade_not_units,
+        split_combined_requisite_cell,
+    )
+
     rows_out: list[dict[str, Any]] = []
     if not table:
-        return rows_out
+        return rows_out, doc_profile or DEFAULT_PROFILE
 
-    col_map = _build_col_map(table, warnings)
+    col_map, table_profile = _build_col_map(table, warnings, profile=doc_profile)
+    profile = table_profile
     course_j = col_map.get("course")
     title_j = col_map.get("title")
+    pending_prereq_append: str | None = None
 
     for ri, raw_row in enumerate(table):
         if not raw_row:
@@ -754,6 +801,15 @@ def _parse_table_rows(
 
         if re.search(r"(?i)\b(total|subtotal)\b", joined):
             term_state.clear_pending_year()
+            pending_prereq_append = None
+            continue
+
+        if is_footer_or_signature_row(joined):
+            pending_prereq_append = None
+            continue
+
+        if is_semester_total_only_row(cells, has_course_col=course_j is not None):
+            pending_prereq_append = None
             continue
 
         if _consume_runon_year_sem_heading_line(joined, term_state):
@@ -768,7 +824,17 @@ def _parse_table_rows(
         if course_j is not None:
             ccell = _get_cell(raw_row, course_j)
             if not ccell.strip():
-                # Continuation row: codes in Prerequisite(s) must not become a fake course (e.g. MATH 102).
+                pre_cont = _get_cell(raw_row, col_map.get("prereq"))
+                if (
+                    profile == PROFILE_EVALUATION_5COL
+                    and rows_out
+                    and pre_cont.strip()
+                    and not _get_cell(raw_row, title_j).strip()
+                ):
+                    prev = rows_out[-1]
+                    prev_pre = str(prev.get("raw_prerequisites") or "").strip()
+                    prev["raw_prerequisites"] = f"{prev_pre} {pre_cont}".strip() if prev_pre else pre_cont
+                    pending_prereq_append = None
                 continue
             hit = _find_code_in_text(ccell)
             if hit:
@@ -795,11 +861,15 @@ def _parse_table_rows(
                 if len(cand) > len(title):
                     title = cand
 
+        allow_title_merge = profile == PROFILE_EVALUATION_5COL or (
+            col_map.get("lec") is not None or col_map.get("lab") is not None
+        )
         if (
             not (title or "").strip()
             and title_j is not None
             and course_j is not None
             and ri > 0
+            and allow_title_merge
         ):
             prev = table[ri - 1]
             if not _get_cell(prev, course_j).strip():
@@ -819,16 +889,24 @@ def _parse_table_rows(
         lab_raw = _get_cell(raw_row, col_map.get("lab"))
 
         units_raw = _get_cell(raw_row, col_map.get("units"))
+        if looks_like_grade_not_units(units_raw, profile=profile):
+            units_raw = ""
         units_from_header = bool(units_raw and col_map.get("units") is not None)
         units = _normalize_units_value(units_raw, code, title, warnings)
         if not units and col_map.get("units") is None:
-            fb, _fb_ok = _pick_units_fallback(cells, col_map, warnings, code)
+            fb, _fb_ok = _pick_units_fallback(cells, col_map, warnings, code, profile=profile)
+            if looks_like_grade_not_units(fb, profile=profile):
+                fb = ""
             units = _normalize_units_value(fb, code, title, warnings)
 
         prereq_j = col_map.get("prereq")
         coreq_j = col_map.get("coreq")
         raw_pre = _get_cell(raw_row, prereq_j)
         raw_co = _get_cell(raw_row, coreq_j)
+        if profile == PROFILE_EVALUATION_5COL and raw_pre and coreq_j is None:
+            raw_pre, raw_co_split = split_combined_requisite_cell(raw_pre)
+            if raw_co_split and not raw_co:
+                raw_co = raw_co_split
         prereq_from_map = prereq_j is not None and bool(raw_pre)
         coreq_from_map = coreq_j is not None and bool(raw_co)
 
@@ -851,7 +929,13 @@ def _parse_table_rows(
             "raw_corequisites": raw_co,
             "raw_max_units_text": raw_max,
             "confidence": round(conf, 3),
-            "source": {"kind": "pdf_table", "row_index": ri, "page": page, "table": table_idx},
+            "source": {
+                "kind": "pdf_table",
+                "row_index": ri,
+                "page": page,
+                "table": table_idx,
+                "template_profile": profile,
+            },
         }
         _finalize_row(
             row,
@@ -861,7 +945,8 @@ def _parse_table_rows(
             warnings=warnings,
         )
         rows_out.append(row)
-    return rows_out
+        pending_prereq_append = None
+    return rows_out, profile
 
 
 def _merge_unique_rows_by_code(primary: list[dict[str, Any]], secondary: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -1022,7 +1107,31 @@ def _page_extract_text_for_timeline(page: Any) -> str:
     return page.extract_text() or ""
 
 
-def extract_curriculum_rows_from_pdf(pdf_path: Path) -> dict[str, Any]:
+def _apply_term_label_normalization(
+    rows: list[dict[str, Any]],
+    profile: str,
+) -> int:
+    """Rewrite term_label/term to canonical grid strings where possible; return count changed."""
+    from pos.curriculum_pdf_profiles import normalize_term_label
+
+    changed = 0
+    for row in rows:
+        raw = str(row.get("term_label") or row.get("term") or "").strip()
+        if not raw:
+            continue
+        norm = normalize_term_label(raw, profile)
+        if norm and norm != raw:
+            row["term_label"] = norm
+            row["term"] = norm
+            changed += 1
+    return changed
+
+
+def extract_curriculum_rows_from_pdf(
+    pdf_path: Path,
+    *,
+    template_hint: str | None = None,
+) -> dict[str, Any]:
     """
     Return a draft_json-shaped extraction dict (not yet merged with DB wrapper).
 
@@ -1037,9 +1146,25 @@ def extract_curriculum_rows_from_pdf(pdf_path: Path) -> dict[str, Any]:
       - extraction_meta: dict (pages, library, path hint)
       - suggested_graph: null (Phase 6)
     """
+    from pos.curriculum_pdf_profiles import (
+        DEFAULT_PROFILE,
+        KNOWN_PROFILES,
+        PROFILE_EVALUATION_5COL,
+        merge_document_profile,
+        should_skip_ocr_for_profile,
+    )
+
     warnings: list[str] = []
     extracted: list[dict[str, Any]] = []
     meta: dict[str, Any] = {"library": "pdfplumber", "path": str(pdf_path.name)}
+    hint_profile: str | None = None
+    if template_hint and template_hint in KNOWN_PROFILES:
+        hint_profile = template_hint
+    elif template_hint == "evaluation":
+        hint_profile = PROFILE_EVALUATION_5COL
+    elif template_hint == "catalog":
+        hint_profile = DEFAULT_PROFILE
+    table_profiles: list[str] = []
 
     try:
         import pdfplumber
@@ -1071,7 +1196,15 @@ def extract_curriculum_rows_from_pdf(pdf_path: Path) -> dict[str, Any]:
                         if _table_looks_like_cmo_comparison_matrix(table):
                             skipped_cmp_tables += 1
                             continue
-                        part = _parse_table_rows(table, term_state, warnings, page=pi + 1, table_idx=ti)
+                        part, tbl_profile = _parse_table_rows(
+                            table,
+                            term_state,
+                            warnings,
+                            page=pi + 1,
+                            table_idx=ti,
+                            doc_profile=hint_profile,
+                        )
+                        table_profiles.append(tbl_profile)
                         extracted.extend(part)
                         page_rows += len(part)
                 if page_rows == 0:
@@ -1109,7 +1242,23 @@ def extract_curriculum_rows_from_pdf(pdf_path: Path) -> dict[str, Any]:
                     backfill_source="document_text_timeline",
                 )
 
-        if _should_run_ocr(len(extracted), total_text_chars, int(meta.get("page_count") or 0)):
+            doc_profile = hint_profile or merge_document_profile(table_profiles)
+            meta["template_profile"] = doc_profile
+            if doc_profile == PROFILE_EVALUATION_5COL:
+                meta["grade_column_ignored"] = True
+            norm_n = _apply_term_label_normalization(extracted, doc_profile)
+            if norm_n:
+                meta["term_labels_normalized"] = norm_n
+
+        doc_profile = meta.get("template_profile") or hint_profile or DEFAULT_PROFILE
+        skip_ocr = should_skip_ocr_for_profile(
+            str(doc_profile),
+            len(extracted),
+            total_text_chars,
+        )
+        if skip_ocr:
+            meta["ocr_skipped"] = "evaluation_native_text"
+        if _should_run_ocr(len(extracted), total_text_chars, int(meta.get("page_count") or 0)) and not skip_ocr:
             ocr_text = _ocr_pdf_to_text_pymupdf_tesseract(pdf_path, warnings)
             if ocr_text.strip():
                 ocr_text, _ocr_pos_trunc = _truncate_combined_text_at_pos_section_end(ocr_text)

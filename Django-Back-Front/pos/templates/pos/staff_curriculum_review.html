@@ -22,7 +22,8 @@
     <header class="staff-topbar">
         <span><strong>Curriculum review</strong> — version {{ cv_id }}</span>
         <span>
-            <a href="{% url 'staff_curriculum_upload' %}">Upload</a>
+            <a href="{% url 'staff_curriculum_edit' %}">All curricula</a>
+            · <a href="{% url 'staff_curriculum_upload' %}">Upload</a>
             · <a href="{% url 'staff_logout' %}">Sign out</a>
         </span>
     </header>
