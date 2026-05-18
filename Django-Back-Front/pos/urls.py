@@ -43,6 +43,8 @@ from .staff_portal_views import (
     staff_api_students_list,
     staff_api_student_patch,
     staff_api_programs_list,
+    staff_api_program_patch,
+    staff_api_program_delete,
 )
 from .staff_curriculum_views import (
     staff_curriculum_upload_page,
@@ -77,6 +79,8 @@ urlpatterns = [
     path("staff/api/students/", staff_api_students_list, name="staff_api_students_list"),
     path("staff/api/students/<int:pk>/", staff_api_student_patch, name="staff_api_student_patch"),
     path("staff/api/programs/", staff_api_programs_list, name="staff_api_programs_list"),
+    path("staff/api/programs/<int:pk>/", staff_api_program_patch, name="staff_api_program_patch"),
+    path("staff/api/programs/<int:pk>/delete/", staff_api_program_delete, name="staff_api_program_delete"),
     path("staff/curriculum/upload/", staff_curriculum_upload_page, name="staff_curriculum_upload"),
     path("staff/curriculum/edit/", staff_curriculum_edit_list_page, name="staff_curriculum_edit"),
     path(

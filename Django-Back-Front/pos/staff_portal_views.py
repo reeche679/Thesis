@@ -4,17 +4,22 @@ Staff portal home page and student assignment APIs.
 GET  /staff/                       — homepage (staff_home)
 GET  /staff/api/students/          — list all students (search, program filter)
 PATCH /staff/api/students/<pk>/    — assign program + approved curriculum version
-GET  /staff/api/programs/          — list all programs (for dropdowns)
+GET  /staff/api/programs/          — list programs (GET) or create (POST)
+PATCH /staff/api/programs/<pk>/    — update program name
+POST /staff/api/programs/<pk>/delete/ — delete program
 """
 
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 from django.contrib.auth.decorators import login_required
+from django.db.models import Count
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
+from django.utils.text import slugify
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_http_methods
 
@@ -23,8 +28,51 @@ from .models import CurriculumVersion, Program
 from .staff_auth_views import user_may_use_staff_curriculum_portal
 
 
+def _portal_forbidden(request) -> JsonResponse | None:
+    if not request.user.is_authenticated:
+        return JsonResponse({"ok": False, "error": "Not authenticated."}, status=401)
+    if not user_may_use_staff_curriculum_portal(request.user):
+        return JsonResponse({"ok": False, "error": "Curriculum staff portal only."}, status=403)
+    return None
+
+
 def _programs_all() -> list[Program]:
-    return list(Program.objects.order_by("name"))
+    return list(
+        Program.objects.annotate(
+            student_count=Count("students", distinct=True),
+            curriculum_version_count=Count("curriculum_versions", distinct=True),
+        ).order_by("name")
+    )
+
+
+def _program_row(p: Program) -> dict[str, Any]:
+    student_count = getattr(p, "student_count", None)
+    if student_count is None:
+        student_count = p.students.count()
+    cv_count = getattr(p, "curriculum_version_count", None)
+    if cv_count is None:
+        cv_count = p.curriculum_versions.count()
+    return {
+        "id": p.pk,
+        "slug": p.slug,
+        "name": p.name,
+        "description": p.description or "",
+        "is_active": p.is_active,
+        "student_count": student_count,
+        "curriculum_version_count": cv_count,
+    }
+
+
+def _unique_program_slug(base: str) -> str:
+    root = slugify(base)[:64] or "program"
+    if not Program.objects.filter(slug=root).exists():
+        return root
+    n = 2
+    while True:
+        candidate = f"{root}-{n}"[:64]
+        if not Program.objects.filter(slug=candidate).exists():
+            return candidate
+        n += 1
 
 
 def _student_row(s: Student) -> dict[str, Any]:
@@ -91,10 +139,7 @@ def staff_api_students_list(request):
             pass
 
     students = [_student_row(s) for s in qs[:500]]
-    programs = [
-        {"id": p.pk, "slug": p.slug, "name": p.name}
-        for p in _programs_all()
-    ]
+    programs = [_program_row(p) for p in _programs_all()]
     return JsonResponse({"ok": True, "students": students, "programs": programs})
 
 
@@ -169,14 +214,94 @@ def staff_api_student_patch(request, pk: int):
     return JsonResponse({"ok": True, "student": _student_row(student)})
 
 
-@require_http_methods(["GET"])
+@require_http_methods(["GET", "POST"])
 def staff_api_programs_list(request):
-    if not request.user.is_authenticated:
-        return JsonResponse({"ok": False, "error": "Not authenticated."}, status=401)
-    if not user_may_use_staff_curriculum_portal(request.user):
-        return JsonResponse({"ok": False, "error": "Curriculum staff portal only."}, status=403)
-    programs = [
-        {"id": p.pk, "slug": p.slug, "name": p.name}
-        for p in _programs_all()
-    ]
-    return JsonResponse({"ok": True, "programs": programs})
+    denied = _portal_forbidden(request)
+    if denied is not None:
+        return denied
+
+    if request.method == "GET":
+        programs = [_program_row(p) for p in _programs_all()]
+        return JsonResponse({"ok": True, "programs": programs})
+
+    try:
+        body = json.loads(request.body.decode("utf-8") or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"ok": False, "error": "Invalid JSON body."}, status=400)
+
+    name = (body.get("name") or "").strip()
+    if not name:
+        return JsonResponse({"ok": False, "error": "Program name is required."}, status=400)
+    if len(name) > 200:
+        return JsonResponse({"ok": False, "error": "Program name is too long (max 200 characters)."}, status=400)
+
+    raw_slug = (body.get("slug") or "").strip()
+    if raw_slug:
+        slug = slugify(raw_slug)[:64]
+        if not slug:
+            return JsonResponse({"ok": False, "error": "Slug is invalid."}, status=400)
+        if not re.match(r"^[a-z0-9]+(?:[-_][a-z0-9]+)*$", slug):
+            return JsonResponse(
+                {"ok": False, "error": "Slug must use lowercase letters, numbers, hyphens, and underscores only."},
+                status=400,
+            )
+        if Program.objects.filter(slug=slug).exists():
+            return JsonResponse({"ok": False, "error": f"A program with slug “{slug}” already exists."}, status=400)
+    else:
+        slug = _unique_program_slug(name)
+
+    description = (body.get("description") or "").strip()
+    program = Program.objects.create(name=name, slug=slug, description=description)
+    return JsonResponse({"ok": True, "program": _program_row(program)}, status=201)
+
+
+@require_http_methods(["PATCH"])
+def staff_api_program_patch(request, pk: int):
+    denied = _portal_forbidden(request)
+    if denied is not None:
+        return denied
+
+    try:
+        program = Program.objects.get(pk=pk)
+    except Program.DoesNotExist:
+        return JsonResponse({"ok": False, "error": "Program not found."}, status=404)
+
+    try:
+        body = json.loads(request.body.decode("utf-8") or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"ok": False, "error": "Invalid JSON body."}, status=400)
+
+    name = (body.get("name") or "").strip()
+    if not name:
+        return JsonResponse({"ok": False, "error": "Program name is required."}, status=400)
+    if len(name) > 200:
+        return JsonResponse({"ok": False, "error": "Program name is too long (max 200 characters)."}, status=400)
+
+    program.name = name
+    program.save(update_fields=["name"])
+    return JsonResponse({"ok": True, "program": _program_row(program)})
+
+
+@require_http_methods(["POST"])
+def staff_api_program_delete(request, pk: int):
+    denied = _portal_forbidden(request)
+    if denied is not None:
+        return denied
+
+    try:
+        program = Program.objects.get(pk=pk)
+    except Program.DoesNotExist:
+        return JsonResponse({"ok": False, "error": "Program not found."}, status=404)
+
+    student_count = program.students.count()
+    cv_count = program.curriculum_versions.count()
+    program_name = program.name
+    program.delete()
+    return JsonResponse(
+        {
+            "ok": True,
+            "deleted_program": program_name,
+            "deleted_curriculum_versions": cv_count,
+            "unassigned_students": student_count,
+        }
+    )

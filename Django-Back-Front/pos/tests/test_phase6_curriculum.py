@@ -8,7 +8,11 @@ from django.core.exceptions import ValidationError
 from django.test import RequestFactory, TestCase
 
 from pos.admin import validate_approved_bundle
-from pos.curriculum_draft_analyze import analyze_draft_json
+from pos.curriculum_draft_analyze import (
+    analyze_draft_json,
+    normalize_requisite_list_separators,
+    _split_req_fragments,
+)
 from pos.curriculum_draft_semesters import term_index_to_orig_sem_map
 from pos.curriculum_draft_to_approved import draft_to_approved_json
 from pos.curriculum_unit_caps import (
@@ -61,6 +65,55 @@ def _row(
     if term_label:
         d["term_label"] = term_label
     return d
+
+
+class RequisiteSeparatorTests(TestCase):
+    def test_normalize_slash_between_codes_to_semicolon(self) -> None:
+        self.assertEqual(
+            normalize_requisite_list_separators("MATH 401 / MATH 402"),
+            "MATH 401; MATH 402",
+        )
+
+    def test_normalize_comma_between_codes_to_semicolon(self) -> None:
+        self.assertEqual(
+            normalize_requisite_list_separators("MATH 401, MATH 402"),
+            "MATH 401; MATH 402",
+        )
+
+    def test_normalize_three_code_list(self) -> None:
+        self.assertEqual(
+            normalize_requisite_list_separators("MATH 401, MATH 402, PE 101"),
+            "MATH 401; MATH 402; PE 101",
+        )
+
+    def test_standing_phrase_comma_not_normalized(self) -> None:
+        self.assertEqual(
+            normalize_requisite_list_separators("4th Year Standing"),
+            "4th Year Standing",
+        )
+
+    def test_split_fragments_on_semicolon_not_slash_or_comma(self) -> None:
+        frags = _split_req_fragments("MATH 401 / MATH 402")
+        self.assertEqual(frags, ["MATH 401 / MATH 402"])
+        frags_comma = _split_req_fragments("MATH 401, MATH 402")
+        self.assertEqual(frags_comma, ["MATH 401, MATH 402"])
+        frags_semi = _split_req_fragments("MATH 401; MATH 402")
+        self.assertEqual(frags_semi, ["MATH 401", "MATH 402"])
+
+    def test_analyze_rewrites_raw_prerequisites_in_place(self) -> None:
+        row = _row("EE 301", 3, 1)
+        row["raw_prerequisites"] = "MATH 401 / MATH 402"
+        row["prerequisite_codes"] = ["MATH 401", "MATH 402"]
+        draft = {"extracted_rows": [row]}
+        analyze_draft_json(draft)
+        self.assertEqual(row["raw_prerequisites"], "MATH 401; MATH 402")
+
+    def test_analyze_rewrites_comma_separated_prerequisites(self) -> None:
+        row = _row("EE 302", 4, 1)
+        row["raw_prerequisites"] = "MATH 401, PE 101"
+        draft = {"extracted_rows": [row]}
+        analyze_draft_json(draft)
+        self.assertEqual(row["raw_prerequisites"], "MATH 401; PE 101")
 
 
 class OrigSemBandTests(TestCase):

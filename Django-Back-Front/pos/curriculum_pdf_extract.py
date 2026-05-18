@@ -771,6 +771,7 @@ def _parse_table_rows(
     page: int,
     table_idx: int,
     doc_profile: str | None = None,
+    pdf_page: Any | None = None,
 ) -> tuple[list[dict[str, Any]], str]:
     from pos.curriculum_pdf_profiles import (
         DEFAULT_PROFILE,
@@ -861,9 +862,10 @@ def _parse_table_rows(
                 if len(cand) > len(title):
                     title = cand
 
-        allow_title_merge = profile == PROFILE_EVALUATION_5COL or (
-            col_map.get("lec") is not None or col_map.get("lab") is not None
-        )
+        allow_title_merge = col_map.get("lec") is not None or col_map.get("lab") is not None
+        # Evaluation worksheets list one course per coded row; never stitch neighbor titles.
+        if profile == PROFILE_EVALUATION_5COL:
+            allow_title_merge = False
         if (
             not (title or "").strip()
             and title_j is not None
@@ -884,6 +886,11 @@ def _parse_table_rows(
                     if nxt_t and not _find_code_in_text(nxt_t):
                         if not re.search(r"(?i)\b(total|subtotal)\b", nxt_t):
                             title = f"{title} {nxt_t}".strip() if title else nxt_t
+
+        if profile == PROFILE_EVALUATION_5COL and title:
+            title = _evaluation_title_from_page_cell(
+                pdf_page, table, ri, title_j, title
+            )
 
         lec_raw = _get_cell(raw_row, col_map.get("lec"))
         lab_raw = _get_cell(raw_row, col_map.get("lab"))
@@ -1107,6 +1114,103 @@ def _page_extract_text_for_timeline(page: Any) -> str:
     return page.extract_text() or ""
 
 
+def _cell_text_from_word_gaps(
+    page: Any,
+    bbox: tuple[float, float, float, float],
+    *,
+    gap_tolerance: float = 2.5,
+) -> str:
+    """
+    Rebuild cell text from extract_words(), inserting spaces when x-gaps exceed tolerance.
+    Safer than layout=True crop for evaluation worksheets (catalog tables unchanged).
+    """
+    x0, top, x1, bottom = bbox
+    if x1 <= x0 or bottom <= top:
+        return ""
+    try:
+        words = page.extract_words() or []
+    except Exception:
+        return ""
+    in_cell: list[dict[str, Any]] = []
+    for w in words:
+        if w.get("x1", 0) < x0 or w.get("x0", 0) > x1:
+            continue
+        if w.get("bottom", 0) < top or w.get("top", 0) > bottom:
+            continue
+        in_cell.append(w)
+    if not in_cell:
+        return ""
+    in_cell.sort(key=lambda w: (round(float(w.get("top", 0)), 1), float(w.get("x0", 0))))
+    parts: list[str] = []
+    prev: dict[str, Any] | None = None
+    for w in in_cell:
+        t = str(w.get("text") or "")
+        if not t:
+            continue
+        if prev is not None:
+            same_line = abs(float(w.get("top", 0)) - float(prev.get("top", 0))) < 4
+            gap = float(w.get("x0", 0)) - float(prev.get("x1", 0))
+            if not same_line or gap > gap_tolerance:
+                parts.append(" ")
+        parts.append(t)
+        prev = w
+    return re.sub(r"\s+", " ", "".join(parts)).strip()
+
+
+def _word_gap_title_is_better(fallback: str, word_text: str) -> bool:
+    """True when word-gap text fixes spacing without swallowing a neighbor row."""
+    fb = (fallback or "").strip()
+    wt = (word_text or "").strip()
+    if not wt:
+        return False
+    if not fb:
+        return True
+    if len(wt) > len(fb) * 1.3 + 12:
+        return False
+    if wt.count(" ") <= fb.count(" "):
+        return False
+    if fb.lower() in wt.lower() and len(wt) > len(fb) + 25:
+        return False
+    return True
+
+
+def _evaluation_title_from_page_cell(
+    pdf_page: Any,
+    table: list[list[Any | None]],
+    row_index: int,
+    title_col: int | None,
+    fallback: str,
+) -> str:
+    """Improve evaluation title using word-gap reconstruction inside the title cell bbox."""
+    from pos.curriculum_pdf_profiles import repair_evaluation_cell_spacing, title_needs_spacing_repair
+
+    fb = (fallback or "").strip()
+    if not title_needs_spacing_repair(fb):
+        return fb
+    if title_col is None or pdf_page is None or row_index < 0:
+        return repair_evaluation_cell_spacing(fb)
+
+    word_text = ""
+    try:
+        found = pdf_page.find_tables() or []
+    except Exception:
+        found = []
+    for tbl in found:
+        try:
+            if row_index >= len(tbl.rows):
+                continue
+            cells = tbl.rows[row_index].cells
+            if title_col >= len(cells) or cells[title_col] is None:
+                continue
+            word_text = _cell_text_from_word_gaps(pdf_page, cells[title_col])
+            break
+        except Exception:
+            continue
+
+    candidate = word_text if _word_gap_title_is_better(fb, word_text) else fb
+    return repair_evaluation_cell_spacing(candidate)
+
+
 def _apply_term_label_normalization(
     rows: list[dict[str, Any]],
     profile: str,
@@ -1203,6 +1307,7 @@ def extract_curriculum_rows_from_pdf(
                             page=pi + 1,
                             table_idx=ti,
                             doc_profile=hint_profile,
+                            pdf_page=page,
                         )
                         table_profiles.append(tbl_profile)
                         extracted.extend(part)

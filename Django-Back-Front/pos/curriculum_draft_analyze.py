@@ -23,7 +23,7 @@ from pos.curriculum_pdf_extract import (
     _requisite_text_is_standing_or_progression_only,
 )
 
-ANALYZER_VERSION = "phase6-v3"
+ANALYZER_VERSION = "phase6-v4"
 
 
 def _standing_year_guess(match_text: str) -> int | None:
@@ -36,7 +36,8 @@ def _standing_year_guess(match_text: str) -> int | None:
         return 4
     if "third" in s or "3rd" in s or "junior" in s:
         return 3
-    if "second" in s or "2nd" in s:
+    # Catches typographical errors like "2rd" from source curriculum constraints
+    if "second" in s or "2nd" in s or "2rd" in s:
         return 2
     if "first" in s or "1st" in s:
         return 1
@@ -56,10 +57,39 @@ def _collect_standing_phrases(raw: str) -> list[str]:
     return out
 
 
+def normalize_requisite_list_separators(raw: str) -> str:
+    """
+    Rewrite slash- or comma-separated course lists to semicolon-separated form.
+
+    Leaves punctuation in labels (e.g. pre-requisite / co-requisite) or standing
+    phrases when the sides are not both course-code tokens.
+    """
+    s = (raw or "").strip()
+    if not s:
+        return s
+
+    def _pair_to_semi(match: re.Match[str]) -> str:
+        left = (match.group(1) or "").strip()
+        right = (match.group(2) or "").strip()
+        if _extract_codes_from_text(left) and _extract_codes_from_text(right):
+            return f"{left}; {right}"
+        return match.group(0)
+
+    for pattern in (
+        r"([^/;,]+)\s*/\s*([^/;,]+)",
+        r"([^/;,]+)\s*,\s*([^/;,]+)",
+    ):
+        prev = None
+        while prev != s:
+            prev = s
+            s = re.sub(pattern, _pair_to_semi, s)
+    return re.sub(r"\s*;\s*", "; ", s).strip()
+
+
 def _split_req_fragments(raw: str) -> list[str]:
     if not (raw or "").strip():
         return []
-    parts = re.split(r"[;,/\n]+", raw)
+    parts = re.split(r"[;\n\r]+", raw)
     return [" ".join(p.split()) for p in parts if p and p.strip()]
 
 
@@ -171,8 +201,17 @@ def _bundle_suggestions(rows_analysis: dict[str, dict[str, Any]]) -> tuple[dict[
 
 
 def analyze_draft_json(draft_json: dict[str, Any]) -> dict[str, Any]:
-    """Return draft_analysis dict (does not mutate draft_json)."""
+    """Return draft_analysis dict; normalizes raw prereq/coreq separators to semicolons in-place."""
     rows = list(draft_json.get("extracted_rows") or [])
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        row["raw_prerequisites"] = normalize_requisite_list_separators(
+            str(row.get("raw_prerequisites") or "")
+        )
+        row["raw_corequisites"] = normalize_requisite_list_separators(
+            str(row.get("raw_corequisites") or "")
+        )
     all_codes = {str(r.get("code") or "").strip() for r in rows if r.get("code")}
     all_codes = {_canonical_course_code(c) for c in all_codes if c}
     ti_map = term_index_to_orig_sem_map(rows)
@@ -203,3 +242,4 @@ def analyze_draft_json(draft_json: dict[str, Any]) -> dict[str, Any]:
         "year_standing_rules_suggested": ystand,
         "prereq_aliases_suggested": {},
     }
+    

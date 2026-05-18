@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Curriculum draft review (staff)</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
     <link rel="icon" type="image/png" href="{% static 'img/BSU_Logo.png' %}">
     <style>
         body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: #f5f2f2; min-height: 100vh; margin: 0; }
@@ -61,14 +62,24 @@
                 </table>
             </div>
             <p class="small text-muted mb-2">
-                <strong>Category</strong> (Rigid / Bottleneck / Flexible) controls solver offering windows; it defaults to <strong>Rigid</strong> and should match your program rules (e.g. Bottleneck for key math/physics chains).
-                Leave <strong>orig_sem</strong> and <strong>year_level</strong> empty to use analyzer suggestions.
-                When <code>term_label</code> matches the EE/CpE grid (e.g. &quot;3rd Year - First Semester&quot;), <code>orig_sem</code> follows the same order as Generate POS, including slots for missing midterm bands.
+                <strong>Category</strong> sets solver offering windows (default <strong>Rigid</strong>).
+                <strong>Rigid</strong>: same term type as catalog (1st / 2nd / summer).
+                <strong>Bottleneck</strong>: like Rigid normally; with petition, may move — use for subjects that block many others (e.g. Calculus, core math/physics).
+                <strong>Flexible</strong>: may swap between 1st and 2nd sem (not into summer unless catalog is summer).
+                Leave <strong>orig_sem</strong> and <strong>year_level</strong> empty for analyzer suggestions.
+                Canonical <code>term_label</code> values map <code>orig_sem</code> the same way as Generate POS.
             </p>
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                <span class="small text-muted">Remove duplicate rows or add courses the PDF missed.</span>
+                <button type="button" class="btn btn-outline-primary btn-sm" id="btn-add-row">
+                    <i class="bi bi-plus-lg me-1"></i>Add course row
+                </button>
+            </div>
             <div class="table-responsive bg-white border rounded shadow-sm">
                 <table class="table table-sm table-striped mb-0" id="grid">
                     <thead class="table-light">
                         <tr>
+                            <th style="width:2.5rem"></th>
                             <th>Code</th>
                             <th>Title</th>
                             <th>Units</th>
@@ -98,6 +109,21 @@
     const statusEl = document.getElementById('status');
     const tbody = document.querySelector('#grid tbody');
 
+    function escapeHtml(s) {
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function newDraftRowId() {
+        if (window.crypto && typeof crypto.randomUUID === 'function') {
+            return crypto.randomUUID();
+        }
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+            const r = Math.random() * 16 | 0;
+            const v = c === 'x' ? r : (r & 0x3 | 0x8);
+            return v.toString(16);
+        });
+    }
+
     function analysisCell(row, analysisById) {
         const rid = row.draft_row_id;
         const a = rid && analysisById ? analysisById[rid] : null;
@@ -117,17 +143,15 @@
         return 'suggested sem ' + escapeHtml(String(a.orig_sem_suggested != null ? a.orig_sem_suggested : '?')) + yl + src + (u ? '<br>' + u : '') + cw;
     }
 
-    function render(data) {
-        const rows = data.extracted_rows || data.rows || [];
-        const analysis = (data.draft_analysis && data.draft_analysis.rows) || {};
-        tbody.innerHTML = '';
-        rows.forEach(function (row, idx) {
-            const tr = document.createElement('tr');
-            tr.dataset.index = String(idx);
-            const catRaw = (row.category != null && String(row.category).trim()) ? String(row.category).trim() : 'Rigid';
-            const catVal = (['Rigid', 'Bottleneck', 'Flexible'].indexOf(catRaw) >= 0) ? catRaw : 'Rigid';
-            tr.innerHTML =
-                '<td><input class="form-control form-control-sm code" type="text" value="' + escapeHtml(row.code || '') + '"></td>' +
+    function buildRowTr(row, analysisById) {
+        const tr = document.createElement('tr');
+        const catRaw = (row.category != null && String(row.category).trim()) ? String(row.category).trim() : 'Rigid';
+        const catVal = (['Rigid', 'Bottleneck', 'Flexible'].indexOf(catRaw) >= 0) ? catRaw : 'Rigid';
+        const draftRowId = row.draft_row_id || newDraftRowId();
+        tr.innerHTML =
+            '<td><button type="button" class="btn btn-outline-danger btn-sm btn-row-delete" title="Remove row" aria-label="Remove row">'
+                + '<i class="bi bi-trash" aria-hidden="true"></i></button></td>'
+                + '<td><input class="form-control form-control-sm code" type="text" value="' + escapeHtml(row.code || '') + '"></td>' +
                 '<td><input class="form-control form-control-sm title" type="text" value="' + escapeHtml(row.title || '') + '"></td>' +
                 '<td><input class="form-control form-control-sm units" type="text" value="' + escapeHtml(String(row.units != null ? row.units : '')) + '"></td>' +
                 '<td><select class="form-select form-select-sm category">' +
@@ -135,18 +159,36 @@
                     '<option value="Bottleneck"' + (catVal === 'Bottleneck' ? ' selected' : '') + '>Bottleneck</option>' +
                     '<option value="Flexible"' + (catVal === 'Flexible' ? ' selected' : '') + '>Flexible</option>' +
                 '</select></td>' +
-                '<td><input class="form-control form-control-sm orig_sem" type="number" min="1" step="1" value="' + escapeHtml(String(row.orig_sem_override != null ? row.orig_sem_override : (row.orig_sem != null ? row.orig_sem : ''))) + '" placeholder="auto" data-draft-row-id="' + escapeHtml(row.draft_row_id || '') + '"></td>' +
+                '<td><input class="form-control form-control-sm orig_sem" type="number" min="1" step="1" value="' + escapeHtml(String(row.orig_sem_override != null ? row.orig_sem_override : (row.orig_sem != null ? row.orig_sem : ''))) + '" placeholder="auto" data-draft-row-id="' + escapeHtml(draftRowId) + '"></td>' +
                 '<td><input class="form-control form-control-sm year_level" type="number" min="1" step="1" placeholder="auto" value="' + escapeHtml((row.year_level != null && row.year_level !== '') ? String(row.year_level) : '') + '"></td>' +
                 '<td><textarea class="form-control raw-json raw-pre">' + escapeHtml(row.raw_prerequisites || '') + '</textarea></td>' +
                 '<td><textarea class="form-control raw-json raw-co">' + escapeHtml(row.raw_corequisites || '') + '</textarea></td>' +
-                '<td class="small">' + analysisCell(row, analysis) + '</td>';
-            tr.querySelector('.orig_sem').dataset.draftRowId = row.draft_row_id || '';
+                '<td class="small">' + analysisCell(row, analysisById) + '</td>';
+        tr.querySelector('.orig_sem').dataset.draftRowId = draftRowId;
+        return tr;
+    }
+
+    function render(data) {
+        const rows = data.extracted_rows || data.rows || [];
+        const analysis = (data.draft_analysis && data.draft_analysis.rows) || {};
+        tbody.innerHTML = '';
+        rows.forEach(function (row, idx) {
+            const tr = buildRowTr(row, analysis);
+            tr.dataset.index = String(idx);
             tbody.appendChild(tr);
         });
     }
 
-    function escapeHtml(s) {
-        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    function addEmptyRow() {
+        tbody.appendChild(buildRowTr({
+            draft_row_id: newDraftRowId(),
+            code: '',
+            title: '',
+            units: '',
+            category: 'Rigid',
+            raw_prerequisites: '',
+            raw_corequisites: '',
+        }, {}));
     }
 
     function renderCaps(data) {
@@ -178,6 +220,7 @@
         const out = [];
         tbody.querySelectorAll('tr').forEach(function (tr) {
             const code = tr.querySelector('.code').value.trim();
+            if (!code) return;
             const title = tr.querySelector('.title').value.trim();
             const units = tr.querySelector('.units').value.trim();
             const category = (tr.querySelector('.category') && tr.querySelector('.category').value) ? tr.querySelector('.category').value.trim() : 'Rigid';
@@ -204,8 +247,7 @@
             base.raw_prerequisites = rawPre;
             base.raw_corequisites = rawCo;
             base.category = (['Rigid', 'Bottleneck', 'Flexible'].indexOf(category) >= 0) ? category : 'Rigid';
-            if (draftRowId) base.draft_row_id = draftRowId;
-            else if (!base.draft_row_id) base.draft_row_id = '';
+            base.draft_row_id = draftRowId || newDraftRowId();
             out.push(base);
         });
         return out;
@@ -226,6 +268,24 @@
         renderCaps(data);
         statusEl.textContent = 'Loaded.';
     }
+
+    document.getElementById('btn-add-row').addEventListener('click', function () {
+        addEmptyRow();
+        statusEl.innerHTML = '<span class="ok">New row added — enter a course code, then Save draft.</span>';
+    });
+
+    tbody.addEventListener('click', function (e) {
+        const btn = e.target.closest('.btn-row-delete');
+        if (!btn) return;
+        const tr = btn.closest('tr');
+        if (!tr) return;
+        const code = (tr.querySelector('.code') && tr.querySelector('.code').value.trim()) || '';
+        let msg = 'Remove this row from the draft?';
+        if (code) msg = 'Remove course “' + code + '” from the draft?';
+        if (!confirm(msg)) return;
+        tr.remove();
+        statusEl.innerHTML = '<span class="ok">Row removed. Save draft to keep changes.</span>';
+    });
 
     document.getElementById('btn-save').addEventListener('click', async function () {
         const rows = collectRows((lastPayload && (lastPayload.extracted_rows || lastPayload.rows)) || []);

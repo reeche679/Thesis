@@ -15,6 +15,8 @@ from django.test import RequestFactory, TestCase
 from accounts.models import Student
 from pos.models import CurriculumVersion, Program
 from pos.staff_portal_views import (
+    staff_api_program_delete,
+    staff_api_program_patch,
     staff_api_programs_list,
     staff_api_student_patch,
     staff_api_students_list,
@@ -255,6 +257,92 @@ class ProgramsAPITests(StaffPortalSetupMixin, TestCase):
     def test_non_portal_403(self):
         r = self._get(self.plain_user)
         self.assertEqual(r.status_code, 403)
+
+    def test_create_program(self):
+        req = self.factory.post(
+            "/staff/api/programs/",
+            data=json.dumps({"name": "Mechanical Engineering", "slug": "mech"}),
+            content_type="application/json",
+        )
+        req.user = self.superuser
+        r = staff_api_programs_list(req)
+        self.assertEqual(r.status_code, 201)
+        data = _json(r)
+        self.assertTrue(data["ok"])
+        self.assertEqual(data["program"]["slug"], "mech")
+        self.assertTrue(Program.objects.filter(slug="mech").exists())
+
+    def test_create_program_slug_with_underscore(self):
+        req = self.factory.post(
+            "/staff/api/programs/",
+            data=json.dumps({"name": "BSEE Batch", "slug": "bsee_2025"}),
+            content_type="application/json",
+        )
+        req.user = self.superuser
+        r = staff_api_programs_list(req)
+        self.assertEqual(r.status_code, 201)
+        data = _json(r)
+        self.assertEqual(data["program"]["slug"], "bsee_2025")
+
+    def test_create_program_duplicate_slug(self):
+        req = self.factory.post(
+            "/staff/api/programs/",
+            data=json.dumps({"name": "Dup EE", "slug": "ee"}),
+            content_type="application/json",
+        )
+        req.user = self.superuser
+        r = staff_api_programs_list(req)
+        self.assertEqual(r.status_code, 400)
+
+    def test_patch_program_name(self):
+        prog = Program.objects.create(name="Old Name", slug="patch-test")
+        req = self.factory.patch(
+            f"/staff/api/programs/{prog.pk}/",
+            data=json.dumps({"name": "New Name"}),
+            content_type="application/json",
+        )
+        req.user = self.superuser
+        r = staff_api_program_patch(req, pk=prog.pk)
+        self.assertEqual(r.status_code, 200)
+        data = _json(r)
+        self.assertTrue(data["ok"])
+        self.assertEqual(data["program"]["name"], "New Name")
+        prog.refresh_from_db()
+        self.assertEqual(prog.name, "New Name")
+        self.assertEqual(prog.slug, "patch-test")
+
+    def test_patch_program_empty_name_rejected(self):
+        req = self.factory.patch(
+            f"/staff/api/programs/{self.prog_ee.pk}/",
+            data=json.dumps({"name": "   "}),
+            content_type="application/json",
+        )
+        req.user = self.superuser
+        r = staff_api_program_patch(req, pk=self.prog_ee.pk)
+        self.assertEqual(r.status_code, 400)
+
+    def test_delete_program(self):
+        prog = Program.objects.create(name="Temp Prog", slug="temp-prog")
+        req = self.factory.post(f"/staff/api/programs/{prog.pk}/delete/")
+        req.user = self.superuser
+        r = staff_api_program_delete(req, pk=prog.pk)
+        self.assertEqual(r.status_code, 200)
+        self.assertFalse(Program.objects.filter(pk=prog.pk).exists())
+
+    def test_delete_program_with_students_unassigns(self):
+        prog_pk = self.prog_ee.pk
+        student_pk = self.student_ee.pk
+        req = self.factory.post(f"/staff/api/programs/{prog_pk}/delete/")
+        req.user = self.superuser
+        r = staff_api_program_delete(req, pk=prog_pk)
+        self.assertEqual(r.status_code, 200)
+        data = _json(r)
+        self.assertTrue(data["ok"])
+        self.assertGreaterEqual(data["unassigned_students"], 1)
+        self.assertFalse(Program.objects.filter(pk=prog_pk).exists())
+        self.student_ee.refresh_from_db()
+        self.assertIsNone(self.student_ee.program_id)
+        self.assertIsNone(self.student_ee.selected_curriculum_version_id)
 
 
 class StaffHomePageTests(StaffPortalSetupMixin, TestCase):

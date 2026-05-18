@@ -116,12 +116,79 @@
         #students-table select.prog-select,
         #students-table select.ver-select { min-width: 100px; }
     }
+
+    /* --- Programs --- */
+    #programs-status { font-size: 0.8rem; color: #555; min-height: 1.2em; }
+    #programs-table { font-size: 0.82rem; }
+    #programs-table thead th { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap; }
+    #programs-table tbody td { vertical-align: middle; }
+    .programs-add-form {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.75rem;
+        margin-bottom: 1rem;
+    }
+    .programs-add-form .full-width { grid-column: 1 / -1; }
+    @media (max-width: 575px) {
+        .programs-add-form { grid-template-columns: 1fr; }
+    }
 </style>
 {% endblock extra_head %}
 
 {% block content %}
 <div class="py-4">
 <div class="staff-home-outer">
+
+    {# ─────────────── PROGRAMS ─────────────── #}
+    <div class="staff-section-title staff-section-title-lg">Programs</div>
+    <div class="staff-pos-card mb-4">
+        <p class="small text-muted mb-3">
+            Add academic programs (departments) used when assigning students and uploading curricula.
+            Deleting a program removes its curriculum versions and clears that program from any assigned students.
+        </p>
+
+        <form id="program-add-form" class="programs-add-form" autocomplete="off">
+            <div>
+                <label for="program-name" class="form-label small fw-semibold mb-1">Program name</label>
+                <input id="program-name" type="text" class="form-control form-control-sm" maxlength="200" required
+                       placeholder="e.g. Computer Engineering">
+            </div>
+            <div>
+                <label for="program-slug" class="form-label small fw-semibold mb-1">Slug <span class="text-muted fw-normal">(optional)</span></label>
+                <input id="program-slug" type="text" class="form-control form-control-sm" maxlength="64"
+                       placeholder="e.g. cpe or bsee_2025 — auto-generated if blank">
+            </div>
+            <div class="full-width">
+                <label for="program-description" class="form-label small fw-semibold mb-1">Description <span class="text-muted fw-normal">(optional)</span></label>
+                <input id="program-description" type="text" class="form-control form-control-sm"
+                       placeholder="Short note for staff">
+            </div>
+            <div class="full-width">
+                <button type="submit" class="btn btn-staff-primary btn-sm">
+                    <i class="bi bi-plus-lg me-1"></i>Add program
+                </button>
+            </div>
+        </form>
+
+        <p id="programs-status"></p>
+
+        <div class="table-responsive">
+            <table id="programs-table" class="table table-sm table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Name</th>
+                        <th>Slug</th>
+                        <th>Students</th>
+                        <th>Curricula</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody id="programs-tbody">
+                    <tr><td colspan="5" class="text-muted small py-3">Loading…</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
 
     {# ─────────────── STUDENTS ─────────────── #}
     <div class="staff-section-title staff-section-title-lg">Students</div>
@@ -180,9 +247,10 @@
                     The system will extract courses into a draft that you can review, edit, and approve.
                 </p>
                 <div>
-                    <a href="{% url 'staff_curriculum_upload' %}" class="btn btn-staff-primary">
+                    <button type="button" class="btn btn-staff-primary"
+                        onclick="window.location.href='{% url 'staff_curriculum_upload' %}'">
                         <i class="bi bi-cloud-upload me-1"></i>Upload PDF
-                    </a>
+                    </button>
                 </div>
             </div>
         </div>
@@ -200,9 +268,10 @@
                     Approved curricula can be reopened as drafts for revision.
                 </p>
                 <div>
-                    <a href="{% url 'staff_curriculum_edit' %}" class="btn btn-staff-primary">
-                        <i class="bi bi-pencil me-1"></i>Manage curricula
-                    </a>
+                    <button type="button" class="btn btn-staff-primary"
+                        onclick="window.location.href='{% url 'staff_curriculum_edit' %}'">
+                        <i class="bi bi-pencil me-1"></i>Review &amp; edit POS
+                    </button>
                 </div>
             </div>
         </div>
@@ -220,11 +289,17 @@
 const studentsListUrl = '{% url "staff_api_students_list" %}';
 const studentPatchBase = '{% url "staff_api_student_patch" pk=0 %}'.replace('/0/', '/');
 const versionsUrl     = '{% url "staff_api_curriculum_versions_list" %}';
+const programsUrl     = '{% url "staff_api_programs_list" %}';
+const programApiBase = '/staff/api/programs/';
 
 const tbody     = document.getElementById('students-tbody');
 const statusEl  = document.getElementById('students-status');
 const searchEl  = document.getElementById('student-search');
 const progFilter= document.getElementById('student-prog-filter');
+
+const programsTbody = document.getElementById('programs-tbody');
+const programsStatusEl = document.getElementById('programs-status');
+const programAddForm = document.getElementById('program-add-form');
 
 let allPrograms = [];
 let approvedVersionsByProgram = {};  // keyed by program_id (or '' for none)
@@ -237,6 +312,181 @@ function getCookie(name) {
 
 function escHtml(s) {
     return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function syncProgramFilterDropdown() {
+    const current = progFilter.value;
+    progFilter.innerHTML = '<option value="">All programs</option>';
+    allPrograms.forEach(function (p) {
+        const o = document.createElement('option');
+        o.value = String(p.id);
+        o.textContent = p.name;
+        progFilter.appendChild(o);
+    });
+    if (current && allPrograms.some(function (p) { return String(p.id) === current; })) {
+        progFilter.value = current;
+    }
+}
+
+function renderPrograms(programs) {
+    if (!programs.length) {
+        programsTbody.innerHTML = '<tr><td colspan="5" class="text-muted small py-3">No programs yet. Add one above.</td></tr>';
+        return;
+    }
+    programsTbody.innerHTML = programs.map(function (p) {
+        const editBtn = '<button type="button" class="btn btn-outline-secondary btn-sm btn-edit-program me-1"'
+            + ' data-id="' + escHtml(String(p.id)) + '"'
+            + ' data-name="' + escHtml(p.name) + '"'
+            + '>Edit</button>';
+        const delBtn = '<button type="button" class="btn btn-outline-danger btn-sm btn-delete-program"'
+            + ' data-id="' + escHtml(String(p.id)) + '"'
+            + ' data-name="' + escHtml(p.name) + '"'
+            + ' data-student-count="' + escHtml(String(p.student_count || 0)) + '"'
+            + ' data-cv-count="' + escHtml(String(p.curriculum_version_count || 0)) + '"'
+            + '>Delete</button>';
+        return '<tr>'
+            + '<td>' + escHtml(p.name) + '</td>'
+            + '<td><code class="small">' + escHtml(p.slug) + '</code></td>'
+            + '<td>' + escHtml(String(p.student_count)) + '</td>'
+            + '<td>' + escHtml(String(p.curriculum_version_count)) + '</td>'
+            + '<td class="text-nowrap">' + editBtn + delBtn + '</td>'
+            + '</tr>';
+    }).join('');
+    programsTbody.querySelectorAll('.btn-edit-program').forEach(function (btn) {
+        btn.addEventListener('click', async function () {
+            const id = btn.getAttribute('data-id');
+            const currentName = btn.getAttribute('data-name') || '';
+            const newName = window.prompt('Program name:', currentName);
+            if (newName === null) return;
+            const trimmed = newName.trim();
+            if (!trimmed) {
+                programsStatusEl.innerHTML = '<span class="text-danger">Program name cannot be empty.</span>';
+                return;
+            }
+            if (trimmed === currentName) return;
+            btn.disabled = true;
+            programsStatusEl.textContent = 'Saving…';
+            try {
+                const r = await fetch(programApiBase + id + '/', {
+                    method: 'PATCH',
+                    credentials: 'same-origin',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken'),
+                    },
+                    body: JSON.stringify({ name: trimmed }),
+                });
+                const data = await r.json().catch(function () { return {}; });
+                if (!r.ok || !data.ok) {
+                    programsStatusEl.innerHTML = '<span class="text-danger">' + escHtml(data.error || 'Update failed') + '</span>';
+                    btn.disabled = false;
+                    return;
+                }
+                programsStatusEl.innerHTML = '<span class="text-success">Updated program name.</span>';
+                await loadPrograms();
+                loadStudents();
+            } catch (e) {
+                programsStatusEl.innerHTML = '<span class="text-danger">' + escHtml(String(e)) + '</span>';
+                btn.disabled = false;
+            }
+        });
+    });
+    programsTbody.querySelectorAll('.btn-delete-program').forEach(function (btn) {
+        btn.addEventListener('click', async function () {
+            const id = btn.getAttribute('data-id');
+            const name = btn.getAttribute('data-name') || id;
+            const studentCount = parseInt(btn.getAttribute('data-student-count') || '0', 10);
+            const cvCount = parseInt(btn.getAttribute('data-cv-count') || '0', 10);
+            let msg = 'Delete program “' + name + '”? This cannot be undone.';
+            if (cvCount) msg += ' ' + cvCount + ' curriculum version(s) will be removed.';
+            if (studentCount) msg += ' ' + studentCount + ' student(s) will have their program and POS version cleared.';
+            if (!confirm(msg)) return;
+            btn.disabled = true;
+            programsStatusEl.textContent = 'Deleting…';
+            try {
+                const r = await fetch(programApiBase + id + '/delete/', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'X-CSRFToken': getCookie('csrftoken') },
+                });
+                const data = await r.json().catch(function () { return {}; });
+                if (!r.ok || !data.ok) {
+                    programsStatusEl.innerHTML = '<span class="text-danger">' + escHtml(data.error || 'Delete failed') + '</span>';
+                    btn.disabled = false;
+                    return;
+                }
+                let msg = 'Deleted “' + (data.deleted_program || name) + '”.';
+                if (data.deleted_curriculum_versions) {
+                    msg += ' Removed ' + data.deleted_curriculum_versions + ' curriculum version(s).';
+                }
+                if (data.unassigned_students) {
+                    msg += ' Cleared program for ' + data.unassigned_students + ' student(s).';
+                }
+                programsStatusEl.innerHTML = '<span class="text-success">' + escHtml(msg) + '</span>';
+                approvedVersionsByProgram = {};
+                await loadPrograms();
+                loadStudents();
+            } catch (e) {
+                programsStatusEl.innerHTML = '<span class="text-danger">' + escHtml(String(e)) + '</span>';
+                btn.disabled = false;
+            }
+        });
+    });
+}
+
+async function loadPrograms() {
+    programsStatusEl.textContent = 'Loading…';
+    programsTbody.innerHTML = '<tr><td colspan="5" class="text-muted small py-3">Loading…</td></tr>';
+    try {
+        const r = await fetch(programsUrl, { credentials: 'same-origin' });
+        const data = await r.json().catch(function () { return {}; });
+        if (!r.ok || !data.ok) {
+            programsTbody.innerHTML = '<tr><td colspan="5" class="text-danger small">' + escHtml(data.error || 'HTTP ' + r.status) + '</td></tr>';
+            programsStatusEl.textContent = '';
+            return;
+        }
+        allPrograms = data.programs || [];
+        syncProgramFilterDropdown();
+        renderPrograms(allPrograms);
+        programsStatusEl.textContent = allPrograms.length + ' program' + (allPrograms.length === 1 ? '' : 's') + '.';
+    } catch (e) {
+        programsTbody.innerHTML = '<tr><td colspan="5" class="text-danger small">Network error</td></tr>';
+        programsStatusEl.textContent = '';
+    }
+}
+
+if (programAddForm) {
+    programAddForm.addEventListener('submit', async function (e) {
+        e.preventDefault();
+        const name = document.getElementById('program-name').value.trim();
+        const slug = document.getElementById('program-slug').value.trim();
+        const description = document.getElementById('program-description').value.trim();
+        if (!name) return;
+        programsStatusEl.textContent = 'Adding…';
+        try {
+            const r = await fetch(programsUrl, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCookie('csrftoken'),
+                },
+                body: JSON.stringify({ name: name, slug: slug || null, description: description }),
+            });
+            const data = await r.json().catch(function () { return {}; });
+            if (!r.ok || !data.ok) {
+                programsStatusEl.innerHTML = '<span class="text-danger">' + escHtml(data.error || 'Could not add program') + '</span>';
+                return;
+            }
+            programsStatusEl.innerHTML = '<span class="text-success">Added “' + escHtml(data.program.name) + '” (' + escHtml(data.program.slug) + ').</span>';
+            programAddForm.reset();
+            approvedVersionsByProgram = {};
+            await loadPrograms();
+            loadStudents();
+        } catch (err) {
+            programsStatusEl.innerHTML = '<span class="text-danger">' + escHtml(String(err)) + '</span>';
+        }
+    });
 }
 
 // Fetch approved versions for a given program_id (empty string = no program)
@@ -425,6 +675,7 @@ document.getElementById('btn-refresh-students').addEventListener('click', functi
     loadStudents();
 });
 
+loadPrograms();
 loadStudents();
 })();
 </script>

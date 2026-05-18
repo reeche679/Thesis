@@ -210,6 +210,8 @@ class ResolveGenerateCurriculumContextTests(TestCase):
         self.assertEqual(ctx["curriculum_version_id"], cv.pk)
         self.assertEqual(_curriculum_version_id_for_student(s), cv.pk)
         self.assertEqual(len(ctx["curriculum_sections"]), 2)
+        self.assertEqual(ctx["curriculum_sections"][0]["label"], "1st Year - First Semester")
+        self.assertEqual(ctx["curriculum_sections"][1]["label"], "1st Year - Second Semester")
         self.assertEqual(len(ctx["curriculum_sections"][0]["courses"]), 1)
         self.assertEqual(ctx["curriculum_sections"][0]["courses"][0]["code"], "EE 101")
         self.assertIn("EE v1", ctx["display_title"])

@@ -247,6 +247,44 @@ def split_combined_requisite_cell(raw: str) -> tuple[str, str]:
     return s, ""
 
 
+# Glued in evaluation PDFs (theSelf, IntroductiontoEngineering, inPhilippine).
+# Keep this list short — longer words like "and" appear inside normal titles.
+_GLUE_BOUNDARY_WORDS: tuple[str, ...] = ("the", "in", "to", "of")
+
+
+def repair_evaluation_cell_spacing(text: str) -> str:
+    """
+    Insert missing spaces in evaluation worksheet cells where the PDF stores
+    run-on tokens (no U+0020) or omits gaps between adjacent word objects.
+
+    Catalog/BSEE titles are not passed through this helper.
+    """
+    s = (text or "").strip()
+    if not s:
+        return s
+    # Case-sensitive lookahead so IGNORECASE does not treat "ing" as a new word.
+    for word in _GLUE_BOUNDARY_WORDS:
+        s = re.sub(rf"(?<=[a-z])(?i:{word})(?=[A-Z][a-z])", r" \g<0> ", s)
+    # Remaining camelCase boundaries (ModemWorld, PhilippineHistory).
+    s = re.sub(r"(?<=[a-z])(?=[A-Z][a-z])", " ", s)
+    return re.sub(r"\s+", " ", s).strip()
+
+
+def title_needs_spacing_repair(title: str) -> bool:
+    """True when an evaluation title likely lost spaces during PDF extraction."""
+    t = (title or "").strip()
+    if not t:
+        return False
+    if re.search(r"[a-z][A-Z]", t):
+        return True
+    if " " not in t and len(t) > 8:
+        return True
+    glue = "|".join(_GLUE_BOUNDARY_WORDS)
+    if re.search(rf"(?i)(?<=[a-z])(?:{glue})(?=[A-Z][a-z])", t):
+        return True
+    return False
+
+
 def should_skip_ocr_for_profile(
     profile: str,
     extracted_count: int,

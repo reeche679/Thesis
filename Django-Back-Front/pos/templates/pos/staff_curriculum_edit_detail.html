@@ -7,11 +7,121 @@
 
 {% block extra_head %}
 <style>
-    .staff-wrap { max-width: 1200px; margin: 0 auto; padding: 1.25rem 1rem 2.5rem; }
+    .staff-wrap { max-width: 100%; margin: 0 auto; padding: 1.25rem 1.5rem 2.5rem; }
     .err { color: #a00; }
     .ok  { color: #060; }
-    table { font-size: 0.85rem; }
-    textarea.raw-json { font-family: ui-monospace, monospace; font-size: 0.75rem; min-height: 4rem; }
+
+    #grid { font-size: 0.8rem; table-layout: fixed; width: 100%; }
+    #grid thead th {
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        white-space: nowrap;
+        padding: 0.4rem 0.35rem;
+        vertical-align: bottom;
+    }
+    #grid tbody td { padding: 0.3rem 0.35rem; vertical-align: top; }
+
+    /* Column widths — percentages that add to ~100% */
+    #grid .col-code    { width: 7%; }
+    #grid .col-title   { width: 20%; }
+    #grid .col-units   { width: 4%; }
+    #grid .col-cat     { width: 7%; }
+    #grid .col-sem     { width: 11%; }
+    #grid .col-year    { width: 11%; }
+    #grid .col-prereq  { width: 12%; }
+    #grid .col-coreq   { width: 12%; }
+    #grid .col-analyze { width: 18%; }
+    #grid .col-actions { width: 3%; text-align: center; }
+    #grid .btn-row-delete {
+        padding: 0.1rem 0.35rem;
+        font-size: 0.72rem;
+        line-height: 1.2;
+    }
+
+    /* Compact inputs */
+    #grid input,
+    #grid select,
+    #grid textarea {
+        font-size: 0.78rem;
+        padding: 0.2rem 0.35rem;
+    }
+    #grid input.code   { width: 100%; }
+    #grid input.units  { width: 100%; }
+    #grid select.category { width: 100%; font-size: 0.72rem; padding: 0.2rem 0.2rem; }
+    #grid input.orig_sem,
+    #grid input.year_level {
+        width: 100%;
+        min-width: 3.5rem;
+        text-align: center;
+    }
+
+    /* Textareas: single-line compact, grow on focus */
+    #grid textarea.title,
+    #grid textarea.raw-pre,
+    #grid textarea.raw-co {
+        width: 100%;
+        min-height: 1.8rem;
+        resize: vertical;
+        white-space: pre-wrap;
+        word-break: break-word;
+        line-height: 1.3;
+        overflow: hidden;
+    }
+    #grid textarea.title { font-size: 0.78rem; }
+    #grid textarea.raw-pre,
+    #grid textarea.raw-co {
+        font-family: ui-monospace, monospace;
+        font-size: 0.72rem;
+    }
+    #grid textarea:focus { overflow: auto; }
+
+    /* Analyzer column */
+    #grid td.col-analyze { font-size: 0.68rem; line-height: 1.3; color: #555; }
+    #grid td.col-analyze .err { font-size: 0.68rem; }
+
+    /* Striped rows for readability */
+    #grid tbody tr:nth-child(even) td { background: #f9f9f9; }
+    #grid tbody tr:hover td { background: #f0f4ff; }
+
+    /* Caps table stays compact */
+    #caps-section table { font-size: 0.85rem; }
+
+    .staff-grid-legend { line-height: 1.4; }
+    .cat-legend-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.35rem 0.85rem;
+    }
+    .cat-legend-label {
+        font-weight: 600;
+        color: #444;
+        margin-right: 0.15rem;
+    }
+    .cat-legend-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.2rem;
+        white-space: nowrap;
+    }
+    .cat-info-btn {
+        color: #6c757d;
+        text-decoration: none;
+        line-height: 1;
+        padding: 0;
+        border: 0;
+        background: none;
+        font-size: 0.8rem;
+        vertical-align: baseline;
+    }
+    .cat-info-btn:hover,
+    .cat-info-btn:focus { color: #a0161c; }
+    .cat-tooltip .tooltip-inner {
+        max-width: 300px;
+        text-align: left;
+        font-size: 0.8rem;
+    }
 </style>
 {% endblock extra_head %}
 
@@ -64,10 +174,18 @@
         <span class="badge bg-primary">draft</span>
         {% if is_default %}<span class="badge bg-warning text-dark ms-1">program default</span>{% endif %}
     </p>
-    <div class="d-flex flex-wrap gap-2 mb-3">
-        <button type="button" class="btn btn-primary btn-sm" id="btn-save">Save draft</button>
-        <button type="button" class="btn btn-outline-secondary btn-sm" id="btn-analyze">Re-analyze</button>
-        <button type="button" class="btn btn-success btn-sm" id="btn-approve">Approve</button>
+    <div class="staff-draft-actions mb-3">
+        <div class="d-flex flex-wrap gap-2">
+            <button type="button" class="btn btn-primary btn-sm" id="btn-save">Save draft</button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" id="btn-analyze">Re-analyze</button>
+            <button type="button" class="btn btn-success btn-sm" id="btn-approve">Approve</button>
+        </div>
+        {% if can_delete %}
+        <div class="mt-2">
+            <button type="button" class="btn btn-outline-danger btn-sm" id="btn-delete-version">Delete this version</button>
+            <p id="delete-status" class="small mt-1 mb-0"></p>
+        </div>
+        {% endif %}
     </div>
     <p id="status" class="small"></p>
 
@@ -92,25 +210,69 @@
         </table>
     </div>
 
-    <p class="small text-muted mb-2">
-        <strong>Category</strong> (Rigid / Bottleneck / Flexible) controls solver offering windows; it defaults to <strong>Rigid</strong>.
-        Leave <strong>orig_sem</strong> and <strong>year_level</strong> empty to use analyzer suggestions.
-        When <code>term_label</code> matches the EE/CpE grid, <code>orig_sem</code> follows the same slot order as Generate POS.
-    </p>
+    <div class="staff-grid-legend small text-muted mb-2">
+        <div class="cat-legend-row">
+            <span class="cat-legend-label">Category</span>
+            <span class="cat-legend-item">
+                Rigid
+                <button type="button" class="cat-info-btn" data-bs-toggle="tooltip" data-bs-placement="top"
+                    data-bs-custom-class="cat-tooltip"
+                    title="Same term type as the catalog (1st sem, 2nd sem, or summer). Default. Use for most courses that should not move between 1st and 2nd sem (e.g. GE, fixed-term labs)."
+                    aria-label="About Rigid category">
+                    <i class="bi bi-info-circle" aria-hidden="true"></i>
+                </button>
+            </span>
+            <span class="cat-legend-item">
+                Bottleneck
+                <button type="button" class="cat-info-btn" data-bs-toggle="tooltip" data-bs-placement="top"
+                    data-bs-custom-class="cat-tooltip"
+                    title="Like Rigid in a normal POS; with a petition (failed/irregular flow), the solver may place it in other semesters. Use for chain-critical courses that block many others, e.g. Calculus, Physics, core math/EE prerequisites."
+                    aria-label="About Bottleneck category">
+                    <i class="bi bi-info-circle" aria-hidden="true"></i>
+                </button>
+            </span>
+            <span class="cat-legend-item">
+                Flexible
+                <button type="button" class="cat-info-btn" data-bs-toggle="tooltip" data-bs-placement="top"
+                    data-bs-custom-class="cat-tooltip"
+                    title="May move between 1st and 2nd sem (not into summer unless the catalog slot is summer). Use when either regular semester is acceptable (e.g. some electives)."
+                    aria-label="About Flexible category">
+                    <i class="bi bi-info-circle" aria-hidden="true"></i>
+                </button>
+            </span>
+        </div>
+        <div class="cat-legend-row mt-1">
+            <span class="cat-legend-label">Sem / Year</span>
+            <span class="cat-legend-item text-muted">leave blank for analyzer</span>
+            <button type="button" class="cat-info-btn" data-bs-toggle="tooltip" data-bs-placement="top"
+                data-bs-custom-class="cat-tooltip"
+                title="Sem (orig_sem) and Year (year_level): leave empty to use analyzer suggestions. When term_label matches the EE/CpE grid (e.g. 3rd Year - First Semester), orig_sem follows the same slot order as Generate POS."
+                aria-label="About Sem and Year fields">
+                <i class="bi bi-info-circle" aria-hidden="true"></i>
+            </button>
+        </div>
+    </div>
 
-    <div class="table-responsive bg-white border rounded shadow-sm">
-        <table class="table table-sm table-striped mb-0" id="grid">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+        <span class="small text-muted">Remove duplicate rows or add courses the PDF missed.</span>
+        <button type="button" class="btn btn-outline-primary btn-sm" id="btn-add-row">
+            <i class="bi bi-plus-lg me-1"></i>Add course row
+        </button>
+    </div>
+    <div class="table-responsive bg-white border rounded shadow-sm" style="overflow-x:auto">
+        <table class="table table-sm mb-0" id="grid">
             <thead class="table-light">
                 <tr>
-                    <th>Code</th>
-                    <th>Title</th>
-                    <th>Units</th>
-                    <th>Category</th>
-                    <th>orig_sem</th>
-                    <th>year_level</th>
-                    <th>Prereq (raw)</th>
-                    <th>Coreq (raw)</th>
-                    <th>Analyzer</th>
+                    <th class="col-actions" aria-label="Row actions"></th>
+                    <th class="col-code">Code</th>
+                    <th class="col-title">Title</th>
+                    <th class="col-units">Units</th>
+                    <th class="col-cat">Category</th>
+                    <th class="col-sem">Sem</th>
+                    <th class="col-year">Year</th>
+                    <th class="col-prereq">Prereq</th>
+                    <th class="col-coreq">Coreq</th>
+                    <th class="col-analyze">Analyzer</th>
                 </tr>
             </thead>
             <tbody></tbody>
@@ -120,11 +282,11 @@
 {% else %}
     <div class="alert alert-secondary">
         Unknown status for version {{ cv_id }}.
-        <a href="{% url 'staff_curriculum_edit' %}">Back to all curricula</a>
+        <a role="button" class="btn btn-outline-secondary btn-sm" href="{% url 'staff_curriculum_edit' %}">Back to all curricula</a>
     </div>
 {% endif %}
 
-{% if can_delete and not forbidden %}
+{% if can_delete and not forbidden and not can_edit %}
 <div class="mt-4 pt-3 border-top">
     <button type="button" class="btn btn-outline-danger btn-sm" id="btn-delete-version">Delete this version</button>
     <p id="delete-status" class="small mt-2"></p>
@@ -222,6 +384,21 @@ function escapeHtml(s) {
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+function textareaRows(text, minRows, maxRows) {
+    return Math.max(minRows, Math.min(maxRows, String(text || '').split('\n').length + 1));
+}
+
+function newDraftRowId() {
+    if (window.crypto && typeof crypto.randomUUID === 'function') {
+        return crypto.randomUUID();
+    }
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+        const r = Math.random() * 16 | 0;
+        const v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+    });
+}
+
 function analysisCell(row, analysisById) {
     const rid = row.draft_row_id;
     const a = rid && analysisById ? analysisById[rid] : null;
@@ -241,32 +418,65 @@ function analysisCell(row, analysisById) {
     return 'suggested sem ' + escapeHtml(String(a.orig_sem_suggested != null ? a.orig_sem_suggested : '?')) + yl + src + (u ? '<br>' + u : '') + cw;
 }
 
+function buildRowTr(row, analysisById) {
+    const tr = document.createElement('tr');
+    const catRaw = (row.category != null && String(row.category).trim()) ? String(row.category).trim() : 'Rigid';
+    const catVal = (['Rigid', 'Bottleneck', 'Flexible'].indexOf(catRaw) >= 0) ? catRaw : 'Rigid';
+    const draftRowId = row.draft_row_id || newDraftRowId();
+    const titleText = row.title || '';
+    const preText = row.raw_prerequisites || '';
+    const coText = row.raw_corequisites || '';
+    const titleRows = textareaRows(titleText, 1, 4);
+    const preRows = textareaRows(preText, 1, 4);
+    const coRows = textareaRows(coText, 1, 4);
+    tr.innerHTML =
+        '<td class="col-actions">'
+            + '<button type="button" class="btn btn-outline-danger btn-sm btn-row-delete" title="Remove row" aria-label="Remove row">'
+            + '<i class="bi bi-trash" aria-hidden="true"></i></button></td>'
+        + '<td class="col-code"><input class="form-control form-control-sm code" type="text" value="' + escapeHtml(row.code || '') + '"></td>'
+        + '<td class="col-title"><textarea class="form-control form-control-sm title" rows="' + titleRows + '">'
+            + escapeHtml(titleText) + '</textarea></td>'
+        + '<td class="col-units"><input class="form-control form-control-sm units" type="text" value="' + escapeHtml(String(row.units != null ? row.units : '')) + '"></td>'
+        + '<td class="col-cat"><select class="form-select form-select-sm category">'
+            + '<option value="Rigid"'      + (catVal === 'Rigid'      ? ' selected' : '') + '>Rigid</option>'
+            + '<option value="Bottleneck"' + (catVal === 'Bottleneck' ? ' selected' : '') + '>Bottl.</option>'
+            + '<option value="Flexible"'   + (catVal === 'Flexible'   ? ' selected' : '') + '>Flex.</option>'
+        + '</select></td>'
+        + '<td class="col-sem"><input class="form-control form-control-sm orig_sem" type="number" min="1" step="1" value="'
+            + escapeHtml(String(row.orig_sem_override != null ? row.orig_sem_override : (row.orig_sem != null ? row.orig_sem : '')))
+            + '" placeholder="auto" data-draft-row-id="' + escapeHtml(draftRowId) + '"></td>'
+        + '<td class="col-year"><input class="form-control form-control-sm year_level" type="number" min="1" step="1" placeholder="auto" value="'
+            + escapeHtml((row.year_level != null && row.year_level !== '') ? String(row.year_level) : '') + '"></td>'
+        + '<td class="col-prereq"><textarea class="form-control form-control-sm raw-pre" rows="' + preRows + '">'
+            + escapeHtml(preText) + '</textarea></td>'
+        + '<td class="col-coreq"><textarea class="form-control form-control-sm raw-co" rows="' + coRows + '">'
+            + escapeHtml(coText) + '</textarea></td>'
+        + '<td class="col-analyze">' + analysisCell(row, analysisById) + '</td>';
+    tr.querySelector('.orig_sem').dataset.draftRowId = draftRowId;
+    return tr;
+}
+
 function render(data) {
     const rows = data.extracted_rows || data.rows || [];
     const analysis = (data.draft_analysis && data.draft_analysis.rows) || {};
     tbody.innerHTML = '';
     rows.forEach(function (row, idx) {
-        const tr = document.createElement('tr');
+        const tr = buildRowTr(row, analysis);
         tr.dataset.index = String(idx);
-        const catRaw = (row.category != null && String(row.category).trim()) ? String(row.category).trim() : 'Rigid';
-        const catVal = (['Rigid', 'Bottleneck', 'Flexible'].indexOf(catRaw) >= 0) ? catRaw : 'Rigid';
-        tr.innerHTML =
-            '<td><input class="form-control form-control-sm code" type="text" value="' + escapeHtml(row.code || '') + '"></td>' +
-            '<td><input class="form-control form-control-sm title" type="text" value="' + escapeHtml(row.title || '') + '"></td>' +
-            '<td><input class="form-control form-control-sm units" type="text" value="' + escapeHtml(String(row.units != null ? row.units : '')) + '" style="width:4rem"></td>' +
-            '<td><select class="form-select form-select-sm category">' +
-                '<option value="Rigid"'      + (catVal === 'Rigid'      ? ' selected' : '') + '>Rigid</option>' +
-                '<option value="Bottleneck"' + (catVal === 'Bottleneck' ? ' selected' : '') + '>Bottleneck</option>' +
-                '<option value="Flexible"'   + (catVal === 'Flexible'   ? ' selected' : '') + '>Flexible</option>' +
-            '</select></td>' +
-            '<td><input class="form-control form-control-sm orig_sem" type="number" min="1" step="1" value="' + escapeHtml(String(row.orig_sem_override != null ? row.orig_sem_override : (row.orig_sem != null ? row.orig_sem : ''))) + '" placeholder="auto" data-draft-row-id="' + escapeHtml(row.draft_row_id || '') + '" style="width:5rem"></td>' +
-            '<td><input class="form-control form-control-sm year_level" type="number" min="1" step="1" placeholder="auto" value="' + escapeHtml((row.year_level != null && row.year_level !== '') ? String(row.year_level) : '') + '" style="width:5rem"></td>' +
-            '<td><textarea class="form-control raw-json raw-pre">' + escapeHtml(row.raw_prerequisites || '') + '</textarea></td>' +
-            '<td><textarea class="form-control raw-json raw-co">' + escapeHtml(row.raw_corequisites || '') + '</textarea></td>' +
-            '<td class="small">' + analysisCell(row, analysis) + '</td>';
-        tr.querySelector('.orig_sem').dataset.draftRowId = row.draft_row_id || '';
         tbody.appendChild(tr);
     });
+}
+
+function addEmptyRow() {
+    tbody.appendChild(buildRowTr({
+        draft_row_id: newDraftRowId(),
+        code: '',
+        title: '',
+        units: '',
+        category: 'Rigid',
+        raw_prerequisites: '',
+        raw_corequisites: '',
+    }, {}));
 }
 
 function renderCaps(data) {
@@ -298,13 +508,14 @@ function collectRows(originalRows) {
     const out = [];
     tbody.querySelectorAll('tr').forEach(function (tr) {
         const code = tr.querySelector('.code').value.trim();
-        const title = tr.querySelector('.title').value.trim();
+        if (!code) return;
+        const title = tr.querySelector('textarea.title').value.replace(/^\s+|\s+$/g, '');
         const units = tr.querySelector('.units').value.trim();
         const category = (tr.querySelector('.category') && tr.querySelector('.category').value) ? tr.querySelector('.category').value.trim() : 'Rigid';
         const origInput = tr.querySelector('.orig_sem').value.trim();
         const yearLevel = tr.querySelector('.year_level').value.trim();
-        const rawPre = tr.querySelector('textarea.raw-pre').value;
-        const rawCo  = tr.querySelector('textarea.raw-co').value;
+        const rawPre = tr.querySelector('textarea.raw-pre').value.replace(/^\s+|\s+$/g, '');
+        const rawCo  = tr.querySelector('textarea.raw-co').value.replace(/^\s+|\s+$/g, '');
         const draftRowId = tr.querySelector('.orig_sem').getAttribute('data-draft-row-id') || '';
         const base = draftRowId && byId[draftRowId] ? Object.assign({}, byId[draftRowId]) : {};
         base.code  = code;
@@ -324,8 +535,7 @@ function collectRows(originalRows) {
         base.raw_prerequisites = rawPre;
         base.raw_corequisites  = rawCo;
         base.category = (['Rigid', 'Bottleneck', 'Flexible'].indexOf(category) >= 0) ? category : 'Rigid';
-        if (draftRowId) base.draft_row_id = draftRowId;
-        else if (!base.draft_row_id) base.draft_row_id = '';
+        base.draft_row_id = draftRowId || newDraftRowId();
         out.push(base);
     });
     return out;
@@ -346,6 +556,24 @@ async function loadDraft() {
     renderCaps(data);
     statusEl.textContent = 'Loaded.';
 }
+
+document.getElementById('btn-add-row').addEventListener('click', function () {
+    addEmptyRow();
+    statusEl.innerHTML = '<span class="ok">New row added — enter a course code, then Save draft.</span>';
+});
+
+tbody.addEventListener('click', function (e) {
+    const btn = e.target.closest('.btn-row-delete');
+    if (!btn) return;
+    const tr = btn.closest('tr');
+    if (!tr) return;
+    const code = (tr.querySelector('.code') && tr.querySelector('.code').value.trim()) || '';
+    let msg = 'Remove this row from the draft?';
+    if (code) msg = 'Remove course “' + code + '” from the draft?';
+    if (!confirm(msg)) return;
+    tr.remove();
+    statusEl.innerHTML = '<span class="ok">Row removed. Save draft to keep changes.</span>';
+});
 
 document.getElementById('btn-save').addEventListener('click', async function () {
     const rows = collectRows((lastPayload && (lastPayload.extracted_rows || lastPayload.rows)) || []);
@@ -404,6 +632,12 @@ document.getElementById('btn-approve').addEventListener('click', async function 
 });
 
 loadDraft();
+
+if (typeof bootstrap !== 'undefined' && bootstrap.Tooltip) {
+    document.querySelectorAll('.cat-info-btn[data-bs-toggle="tooltip"]').forEach(function (el) {
+        new bootstrap.Tooltip(el);
+    });
+}
 })();
 </script>
 {% endif %}

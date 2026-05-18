@@ -19,7 +19,19 @@
     #tbl-body td { vertical-align: middle; font-size: 0.875rem; }
     #empty-row td { color: #666; font-style: italic; }
     .actions-cell { white-space: nowrap; }
-    .actions-cell .btn { margin-right: 0.25rem; }
+    .actions-cell .btn { margin-right: 0.35rem; }
+    .btn-staff-primary {
+        background-color: #a0161c;
+        border-color: #a0161c;
+        color: #fff;
+        font-weight: 600;
+        text-decoration: none;
+    }
+    .btn-staff-primary:hover, .btn-staff-primary:focus {
+        background-color: #8b1218;
+        border-color: #8b1218;
+        color: #fff;
+    }
 </style>
 {% endblock extra_head %}
 
@@ -126,7 +138,9 @@ async function loadVersions() {
             : '';
         let actions = '';
         if (v.status === 'draft' || v.status === 'approved') {
-            actions = '<a class="btn btn-outline-primary btn-sm" href="' + escapeHtml(v.edit_url) + '">Edit</a>';
+            const openLabel = v.status === 'draft' ? 'Review & edit' : 'Edit POS';
+            actions = '<a role="button" class="btn btn-staff-primary btn-sm" href="'
+                + escapeHtml(v.edit_url) + '">' + escapeHtml(openLabel) + '</a>';
         }
         if (v.can_delete) {
             actions += ' <button type="button" class="btn btn-outline-danger btn-sm btn-delete-version"'

@@ -10,7 +10,11 @@ from __future__ import annotations
 
 from typing import Any, TypedDict
 
-from pos.curriculum_section_labels import INDEX_TO_YEAR_SEM
+from pos.curriculum_section_labels import (
+    INDEX_TO_YEAR_SEM,
+    format_legacy_pos_section_label,
+    section_meta_for_index,
+)
 from pos.models import CurriculumVersion, Program
 
 
@@ -43,11 +47,12 @@ def _static_sections_and_lookup() -> tuple[list[dict[str, Any]], dict[str, tuple
 
     sections: list[dict[str, Any]] = []
     lookup: dict[str, tuple[Any, ...]] = {}
-    for title1, title2, _tu, _lec, _lab, rows in POS_CURRICULUM:
-        section_label = "{} - {}".format(
-            title1.replace(" ", " ").title(),
-            title2.replace(" ", " ").title(),
-        )
+    for section_index, (title1, title2, _tu, _lec, _lab, rows) in enumerate(POS_CURRICULUM):
+        if section_index < len(INDEX_TO_YEAR_SEM):
+            yl, sem, section_label = section_meta_for_index(section_index)
+        else:
+            yl, sem = title1, title2
+            section_label = format_legacy_pos_section_label(title1, title2)
         courses = [
             {
                 "code": r[0],
@@ -61,41 +66,12 @@ def _static_sections_and_lookup() -> tuple[list[dict[str, Any]], dict[str, tuple
             }
             for r in rows
         ]
-        sections.append({"year": title1, "semester": title2, "label": section_label, "courses": courses})
+        sections.append({"year": yl, "semester": sem, "label": section_label, "courses": courses})
         for r in rows:
             code = r[0]
             if code not in lookup:
                 lookup[code] = (r[1], r[2], r[3], r[4], r[5] or "", r[6] or "")
     return sections, lookup
-
-
-def _ordinal_year(n: int) -> str:
-    if 10 <= n % 100 <= 20:
-        suf = "th"
-    else:
-        suf = {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
-    return f"{n}{suf} Year"
-
-
-def _synthetic_year_sem(section_index: int) -> tuple[str, str, str]:
-    """Beyond INDEX_TO_YEAR_SEM: assume 3 bands per year (First, Second, Midterm)."""
-    rel = section_index - len(INDEX_TO_YEAR_SEM)
-    year_num = rel // 3 + 11
-    band = rel % 3
-    sem_names = ("First Semester", "Second Semester", "Midterm")
-    yl = _ordinal_year(year_num)
-    sem = sem_names[band]
-    label = f"{yl} - {sem}"
-    return yl, sem, label
-
-
-def _section_label_for_index(i: int) -> tuple[str, str, str]:
-    """Return (year, semester, label)."""
-    if 0 <= i < len(INDEX_TO_YEAR_SEM):
-        yl, sem = INDEX_TO_YEAR_SEM[i]
-        label = "{} - {}".format(yl.replace(" ", " ").title(), sem.replace(" ", " ").title())
-        return yl, sem, label
-    return _synthetic_year_sem(i)
 
 
 def _format_req_token(tok: Any) -> str:
@@ -180,7 +156,7 @@ def _map_approved_json_to_sections(
 
     sections: list[dict[str, Any]] = []
     for i in range(n_sections):
-        yl, sem, label = _section_label_for_index(i)
+        yl, sem, label = section_meta_for_index(i)
         orig = i + 1
         courses = list(per_sem.get(orig, []))
         sections.append({"year": yl, "semester": sem, "label": label, "courses": courses})

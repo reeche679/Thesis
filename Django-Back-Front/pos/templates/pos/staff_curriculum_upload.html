@@ -12,7 +12,6 @@
     .hint { font-size: 0.85rem; color: #555; margin-top: 0.25rem; }
     .btn-staff-primary { background-color: #a0161c; border-color: #a0161c; font-weight: 600; color: #fff; }
     .btn-staff-primary:hover { background-color: #8b1218; border-color: #8b1218; color: #fff; }
-    pre { background: #f0f0f0; padding: 1rem; overflow: auto; font-size: 0.8rem; border-radius: 6px; border: 1px solid #ddd; }
     .err { color: #a00; }
     .ok  { color: #060; }
 </style>
@@ -48,7 +47,7 @@
         <button type="submit" class="btn btn-staff-primary text-white mt-3">Upload &amp; extract</button>
     </form>
     <p id="status" class="mt-3"></p>
-    <pre id="out" hidden></pre>
+    <div id="upload-actions" class="mt-2" hidden></div>
     {% endif %}
 </div>
 {% endblock content %}
@@ -64,9 +63,9 @@ if (form) {
     form.addEventListener('submit', async function (e) {
         e.preventDefault();
         const status = document.getElementById('status');
-        const out = document.getElementById('out');
+        const actions = document.getElementById('upload-actions');
         status.textContent = 'Uploading…';
-        out.hidden = true;
+        if (actions) { actions.hidden = true; actions.innerHTML = ''; }
         const fd = new FormData(form);
         try {
             const r = await fetch('{% url "staff_api_upload_curriculum_pdf" %}', {
@@ -84,12 +83,14 @@ if (form) {
                 status.innerHTML = '<span class="err">' + (data.error || ('HTTP ' + r.status)) + '</span>';
                 return;
             }
-            const editLink = (data.edit_url || data.review_url)
-                ? (' <a href="' + (data.edit_url || data.review_url) + '">Open editor</a>')
-                : '';
-            status.innerHTML = '<span class="ok">Saved draft id ' + data.curriculum_version_id + ' — ' + data.row_count + ' row(s).' + editLink + '</span>';
-            out.textContent = JSON.stringify(data, null, 2);
-            out.hidden = false;
+            status.innerHTML = '<span class="ok">Saved draft id ' + data.curriculum_version_id
+                + ' — ' + data.row_count + ' row(s).</span>';
+            const editorUrl = data.edit_url || data.review_url;
+            if (actions && editorUrl) {
+                actions.innerHTML = '<a role="button" class="btn btn-staff-primary" href="'
+                    + editorUrl + '"><i class="bi bi-pencil-square me-1"></i>Review &amp; edit draft</a>';
+                actions.hidden = false;
+            }
         } catch (err) {
             status.innerHTML = '<span class="err">' + err + '</span>';
         }

@@ -640,9 +640,11 @@
             .pos-main .btn-sm { font-size: 0.75rem; padding: 0.3rem 0.45rem; }
         }
 
-        /* Sign Out in nav: right-anchored, same tab style; extra left margin to separate from main tabs */
+        /* Staff Login + Sign Out in nav: right-anchored, same tab style */
+        .pos-nav-staff-login,
         .pos-nav-signout { margin-left: 0.5rem; }
         @media (max-width: 575.98px) {
+            .pos-nav-staff-login,
             .pos-nav-signout { margin-left: 0.35rem; }
         }
 
@@ -889,6 +891,9 @@
                 </ul>
                 <ul class="navbar-nav mb-2 mb-lg-0 ms-auto flex-shrink-0">
                     <li class="nav-item">
+                        <a class="nav-link pos-nav-staff-login" href="{% url 'staff_login' %}" title="Staff Login"><i class="bi bi-shield-lock-fill"></i><span class="nav-link-text">Staff Login</span></a>
+                    </li>
+                    <li class="nav-item">
                         <a class="nav-link pos-nav-signout pos-app-sign-out-link" href="{% url 'sign_out' %}" title="Sign Out"><i class="bi bi-box-arrow-right"></i><span class="nav-link-text">Sign Out</span></a>
                     </li>
                 </ul>
@@ -912,6 +917,7 @@
             <a class="pos-mobile-drawer-link" href="{% if has_complete_info %}{% url 'pos_history' %}{% else %}{% url 'pos_home' %}?required=1{% endif %}" data-nav-key="history"><i class="bi bi-clock-history" aria-hidden="true"></i><span>History</span></a>
             <a class="pos-mobile-drawer-link" href="{% url 'contact_us' %}" data-nav-key="contact"><i class="bi bi-envelope-fill" aria-hidden="true"></i><span>Contact Us</span></a>
             <a class="pos-mobile-drawer-link" href="{% url 'help' %}" data-nav-key="help"><i class="bi bi-question-circle-fill" aria-hidden="true"></i><span>Help</span></a>
+            <a class="pos-mobile-drawer-link" href="{% url 'staff_login' %}" data-nav-key="staff"><i class="bi bi-shield-lock-fill" aria-hidden="true"></i><span>Staff Login</span></a>
             <a class="pos-mobile-drawer-link pos-app-sign-out-link" href="{% url 'sign_out' %}" data-nav-key="signout"><i class="bi bi-box-arrow-right" aria-hidden="true"></i><span>Sign Out</span></a>
         </nav>
     </aside>

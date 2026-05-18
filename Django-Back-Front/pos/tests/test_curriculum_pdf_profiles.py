@@ -4,7 +4,15 @@ from django.test import SimpleTestCase
 
 from pos.canonical_term_grid import orig_sem_from_term_label
 from pos.curriculum_draft_analyze import analyze_draft_json
-from pos.curriculum_pdf_extract import _build_col_map, _header_cell_category, _parse_table_rows
+from unittest.mock import MagicMock, patch
+
+from pos.curriculum_pdf_extract import (
+    _build_col_map,
+    _evaluation_title_from_page_cell,
+    _header_cell_category,
+    _parse_table_rows,
+    _word_gap_title_is_better,
+)
 from pos.curriculum_pdf_profiles import (
     PROFILE_CATALOG_8COL,
     PROFILE_EVALUATION_5COL,
@@ -12,7 +20,9 @@ from pos.curriculum_pdf_profiles import (
     looks_like_grade_not_units,
     merge_document_profile,
     normalize_term_label,
+    repair_evaluation_cell_spacing,
     split_combined_requisite_cell,
+    title_needs_spacing_repair,
 )
 from pos.curriculum_pdf_extract import _TermState
 
@@ -57,6 +67,33 @@ class EvaluationColMapTests(SimpleTestCase):
 
 
 class EvaluationRowParseTests(SimpleTestCase):
+    def test_evaluation_adjacent_coded_rows_keep_own_titles(self) -> None:
+        table = [
+            ["Course Code", "Course Title", "Unit/s", "Pre-requisite / Co-requisite", "Grade"],
+            ["ENGG401", "Introduction to Engineering", "1", "", ""],
+            ["GEd101", "Understanding the Self", "3", "", ""],
+        ]
+        state = _TermState()
+        w: list[str] = []
+        rows, profile = _parse_table_rows(table, state, w, page=1, table_idx=0)
+        self.assertEqual(profile, PROFILE_EVALUATION_5COL)
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[0]["title"], "Introduction to Engineering")
+        self.assertEqual(rows[1]["title"], "Understanding the Self")
+
+    def test_evaluation_title_not_merged_from_next_row_when_present(self) -> None:
+        table = [
+            ["Course Code", "Course Title", "Unit/s", "Pre-requisite / Co-requisite", "Grade"],
+            ["ENGG401", "Introduction to Engineering", "1", "", ""],
+            ["", "Understanding theSelf", "", "", ""],
+        ]
+        state = _TermState()
+        w: list[str] = []
+        rows, profile = _parse_table_rows(table, state, w, page=1, table_idx=0)
+        self.assertEqual(profile, PROFILE_EVALUATION_5COL)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["title"], "Introduction to Engineering")
+
     def test_grade_not_used_as_units(self) -> None:
         table = [
             ["Course Code", "Course Title", "Unit/s", "Pre-requisite / Co-requisite", "Grade"],
@@ -90,6 +127,56 @@ class EvaluationRowParseTests(SimpleTestCase):
         pre, co = split_combined_requisite_cell("MATH 401 / MATH 402")
         self.assertIn("MATH 401", pre)
         self.assertIn("MATH 402", pre)
+
+
+class EvaluationWordGapTests(SimpleTestCase):
+    def test_word_gap_rejects_neighbor_bleed(self) -> None:
+        fb = "Understanding the Self"
+        bloated = "Introduction to Engineering Understanding the Self"
+        self.assertFalse(_word_gap_title_is_better(fb, bloated))
+
+    @patch("pos.curriculum_pdf_extract._cell_text_from_word_gaps")
+    def test_runon_title_uses_repair_not_neighbor_word_gap(self, mock_gap: MagicMock) -> None:
+        mock_gap.return_value = "Introduction to Engineering Understanding the Self"
+        page = MagicMock()
+        cell = (10.0, 20.0, 200.0, 40.0)
+        row = MagicMock()
+        row.cells = [None, cell]
+        tbl = MagicMock()
+        tbl.rows = [row, row]
+        page.find_tables.return_value = [tbl]
+
+        out = _evaluation_title_from_page_cell(
+            page,
+            [],
+            1,
+            1,
+            "UnderstandingtheSelf",
+        )
+        self.assertEqual(out, "Understanding the Self")
+
+
+class EvaluationTitleSpacingTests(SimpleTestCase):
+    def test_repair_glued_common_words(self) -> None:
+        self.assertEqual(
+            repair_evaluation_cell_spacing("UnderstandingtheSelf"),
+            "Understanding the Self",
+        )
+        self.assertEqual(
+            repair_evaluation_cell_spacing("IntroductiontoEngineering"),
+            "Introduction to Engineering",
+        )
+        self.assertEqual(
+            repair_evaluation_cell_spacing("ReadingsinPhilippineHistory"),
+            "Readings in Philippine History",
+        )
+
+    def test_preserves_already_spaced_title(self) -> None:
+        t = "Differential Calculus"
+        self.assertEqual(repair_evaluation_cell_spacing(t), t)
+
+    def test_catalog_like_title_unchanged_when_spaced(self) -> None:
+        self.assertFalse(title_needs_spacing_repair("Algebra and Trigonometry"))
 
 
 class TermLabelNormalizeTests(SimpleTestCase):

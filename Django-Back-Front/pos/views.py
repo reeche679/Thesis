@@ -619,11 +619,11 @@ def _curriculum_for_irregular():
     """Build curriculum sections list for irregular POS picker (year, semester, section_label, courses)."""
     from .pos_pdf import POS_CURRICULUM, display_pos_course_code
     sections = []
-    for title1, title2, _tu, _lec, _lab, rows in POS_CURRICULUM:
-        section_label = "{} - {}".format(
-            title1.replace(" ", " ").title(),
-            title2.replace(" ", " ").title()
-        )
+    for section_index, (title1, title2, _tu, _lec, _lab, rows) in enumerate(POS_CURRICULUM):
+        if section_index < len(_INDEX_TO_YEAR_SEM):
+            _yl, _sem, section_label = section_meta_for_index(section_index)
+        else:
+            section_label = format_legacy_pos_section_label(title1, title2)
         courses = [
             {
                 "code": r[0],
@@ -642,7 +642,12 @@ def _curriculum_for_irregular():
 
 
 # Order matches POS_CURRICULUM (see pos/curriculum_section_labels.py).
-from .curriculum_section_labels import INDEX_TO_YEAR_SEM as _INDEX_TO_YEAR_SEM, YEAR_SEM_TO_INDEX as _YEAR_SEM_TO_INDEX
+from .curriculum_section_labels import (
+    INDEX_TO_YEAR_SEM as _INDEX_TO_YEAR_SEM,
+    YEAR_SEM_TO_INDEX as _YEAR_SEM_TO_INDEX,
+    format_legacy_pos_section_label,
+    section_meta_for_index,
+)
 
 # For home: current semester dropdown (section_index -> label)
 CURRENT_SEMESTER_CHOICES = [
@@ -940,10 +945,10 @@ def _preview_sections_from_curriculum(grades_by_section):
     sections = []
     for section_index, (title1, title2, total_units, _lec_t, _lab_t, rows) in enumerate(POS_CURRICULUM):
         section_grades = (grades_by_section or {}).get(section_index, {})
-        section_label = "{} - {}".format(
-            title1.replace(" ", " ").title(),
-            title2.replace(" ", " ").title()
-        )
+        if section_index < len(_INDEX_TO_YEAR_SEM):
+            _yl, _sem, section_label = section_meta_for_index(section_index)
+        else:
+            section_label = format_legacy_pos_section_label(title1, title2)
         curriculum_codes_this_section = {r[0] for r in rows}
         course_rows = []
         seen_codes = set()
@@ -1938,8 +1943,11 @@ def validate_pos(request):
             sec = gctx["curriculum_sections"][si]
             section_label = sec.get("label") or ""
         else:
-            _t1, _t2, _total_units_cur, _lec, _lab, rows = POS_CURRICULUM[si]
-            section_label = "{} - {}".format(_t1.title(), _t2.title())
+            if si < len(_INDEX_TO_YEAR_SEM):
+                _yl, _sem, section_label = section_meta_for_index(si)
+            else:
+                _t1, _t2, _total_units_cur, _lec, _lab, rows = POS_CURRICULUM[si]
+                section_label = format_legacy_pos_section_label(_t1, _t2)
         # Per this semester table only (not pooled with other tables). Denominator: units for rows
         # with a non-empty grade only. Neither the 50% nor the 75% rule runs if graded units < minimum.
         graded_u = 0.0
@@ -4539,61 +4547,14 @@ def api_curriculum_me(request):
 @require_POST
 @_require_student_api
 def api_curriculum_set_active(request):
-    student = get_logged_in_student(request)
-    if student is None:
-        return JsonResponse({"ok": False, "error": "Not authenticated"}, status=401)
-    try:
-        body = json.loads(request.body.decode("utf-8") if request.body else "{}")
-    except json.JSONDecodeError:
-        return JsonResponse({"ok": False, "error": "Invalid JSON"}, status=400)
-    if not isinstance(body, dict):
-        return JsonResponse({"ok": False, "error": "Expected JSON object"}, status=400)
-    if "curriculum_version_id" not in body:
-        return JsonResponse(
-            {"ok": False, "error": "curriculum_version_id is required (use null to clear selection)."},
-            status=400,
-        )
-    raw_id = body.get("curriculum_version_id")
-    try:
-        if raw_id is None or raw_id is False:
-            Student.objects.filter(pk=student.pk).update(selected_curriculum_version=None)
-        else:
-            pk = int(raw_id)
-            if student.program_id is None:
-                return JsonResponse(
-                    {
-                        "ok": False,
-                        "error": "Your account has no program assigned. An administrator must set your program before you can choose a curriculum.",
-                    },
-                    status=400,
-                )
-            cv = CurriculumVersion.objects.filter(
-                pk=pk, status=CurriculumVersion.STATUS_APPROVED
-            ).first()
-            if cv is None:
-                return JsonResponse(
-                    {"ok": False, "error": "Curriculum version not found or not approved."},
-                    status=404,
-                )
-            if cv.program_id != student.program_id:
-                return JsonResponse(
-                    {"ok": False, "error": "That curriculum does not belong to your program."},
-                    status=403,
-                )
-            Student.objects.filter(pk=student.pk).update(selected_curriculum_version_id=cv.pk)
-    except (TypeError, ValueError):
-        return JsonResponse(
-            {"ok": False, "error": "curriculum_version_id must be an integer or null."},
-            status=400,
-        )
-    try:
-        student = Student.objects.select_related("program", "selected_curriculum_version").get(pk=student.pk)
-        return JsonResponse(_curriculum_me_payload(student))
-    except (OperationalError, ProgrammingError):
-        return JsonResponse(
-            {"ok": False, "error": "Curriculum storage is not ready (run migrations)."},
-            status=500,
-        )
+    """Students cannot change their active curriculum; staff assign via admin or staff portal."""
+    return JsonResponse(
+        {
+            "ok": False,
+            "error": "Please coordinate with your academic supervisor to change your current active Program of Study.",
+        },
+        status=403,
+    )
 
 
 def contact_us(request):

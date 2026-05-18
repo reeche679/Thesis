@@ -640,13 +640,22 @@ def build_pos_pdf(
             pass
         return ""
 
+    from pos.curriculum_section_labels import (
+        INDEX_TO_YEAR_SEM,
+        format_legacy_pos_section_label,
+        section_meta_for_index,
+    )
+
     for section_index, (title1, title2, total_units, lec_total, lab_total, rows) in enumerate(POS_CURRICULUM):
         section_grades = {}
         if grades_by_section is not None:
             section_grades = grades_by_section.get(section_index) or grades_by_section.get(str(section_index)) or {}
         else:
             section_grades = grades_dict or {}
-        section_label = f"{title1.title()} - {title2.title()}"
+        if section_index < len(INDEX_TO_YEAR_SEM):
+            _yl, _sem, section_label = section_meta_for_index(section_index)
+        else:
+            section_label = format_legacy_pos_section_label(title1, title2)
         title_year_para = Paragraph("<b>" + section_label + "</b>", ParagraphStyle(
             name="YearTitle", parent=normal, alignment=1, fontName="Times-Bold", fontSize=10,
         ))
