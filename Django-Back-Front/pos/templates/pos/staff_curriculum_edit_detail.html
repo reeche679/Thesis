@@ -24,6 +24,14 @@
     }
     .staff-draft-actions-delete {
         margin-left: auto;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    #btn-save.btn-draft-saved {
+        pointer-events: none;
+        opacity: 0.85;
     }
 
     #grid { font-size: 0.8rem; table-layout: fixed; width: 100%; }
@@ -233,7 +241,7 @@
     {% endif %}
 
 {% elif can_edit %}
-    <p class="text-muted small mb-2">Program <strong>{{ program_slug }}</strong> — {{ version_label }}
+    <p class="text-muted small mb-2">Program <strong>{{ program_slug }}</strong> — <span id="cv-version-label-display">{{ version_label|default:"—" }}</span>
         <span class="badge bg-primary">draft</span>
         {% if is_default %}<span class="badge bg-warning text-dark ms-1">program default</span>{% endif %}
     </p>
@@ -246,6 +254,7 @@
             </div>
             {% if can_delete %}
             <div class="staff-draft-actions-delete">
+                <button type="button" class="btn btn-outline-secondary btn-sm" id="btn-edit-version-label" title="Edit curriculum name">Edit name</button>
                 <button type="button" class="btn btn-outline-danger btn-sm" id="btn-delete-version">Delete this version</button>
             </div>
             {% endif %}
@@ -362,6 +371,29 @@
 </div>
 {% endif %}
 
+{% if can_edit and can_delete and not forbidden %}
+<div class="modal fade" id="cv-version-label-modal" tabindex="-1" aria-labelledby="cv-version-label-modal-title" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h6 class="modal-title mb-0" id="cv-version-label-modal-title">Edit Curriculum Name</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <label for="cv-version-label-input" class="form-label small fw-semibold mb-1">POS version name</label>
+                <input type="text" class="form-control form-control-sm" id="cv-version-label-input" maxlength="128" autocomplete="off">
+                <div class="form-text">e.g. BSCpE Curriculum 2026</div>
+                <p id="cv-version-label-modal-error" class="small err mb-0 mt-2 d-none" role="alert"></p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal" id="cv-version-label-cancel">Cancel</button>
+                <button type="button" class="btn btn-primary btn-sm" id="cv-version-label-save">Save</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
     </div>
 
 </div>
@@ -370,7 +402,7 @@
 
 {% block extra_scripts %}
 <script type="application/json" id="staff-edit-detail-config">
-{"cvId":{{ cv_id }},"isDefault":{% if is_default %}true{% else %}false{% endif %},"curriculumEditUrl":"{% filter escapejs %}{% url 'staff_curriculum_edit' %}{% endfilter %}"}
+{"cvId":{{ cv_id }},"versionLabel":"{% filter escapejs %}{{ version_label|default:'' }}{% endfilter %}","isDefault":{% if is_default %}true{% else %}false{% endif %},"curriculumEditUrl":"{% filter escapejs %}{% url 'staff_curriculum_edit' %}{% endfilter %}"}
 </script>
 <script>
 function staffEditDetailPageConfig() {
@@ -385,12 +417,103 @@ function staffEditDetailPageConfig() {
     const CV_ID = cfg.cvId;
     const IS_DEFAULT = cfg.isDefault;
     const deleteUrl = '/staff/api/curriculum/version/' + CV_ID + '/delete/';
+    const labelUrl = '/staff/api/curriculum/version/' + CV_ID + '/version-label/';
     const deleteBtn = document.getElementById('btn-delete-version');
+    const editLabelBtn = document.getElementById('btn-edit-version-label');
     const deleteStatus = document.getElementById('delete-status');
-    if (!deleteBtn) return;
     function getCookie(name) {
         const v = document.cookie.match('(^|;) ?' + name + '=([^;]*)(;|$)');
         return v ? decodeURIComponent(v[2]) : '';
+    }
+    function escapeHtml(s) {
+        return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+    let versionLabelModal = null;
+    function getVersionLabelModal() {
+        if (versionLabelModal) return versionLabelModal;
+        const el = document.getElementById('cv-version-label-modal');
+        if (!el) return null;
+        if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+            versionLabelModal = bootstrap.Modal.getOrCreateInstance(el);
+        }
+        return versionLabelModal;
+    }
+    function showVersionLabelError(msg) {
+        const errEl = document.getElementById('cv-version-label-modal-error');
+        if (!errEl) return;
+        if (msg) {
+            errEl.textContent = msg;
+            errEl.classList.remove('d-none');
+        } else {
+            errEl.textContent = '';
+            errEl.classList.add('d-none');
+        }
+    }
+    async function saveVersionLabel() {
+        const input = document.getElementById('cv-version-label-input');
+        const saveBtn = document.getElementById('cv-version-label-save');
+        if (!input) return;
+        const trimmed = (input.value || '').trim();
+        if (!trimmed) {
+            showVersionLabelError('Name cannot be empty.');
+            input.focus();
+            return;
+        }
+        showVersionLabelError('');
+        if (saveBtn) saveBtn.disabled = true;
+        if (editLabelBtn) editLabelBtn.disabled = true;
+        const r = await fetch(labelUrl, {
+            method: 'PATCH',
+            credentials: 'same-origin',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken'),
+            },
+            body: JSON.stringify({ version_label: trimmed }),
+        });
+        const data = await r.json().catch(function () { return {}; });
+        if (saveBtn) saveBtn.disabled = false;
+        if (editLabelBtn) editLabelBtn.disabled = false;
+        if (!r.ok || !data.ok) {
+            showVersionLabelError(data.error || 'HTTP ' + r.status);
+            return;
+        }
+        cfg.versionLabel = data.version_label || trimmed;
+        const display = document.getElementById('cv-version-label-display');
+        if (display) display.textContent = cfg.versionLabel;
+        document.title = 'Edit curriculum — ' + cfg.versionLabel + ' (staff)';
+        const modal = getVersionLabelModal();
+        if (modal) modal.hide();
+        if (deleteStatus) deleteStatus.innerHTML = '<span class="ok">Curriculum name updated.</span>';
+    }
+    if (editLabelBtn) {
+        editLabelBtn.addEventListener('click', function () {
+            const input = document.getElementById('cv-version-label-input');
+            if (input) {
+                input.value = (cfg.versionLabel || '').trim();
+            }
+            showVersionLabelError('');
+            const modal = getVersionLabelModal();
+            if (modal) {
+                modal.show();
+                if (input) {
+                    setTimeout(function () { input.focus(); input.select(); }, 200);
+                }
+            }
+        });
+    }
+    const versionLabelSaveBtn = document.getElementById('cv-version-label-save');
+    if (versionLabelSaveBtn) {
+        versionLabelSaveBtn.addEventListener('click', saveVersionLabel);
+    }
+    const versionLabelInput = document.getElementById('cv-version-label-input');
+    if (versionLabelInput) {
+        versionLabelInput.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                saveVersionLabel();
+            }
+        });
     }
     deleteBtn.addEventListener('click', async function () {
         let msg = 'Permanently delete this curriculum version? This cannot be undone.';
@@ -462,7 +585,27 @@ const draftUrl   = '/staff/api/curriculum/version/' + CV_ID + '/draft/';
 const analyzeUrl = '/staff/api/curriculum/version/' + CV_ID + '/analyze/';
 const approveUrl = '/staff/api/curriculum/version/' + CV_ID + '/approve/';
 const statusEl   = document.getElementById('status');
+const saveBtn    = document.getElementById('btn-save');
 const tbody      = document.querySelector('#grid tbody');
+let draftIsSaved = false;
+
+function markDraftDirty() {
+    draftIsSaved = false;
+    if (!saveBtn) return;
+    saveBtn.disabled = false;
+    saveBtn.textContent = 'Save draft';
+    saveBtn.classList.remove('btn-draft-saved', 'btn-secondary');
+    saveBtn.classList.add('btn-primary');
+}
+
+function markDraftSaved() {
+    draftIsSaved = true;
+    if (!saveBtn) return;
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Saved';
+    saveBtn.classList.remove('btn-primary');
+    saveBtn.classList.add('btn-secondary', 'btn-draft-saved');
+}
 
 function escapeHtml(s) {
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -643,8 +786,19 @@ async function loadDraft() {
     statusEl.textContent = 'Loaded.';
 }
 
+const capsSection = document.getElementById('caps-section');
+if (capsSection) {
+    capsSection.addEventListener('input', markDraftDirty);
+    capsSection.addEventListener('change', markDraftDirty);
+}
+if (tbody) {
+    tbody.addEventListener('input', markDraftDirty);
+    tbody.addEventListener('change', markDraftDirty);
+}
+
 document.getElementById('btn-add-row').addEventListener('click', function () {
     const tr = addEmptyRow();
+    markDraftDirty();
     statusEl.innerHTML = '<span class="ok">New row added — enter a course code, then Save draft.</span>';
     requestAnimationFrame(function () {
         tr.scrollIntoView({ behavior: 'smooth', block: 'end' });
@@ -663,6 +817,7 @@ tbody.addEventListener('click', function (e) {
     if (code) msg = 'Remove course “' + code + '” from the draft?';
     if (!confirm(msg)) return;
     tr.remove();
+    markDraftDirty();
     statusEl.innerHTML = '<span class="ok">Row removed. Save draft to keep changes.</span>';
 });
 
@@ -683,16 +838,19 @@ async function saveDraft() {
     return { ok: true, data: data };
 }
 
-document.getElementById('btn-save').addEventListener('click', async function () {
-    statusEl.textContent = 'Saving…';
-    const result = await saveDraft();
-    if (!result.ok) {
-        statusEl.innerHTML = '<span class="err">' + escapeHtml(result.error) + '</span>';
-        return;
-    }
-    statusEl.innerHTML = '<span class="ok">Saved. Redirecting…</span>';
-    setTimeout(function () { window.location.href = cfg.curriculumEditUrl; }, 400);
-});
+if (saveBtn) {
+    saveBtn.addEventListener('click', async function () {
+        if (draftIsSaved) return;
+        statusEl.textContent = 'Saving…';
+        const result = await saveDraft();
+        if (!result.ok) {
+            statusEl.innerHTML = '<span class="err">' + escapeHtml(result.error) + '</span>';
+            return;
+        }
+        markDraftSaved();
+        statusEl.innerHTML = '<span class="ok">Draft saved.</span>';
+    });
+}
 
 document.getElementById('btn-analyze').addEventListener('click', async function () {
     statusEl.textContent = 'Analyzing…';
@@ -708,6 +866,7 @@ document.getElementById('btn-analyze').addEventListener('click', async function 
     }
     lastPayload = data;
     render(data);
+    markDraftDirty();
     statusEl.innerHTML = '<span class="ok">Analysis updated.</span>';
 });
 
@@ -730,8 +889,8 @@ document.getElementById('btn-approve').addEventListener('click', async function 
         statusEl.innerHTML = '<span class="err">' + escapeHtml(data.error || ('HTTP ' + r.status)) + '</span>';
         return;
     }
-    statusEl.innerHTML = '<span class="ok">Approved (' + (data.course_count || 0) + ' courses). Reloading…</span>';
-    setTimeout(function () { window.location.reload(); }, 600);
+    statusEl.innerHTML = '<span class="ok">Approved (' + (data.course_count || 0) + ' courses). Returning to curriculum list…</span>';
+    setTimeout(function () { window.location.href = cfg.curriculumEditUrl; }, 500);
 });
 
 loadDraft();

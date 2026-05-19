@@ -58,6 +58,7 @@ from .staff_curriculum_views import (
     staff_api_curriculum_versions_list,
     staff_api_curriculum_reopen,
     staff_api_curriculum_delete,
+    staff_api_curriculum_version_label,
 )
 
 urlpatterns = [
@@ -127,6 +128,11 @@ urlpatterns = [
         "staff/api/curriculum/version/<int:pk>/delete/",
         staff_api_curriculum_delete,
         name="staff_api_curriculum_delete",
+    ),
+    path(
+        "staff/api/curriculum/version/<int:pk>/version-label/",
+        staff_api_curriculum_version_label,
+        name="staff_api_curriculum_version_label",
     ),
 
     path("generate/", pos_generate, name="pos_generate"),

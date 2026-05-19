@@ -28,6 +28,7 @@ from pos.staff_curriculum_views import (
     staff_api_curriculum_versions_list,
     staff_api_curriculum_reopen,
     staff_api_curriculum_delete,
+    staff_api_curriculum_version_label,
     staff_curriculum_edit_list_page,
     staff_curriculum_edit_detail_page,
 )
@@ -779,9 +780,26 @@ class StaffCurriculumEditTests(TestCase):
         r = self._detail_req(self.superuser, self.draft_cv.pk)
         self.assertEqual(r.status_code, 200)
         self.assertContains(r, "btn-save")
+        self.assertContains(r, "btn-edit-version-label")
+        self.assertContains(r, "cv-version-label-modal")
+        self.assertContains(r, "Edit Curriculum Name")
+        self.assertContains(r, "BSCpE Curriculum 2025-2026")
 
-    def test_detail_page_approved_can_reopen(self) -> None:
+    def test_detail_page_approved_without_reopen_redirects_to_list(self) -> None:
         r = self._detail_req(self.superuser, self.approved_cv.pk)
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(r.url, "/staff/curriculum/edit/")
+
+    def test_detail_page_approved_can_reopen_from_list(self) -> None:
+        req = self.factory.get(
+            f"/staff/curriculum/edit/{self.approved_cv.pk}/",
+            {"reopen": "1"},
+        )
+        req.user = self.superuser
+        from unittest.mock import MagicMock
+        req.session = MagicMock()
+        req.session.get.return_value = None
+        r = staff_curriculum_edit_detail_page(req, pk=self.approved_cv.pk)
         self.assertEqual(r.status_code, 200)
         self.assertContains(r, "btn-reopen")
 
@@ -797,6 +815,30 @@ class StaffCurriculumEditTests(TestCase):
         req = self.factory.post(f"/staff/api/curriculum/version/{pk}/delete/")
         req.user = user
         return staff_api_curriculum_delete(req, pk=pk)
+
+    def _patch_label_req(self, user, pk, label: str):
+        req = self.factory.patch(
+            f"/staff/api/curriculum/version/{pk}/version-label/",
+            data=json.dumps({"version_label": label}),
+            content_type="application/json",
+        )
+        req.user = user
+        return staff_api_curriculum_version_label(req, pk=pk)
+
+    def test_patch_version_label_draft(self) -> None:
+        cv = CurriculumVersion.objects.create(
+            program=self.program,
+            status=CurriculumVersion.STATUS_DRAFT,
+            version_label="old-name",
+            draft_json={"extracted_rows": []},
+        )
+        r = self._patch_label_req(self.superuser, cv.pk, "New POS Name")
+        self.assertEqual(r.status_code, 200)
+        data = _json(r)
+        self.assertTrue(data["ok"])
+        self.assertEqual(data["version_label"], "New POS Name")
+        cv.refresh_from_db()
+        self.assertEqual(cv.version_label, "New POS Name")
 
     def test_delete_draft_version(self) -> None:
         cv = CurriculumVersion.objects.create(

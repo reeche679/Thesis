@@ -404,6 +404,9 @@ def staff_curriculum_edit_detail_page(request, pk: int):
             "is_default": is_default,
         }
     elif cv.status == CurriculumVersion.STATUS_APPROVED:
+        # Reopen gate only when staff opens an approved version from the list (?reopen=1).
+        if request.GET.get("reopen") != "1":
+            return redirect("staff_curriculum_edit")
         dj = cv.draft_json if isinstance(cv.draft_json, dict) else {}
         has_draft_data = bool((dj.get("extracted_rows") or []))
         ctx = {
@@ -487,6 +490,46 @@ def staff_api_curriculum_versions_list(request):
         )
 
     return JsonResponse({"ok": True, "versions": versions})
+
+
+@require_http_methods(["PATCH"])
+def staff_api_curriculum_version_label(request, pk: int):
+    """Update the human-readable curriculum / POS version name."""
+    cv, err = _require_cv_staff(request, pk)
+    if err:
+        return err
+    assert cv is not None
+
+    try:
+        body = json.loads(request.body.decode("utf-8") or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"ok": False, "error": "Invalid JSON body."}, status=400)
+    if not isinstance(body, dict):
+        return JsonResponse({"ok": False, "error": "Body must be a JSON object."}, status=400)
+
+    label = (body.get("version_label") or "").strip()
+    if not label:
+        return JsonResponse({"ok": False, "error": "Curriculum name is required."}, status=400)
+
+    cv.version_label = label[:128]
+    update_fields = ["version_label", "updated_at"]
+
+    if cv.status == CurriculumVersion.STATUS_APPROVED:
+        approved = dict(cv.approved_json) if isinstance(cv.approved_json, dict) else {}
+        meta = dict(approved.get("metadata") or {}) if isinstance(approved.get("metadata"), dict) else {}
+        meta["curriculum_version_label"] = cv.version_label
+        approved["metadata"] = meta
+        cv.approved_json = approved
+        update_fields.append("approved_json")
+
+    cv.save(update_fields=update_fields)
+    return JsonResponse(
+        {
+            "ok": True,
+            "curriculum_version_id": cv.pk,
+            "version_label": cv.version_label,
+        }
+    )
 
 
 @require_POST
