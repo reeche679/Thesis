@@ -5,9 +5,8 @@
 
 {% block staff_nav_edit_active %}active{% endblock %}
 
-{% block extra_head %}
+{% block staff_page_head %}
 <style>
-    .staff-wrap { max-width: 1100px; margin: 0 auto; padding: 1.5rem 1rem 3rem; }
     .badge-draft    { background: #0d6efd; color: #fff; }
     .badge-approved { background: #198754; color: #fff; }
     .badge-archived { background: #6c757d; color: #fff; }
@@ -20,24 +19,18 @@
     #empty-row td { color: #666; font-style: italic; }
     .actions-cell { white-space: nowrap; }
     .actions-cell .btn { margin-right: 0.35rem; }
-    .btn-staff-primary {
-        background-color: #a0161c;
-        border-color: #a0161c;
-        color: #fff;
-        font-weight: 600;
-        text-decoration: none;
-    }
-    .btn-staff-primary:hover, .btn-staff-primary:focus {
-        background-color: #8b1218;
-        border-color: #8b1218;
-        color: #fff;
-    }
+    .btn-staff-primary { text-decoration: none; }
 </style>
-{% endblock extra_head %}
+{% endblock staff_page_head %}
 
 {% block content %}
-<div class="staff-wrap">
-    <h1 class="h4 mb-3">All curriculum versions</h1>
+<div class="py-4">
+<div class="staff-home-outer">
+
+    <div class="staff-section-title staff-section-title-lg">Edit POS</div>
+
+    <div class="staff-pos-card">
+    <p class="small text-muted mb-3">View, edit, approve, reopen, or delete curriculum versions for your programs.<br>Use program/status filters to narrow down.</p>
     <div class="filters">
         <div>
             <label class="form-label mb-1 small fw-semibold" for="filter-program">Program</label>
@@ -60,7 +53,7 @@
         <button id="btn-refresh" class="btn btn-outline-secondary btn-sm align-self-end">Refresh</button>
     </div>
     <p id="list-status" class="small text-muted"></p>
-    <div class="table-responsive bg-white border rounded shadow-sm">
+    <div class="table-responsive">
         <table class="table table-sm table-hover mb-0">
             <thead class="table-light">
                 <tr>
@@ -78,7 +71,10 @@
             </tbody>
         </table>
     </div>
-    <p class="small text-muted mt-2">Showing up to 200 versions. Use program/status filters to narrow down.</p>
+    <p class="small text-muted mt-2 mb-0">Showing up to 200 versions.</p>
+    </div>
+
+</div>
 </div>
 {% endblock content %}
 

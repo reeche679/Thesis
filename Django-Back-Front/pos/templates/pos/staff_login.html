@@ -12,7 +12,9 @@
             min-height: 100vh;
             margin: 0;
             font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-            background: linear-gradient(135deg, #f5f0f0 0%, #e8e0e0 45%, #d4c4c4 100%);
+            background: url("{% static 'img/BSU_Background.jpg' %}") no-repeat center center fixed;
+            background-size: cover;
+            color: #212529;
         }
         .staff-shell {
             min-height: 100vh;
@@ -81,8 +83,9 @@
     <div class="staff-card">
         <div class="staff-card-header">
             <img src="{% static 'img/BSU_Logo.png' %}" alt="BSU">
-            <h1>Curriculum staff</h1>
-            <p>Sign in with your Django account (curriculum manager or superuser).</p>
+            <h1>Curriculum Staff</h1>
+            <p>Sign in with your Django account</p>
+            <p>(curriculum manager or superuser)</p>
         </div>
         <div class="staff-card-body">
             {% if messages %}
@@ -107,7 +110,7 @@
             </form>
             <p class="staff-footnote mb-0">
                 Student POS login is <a href="{% url 'login' %}">here</a>.
-                Django admin remains at <a href="/admin/">/admin/</a>.
+                Django admin remains at <a href="/admin/">admin</a>.
             </p>
         </div>
     </div>

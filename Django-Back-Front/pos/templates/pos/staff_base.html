@@ -70,3 +70,77 @@
     </div>
 </nav>
 {% endblock navbar %}
+
+{% block extra_head %}
+<style>
+    .staff-home-outer {
+        background-color: rgba(255, 255, 255, 0.655);
+        border-radius: 0.5rem;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+        padding: clamp(1rem, 4vw, 1.75rem) clamp(1rem, 4vw, 2rem);
+        max-width: min(1200px, 100%);
+        margin: 0 auto;
+        width: 100%;
+    }
+
+    .staff-section-title {
+        font-size: clamp(0.75rem, 2vw, 0.85rem);
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: #a0161c;
+        border-bottom: 2px solid #a0161c;
+        padding-bottom: 0.35rem;
+        margin-bottom: 1.25rem;
+    }
+    .staff-section-title.staff-section-title-lg {
+        font-size: clamp(1.3rem, 4vw, 1.5rem);
+        padding-bottom: 0.5rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .staff-pos-card {
+        background: rgba(255, 255, 255, 0.72);
+        border-radius: 0.5rem;
+        border: 1px solid #dee2e6;
+        padding: 1.25rem 1.5rem 1.5rem;
+    }
+    .staff-home-outer-wide {
+        max-width: min(1520px, 98vw);
+    }
+    .staff-home-outer-narrow {
+        max-width: min(720px, 100%);
+    }
+    .staff-pos-card-narrow {
+        max-width: min(640px, 100%);
+        margin-left: auto;
+        margin-right: auto;
+    }
+
+    .btn-staff-primary {
+        background-color: #a0161c;
+        border-color: #a0161c;
+        color: #fff;
+        font-weight: 600;
+        font-size: 0.875rem;
+    }
+    .btn-staff-primary:hover,
+    .btn-staff-primary:focus {
+        background-color: #8b1218;
+        border-color: #8b1218;
+        color: #fff;
+    }
+    .btn-staff-outline {
+        border-color: #a0161c;
+        color: #a0161c;
+        font-weight: 600;
+        font-size: 0.875rem;
+    }
+    .btn-staff-outline:hover,
+    .btn-staff-outline:focus {
+        background-color: #a0161c;
+        color: #fff;
+    }
+</style>
+{% block staff_page_head %}{% endblock %}
+{% endblock extra_head %}

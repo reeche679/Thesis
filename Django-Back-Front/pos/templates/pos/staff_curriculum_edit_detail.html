@@ -5,11 +5,26 @@
 
 {% block staff_nav_edit_active %}active{% endblock %}
 
-{% block extra_head %}
+{% block staff_page_head %}
 <style>
-    .staff-wrap { max-width: 100%; margin: 0 auto; padding: 1.25rem 1.5rem 2.5rem; }
     .err { color: #a00; }
     .ok  { color: #060; }
+
+    .staff-draft-actions-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    .staff-draft-actions-main {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    .staff-draft-actions-delete {
+        margin-left: auto;
+    }
 
     #grid { font-size: 0.8rem; table-layout: fixed; width: 100%; }
     #grid thead th {
@@ -20,19 +35,31 @@
         padding: 0.4rem 0.35rem;
         vertical-align: bottom;
     }
-    #grid tbody td { padding: 0.3rem 0.35rem; vertical-align: top; }
+    #grid tbody td {
+        padding: 0.3rem 0.35rem;
+        vertical-align: middle;
+    }
+    #grid td.col-actions,
+    #grid td.col-code,
+    #grid td.col-units,
+    #grid td.col-cat,
+    #grid td.col-sem,
+    #grid td.col-year {
+        text-align: center;
+    }
 
     /* Column widths — percentages that add to ~100% */
-    #grid .col-code    { width: 7%; }
-    #grid .col-title   { width: 20%; }
+    #grid .col-actions { width: 3%; }
+    #grid .col-code    { width: 10%; }
+    #grid .col-title   { width: 16%; }
     #grid .col-units   { width: 4%; }
-    #grid .col-cat     { width: 7%; }
-    #grid .col-sem     { width: 11%; }
-    #grid .col-year    { width: 11%; }
+    #grid .col-cat     { width: 9%; }
+    #grid .col-sem     { width: 8%; }
+    #grid .col-year    { width: 8%; }
     #grid .col-prereq  { width: 12%; }
     #grid .col-coreq   { width: 12%; }
     #grid .col-analyze { width: 18%; }
-    #grid .col-actions { width: 3%; text-align: center; }
+    #grid thead th.col-actions { text-align: center; }
     #grid .btn-row-delete {
         padding: 0.1rem 0.35rem;
         font-size: 0.72rem;
@@ -46,14 +73,24 @@
         font-size: 0.78rem;
         padding: 0.2rem 0.35rem;
     }
-    #grid input.code   { width: 100%; }
-    #grid input.units  { width: 100%; }
-    #grid select.category { width: 100%; font-size: 0.72rem; padding: 0.2rem 0.2rem; }
+    #grid input.code {
+        width: 100%;
+        text-align: center;
+    }
+    #grid input.units  { width: 100%; text-align: center; }
+    #grid select.category {
+        width: 100%;
+        padding-right: 1.5rem;
+    }
     #grid input.orig_sem,
     #grid input.year_level {
         width: 100%;
-        min-width: 3.5rem;
         text-align: center;
+    }
+    .staff-edit-grid-wrap {
+        overflow-x: auto;
+        max-width: 100%;
+        -webkit-overflow-scrolling: touch;
     }
 
     /* Textareas: single-line compact, grow on focus */
@@ -84,8 +121,29 @@
     #grid tbody tr:nth-child(even) td { background: #f9f9f9; }
     #grid tbody tr:hover td { background: #f0f4ff; }
 
-    /* Caps table stays compact */
-    #caps-section table { font-size: 0.85rem; }
+    /* Caps table: centered layout (rounded corners via .table-responsive.border.rounded like #grid) */
+    #caps-section .caps-table-wrap {
+        max-width: 520px;
+        width: 100%;
+        margin-left: auto;
+        margin-right: auto;
+    }
+    #caps-section .caps-table-wrap table {
+        font-size: 0.85rem;
+        width: 100%;
+        margin: 0;
+    }
+    #caps-section .caps-table-wrap table th,
+    #caps-section .caps-table-wrap table td {
+        text-align: center;
+        vertical-align: middle;
+    }
+    #caps-section .cap-input {
+        max-width: 4.5rem;
+        margin-left: auto;
+        margin-right: auto;
+        text-align: center;
+    }
 
     .staff-grid-legend { line-height: 1.4; }
     .cat-legend-row {
@@ -123,10 +181,15 @@
         font-size: 0.8rem;
     }
 </style>
-{% endblock extra_head %}
+{% endblock staff_page_head %}
 
 {% block content %}
-<div class="staff-wrap">
+<div class="py-4">
+<div class="staff-home-outer staff-home-outer-wide">
+
+    <div class="staff-section-title staff-section-title-lg">Review &amp; Edit</div>
+
+    <div class="staff-pos-card">
 
 {% if forbidden %}
     <div class="alert alert-danger">
@@ -175,27 +238,31 @@
         {% if is_default %}<span class="badge bg-warning text-dark ms-1">program default</span>{% endif %}
     </p>
     <div class="staff-draft-actions mb-3">
-        <div class="d-flex flex-wrap gap-2">
-            <button type="button" class="btn btn-primary btn-sm" id="btn-save">Save draft</button>
-            <button type="button" class="btn btn-outline-secondary btn-sm" id="btn-analyze">Re-analyze</button>
-            <button type="button" class="btn btn-success btn-sm" id="btn-approve">Approve</button>
+        <div class="staff-draft-actions-row">
+            <div class="staff-draft-actions-main">
+                <button type="button" class="btn btn-outline-secondary btn-sm" id="btn-analyze">Re-analyze</button>
+                <button type="button" class="btn btn-primary btn-sm" id="btn-save">Save draft</button>
+                <button type="button" class="btn btn-success btn-sm" id="btn-approve">Approve</button>
+            </div>
+            {% if can_delete %}
+            <div class="staff-draft-actions-delete">
+                <button type="button" class="btn btn-outline-danger btn-sm" id="btn-delete-version">Delete this version</button>
+            </div>
+            {% endif %}
         </div>
-        {% if can_delete %}
-        <div class="mt-2">
-            <button type="button" class="btn btn-outline-danger btn-sm" id="btn-delete-version">Delete this version</button>
-            <p id="delete-status" class="small mt-1 mb-0"></p>
-        </div>
-        {% endif %}
+        <p id="delete-status" class="small mt-1 mb-0"></p>
     </div>
     <p id="status" class="small"></p>
 
-    <div class="bg-white border rounded shadow-sm p-3 mb-3" id="caps-section">
+    <div class="border rounded p-3 mb-3 bg-light" id="caps-section">
         <h6 class="mb-2">Max units per semester <span class="text-danger">(required)</span></h6>
         <p class="small text-muted mb-2">
             Set the maximum allowed unit load for each term. These are <strong>not</strong> read from the PDF.
             Overflow semesters beyond Year 6 reuse Year 6 values.
         </p>
-        <table class="table table-sm table-bordered mb-0" style="max-width:520px">
+        <div class="caps-table-wrap">
+        <div class="table-responsive border rounded">
+        <table class="table table-sm table-bordered mb-0">
             <thead class="table-light">
                 <tr><th>Year</th><th>1st Sem</th><th>2nd Sem</th><th>Summer</th></tr>
             </thead>
@@ -208,6 +275,8 @@
                 <tr><td>6</td><td><input type="number" min="0" class="form-control form-control-sm cap-input" data-y="6" data-t="1"></td><td><input type="number" min="0" class="form-control form-control-sm cap-input" data-y="6" data-t="2"></td><td><input type="number" min="0" class="form-control form-control-sm cap-input" data-y="6" data-t="3"></td></tr>
             </tbody>
         </table>
+        </div>
+        </div>
     </div>
 
     <div class="staff-grid-legend small text-muted mb-2">
@@ -243,11 +312,11 @@
         </div>
         <div class="cat-legend-row mt-1">
             <span class="cat-legend-label">Sem / Year</span>
-            <span class="cat-legend-item text-muted">leave blank for analyzer</span>
+            <span class="cat-legend-item text-muted">Leave blank to auto-fill</span>
             <button type="button" class="cat-info-btn" data-bs-toggle="tooltip" data-bs-placement="top"
                 data-bs-custom-class="cat-tooltip"
-                title="Sem (orig_sem) and Year (year_level): leave empty to use analyzer suggestions. When term_label matches the EE/CpE grid (e.g. 3rd Year - First Semester), orig_sem follows the same slot order as Generate POS."
-                aria-label="About Sem and Year fields">
+                title="Semester and Year: leave both blank if you want the system to suggest values from the PDF. When the PDF shows a normal year and term (for example, 3rd Year - First Semester), the semester number will match the order students see when they generate a Program of Study."
+                aria-label="About Semester and Year fields">
                 <i class="bi bi-info-circle" aria-hidden="true"></i>
             </button>
         </div>
@@ -259,7 +328,7 @@
             <i class="bi bi-plus-lg me-1"></i>Add course row
         </button>
     </div>
-    <div class="table-responsive bg-white border rounded shadow-sm" style="overflow-x:auto">
+    <div class="table-responsive border rounded staff-edit-grid-wrap">
         <table class="table table-sm mb-0" id="grid">
             <thead class="table-light">
                 <tr>
@@ -293,15 +362,28 @@
 </div>
 {% endif %}
 
-</div>{# /staff-wrap #}
+    </div>
+
+</div>
+</div>
 {% endblock content %}
 
 {% block extra_scripts %}
+<script type="application/json" id="staff-edit-detail-config">
+{"cvId":{{ cv_id }},"isDefault":{% if is_default %}true{% else %}false{% endif %},"curriculumEditUrl":"{% filter escapejs %}{% url 'staff_curriculum_edit' %}{% endfilter %}"}
+</script>
+<script>
+function staffEditDetailPageConfig() {
+    var el = document.getElementById('staff-edit-detail-config');
+    return el ? JSON.parse(el.textContent) : {};
+}
+</script>
 {% if can_delete and not forbidden %}
 <script>
 (function () {
-    const CV_ID = {{ cv_id }};
-    const IS_DEFAULT = {% if is_default %}true{% else %}false{% endif %};
+    var cfg = staffEditDetailPageConfig();
+    const CV_ID = cfg.cvId;
+    const IS_DEFAULT = cfg.isDefault;
     const deleteUrl = '/staff/api/curriculum/version/' + CV_ID + '/delete/';
     const deleteBtn = document.getElementById('btn-delete-version');
     const deleteStatus = document.getElementById('delete-status');
@@ -328,7 +410,7 @@
             return;
         }
         deleteStatus.innerHTML = '<span class="ok">Deleted. Redirecting…</span>';
-        setTimeout(function () { window.location.href = '{% url "staff_curriculum_edit" %}'; }, 600);
+        setTimeout(function () { window.location.href = cfg.curriculumEditUrl; }, 600);
     });
 })();
 </script>
@@ -337,7 +419,8 @@
 {% if can_reopen and has_draft_data %}
 <script>
 (function () {
-    const CV_ID = {{ cv_id }};
+    var cfg = staffEditDetailPageConfig();
+    const CV_ID = cfg.cvId;
     const reopenUrl = '/staff/api/curriculum/version/' + CV_ID + '/reopen/';
     function getCookie(name) {
         const v = document.cookie.match('(^|;) ?' + name + '=([^;]*)(;|$)');
@@ -369,7 +452,8 @@
 {% if can_edit %}
 <script>
 (function () {
-const CV_ID = {{ cv_id }};
+var cfg = staffEditDetailPageConfig();
+const CV_ID = cfg.cvId;
 function getCookie(name) {
     const v = document.cookie.match('(^|;) ?' + name + '=([^;]*)(;|$)');
     return v ? decodeURIComponent(v[2]) : '';
@@ -468,7 +552,7 @@ function render(data) {
 }
 
 function addEmptyRow() {
-    tbody.appendChild(buildRowTr({
+    const tr = buildRowTr({
         draft_row_id: newDraftRowId(),
         code: '',
         title: '',
@@ -476,7 +560,9 @@ function addEmptyRow() {
         category: 'Rigid',
         raw_prerequisites: '',
         raw_corequisites: '',
-    }, {}));
+    }, {});
+    tbody.appendChild(tr);
+    return tr;
 }
 
 function renderCaps(data) {
@@ -558,8 +644,13 @@ async function loadDraft() {
 }
 
 document.getElementById('btn-add-row').addEventListener('click', function () {
-    addEmptyRow();
+    const tr = addEmptyRow();
     statusEl.innerHTML = '<span class="ok">New row added — enter a course code, then Save draft.</span>';
+    requestAnimationFrame(function () {
+        tr.scrollIntoView({ behavior: 'smooth', block: 'end' });
+        const codeInput = tr.querySelector('.code');
+        if (codeInput) codeInput.focus({ preventScroll: true });
+    });
 });
 
 tbody.addEventListener('click', function (e) {
@@ -589,10 +680,8 @@ document.getElementById('btn-save').addEventListener('click', async function () 
         statusEl.innerHTML = '<span class="err">' + (data.error || ('HTTP ' + r.status)) + '</span>';
         return;
     }
-    lastPayload = data;
-    render(data);
-    renderCaps(data);
-    statusEl.innerHTML = '<span class="ok">Saved.</span>';
+    statusEl.innerHTML = '<span class="ok">Saved. Redirecting…</span>';
+    setTimeout(function () { window.location.href = cfg.curriculumEditUrl; }, 400);
 });
 
 document.getElementById('btn-analyze').addEventListener('click', async function () {
@@ -626,7 +715,7 @@ document.getElementById('btn-approve').addEventListener('click', async function 
         return;
     }
     statusEl.innerHTML = '<span class="ok">Approved (' + (data.course_count || 0) + ' courses). '
-        + '<a href="{% url "staff_curriculum_edit" %}">Back to all curricula</a></span>';
+        + '<a href="' + cfg.curriculumEditUrl + '">Back to all curricula</a></span>';
     document.querySelectorAll('#btn-save, #btn-analyze, #btn-approve, .cap-input, #grid input, #grid select, #grid textarea')
         .forEach(function (el) { el.disabled = true; });
 });

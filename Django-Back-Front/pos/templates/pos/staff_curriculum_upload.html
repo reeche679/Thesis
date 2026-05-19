@@ -5,50 +5,66 @@
 
 {% block staff_nav_upload_active %}active{% endblock %}
 
-{% block extra_head %}
+{% block staff_page_head %}
 <style>
-    .staff-wrap { max-width: 640px; margin: 0 auto; padding: 1.75rem 1rem 2.5rem; }
     label { display: block; margin-top: 1rem; font-weight: 600; }
     .hint { font-size: 0.85rem; color: #555; margin-top: 0.25rem; }
-    .btn-staff-primary { background-color: #a0161c; border-color: #a0161c; font-weight: 600; color: #fff; }
-    .btn-staff-primary:hover { background-color: #8b1218; border-color: #8b1218; color: #fff; }
+    .upload-page-desc {
+        font-size: 0.9rem;
+        color: #444;
+        line-height: 1.5;
+        margin: 0 0 1rem;
+    }
     .err { color: #a00; }
     .ok  { color: #060; }
 </style>
-{% endblock extra_head %}
+{% endblock staff_page_head %}
 
 {% block content %}
-<div class="staff-wrap">
-    <h1 class="h3 mb-2">PDF → draft extraction</h1>
-    <p class="hint mb-4">
-        Superusers see every program; managers see assigned programs only.
-        Need access? Ask an admin to add you to <strong>Program → curriculum managers</strong>.
+<div class="py-4">
+<div class="staff-home-outer staff-home-outer-narrow">
+
+    <div class="staff-section-title staff-section-title-lg">Upload POS &rarr; Draft Extraction</div>
+
+    <p class="upload-page-desc">
+        Upload a curriculum or program-of-study PDF for a department. The system extracts course rows
+        (code, title, units, prerequisites, and semester bands) into a <strong>draft</strong> you can
+        review, fix, and approve before students use that POS version.
     </p>
 
-    {% if not programs %}
-        <p class="err">You have no managed programs (and you are not a superuser). Ask an admin to add you to <strong>Program → curriculum managers</strong>.</p>
-    {% else %}
-    <form id="upload-form" class="bg-white p-4 rounded shadow-sm border">
-        {% csrf_token %}
-        <label for="program_id">Program</label>
-        <select id="program_id" name="program_id" class="form-select" required>
-            {% for p in programs %}
-                <option value="{{ p.pk }}">{{ p.name }} ({{ p.slug }})</option>
-            {% endfor %}
-        </select>
+    <div class="staff-pos-card staff-pos-card-narrow">
+        <p class="hint mb-4">
+            Superusers see every program; managers see assigned programs only.
+           <br> Need access? Ask an admin to add you to <strong>Program → curriculum managers</strong>.
+        </p>
 
-        <label for="file">PDF file</label>
-        <input id="file" name="file" class="form-control" type="file" accept="application/pdf,.pdf" required>
+        {% if not programs %}
+            <p class="err">You have no managed programs (and you are not a superuser). Ask an admin to add you to <strong>Program → curriculum managers</strong>.</p>
+        {% else %}
+        <form id="upload-form">
+            {% csrf_token %}
+            <label for="program_id">Program</label>
+            <select id="program_id" name="program_id" class="form-select" required>
+                {% for p in programs %}
+                    <option value="{{ p.pk }}">{{ p.name }} ({{ p.slug }})</option>
+                {% endfor %}
+            </select>
 
-        <label for="version_label">Version label (optional)</label>
-        <input id="version_label" name="version_label" class="form-control" type="text" maxlength="128" placeholder="defaults to pdf-import-… timestamp">
-        <div class="hint">Creates a <strong>draft</strong> <code>CurriculumVersion</code> with <code>draft_json</code> (pdfplumber + Tesseract OCR when needed). Scanned PDFs need <a href="https://github.com/tesseract-ocr/tesseract" target="_blank" rel="noopener">Tesseract</a> on the server PATH.</div>
+            <label for="file">PDF file</label>
+            <input id="file" name="file" class="form-control" type="file" accept="application/pdf,.pdf" required>
 
-        <button type="submit" class="btn btn-staff-primary text-white mt-3">Upload &amp; extract</button>
-    </form>
-    <p id="status" class="mt-3"></p>
-    <div id="upload-actions" class="mt-2" hidden></div>
-    {% endif %}
+            <label for="version_label">Version Label (optional)</label>
+            <input id="version_label" name="version_label" class="form-control" type="text" maxlength="128" placeholder="e.g. version1.0">
+            <p class="hint">After upload, use <strong>Review &amp; edit draft</strong> to check rows, set max units per semester, then approve. Scanned PDFs may need <a href="https://github.com/tesseract-ocr/tesseract" target="_blank" rel="noopener">Tesseract OCR</a> installed on the server.</p>
+
+            <button type="submit" class="btn btn-staff-primary text-white mt-3">Upload &amp; extract</button>
+        </form>
+        <p id="status" class="mt-3 mb-0"></p>
+        <div id="upload-actions" class="mt-2" hidden></div>
+        {% endif %}
+    </div>
+
+</div>
 </div>
 {% endblock content %}
 
