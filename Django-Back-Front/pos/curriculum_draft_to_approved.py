@@ -6,8 +6,12 @@ from __future__ import annotations
 
 from typing import Any
 
+from pos.curriculum_draft_analyze import _split_req_fragments
 from pos.curriculum_draft_semesters import orig_sem_for_course_row, term_index_to_orig_sem_map
-from pos.curriculum_pdf_extract import _canonical_course_code
+from pos.curriculum_pdf_extract import (
+    _canonical_course_code,
+    _extract_codes_from_text,
+)
 from pos.curriculum_unit_caps import (
     OVERFLOW_SEMESTERS,
     build_max_units_by_semester_index,
@@ -90,39 +94,66 @@ def draft_to_approved_json(
         orig_sem = orig_sem_for_course_row(row, ti_map, draft_analysis_row=row_a)
         title = str(row.get("title") or row.get("course_title") or "").strip() or code
 
+        # raw_prerequisites is authoritative when non-empty; fall back to
+        # prerequisite_codes (PDF extraction) only when the raw field is blank.
+        raw_pre_text = str(row.get("raw_prerequisites") or "").strip()
         pre_tokens: list[str] = []
-        if row_a:
-            for tok in row_a.get("resolved_pre") or []:
-                if isinstance(tok, str) and tok.strip():
-                    pre_tokens.append(tok.strip())
-        if not pre_tokens:
+        if raw_pre_text:
+            for frag in _split_req_fragments(raw_pre_text):
+                for extracted in _extract_codes_from_text(frag):
+                    cc = _canonical_course_code(extracted)
+                    if cc and cc not in pre_tokens:
+                        pre_tokens.append(cc)
+            # Also keep standing phrases (e.g. "4th Year Standing") from analyzer
+            if row_a:
+                for tok in row_a.get("resolved_pre") or []:
+                    if (
+                        isinstance(tok, str)
+                        and tok.strip()
+                        and not _canonical_course_code(tok)
+                        and tok not in pre_tokens
+                    ):
+                        pre_tokens.append(tok.strip())
+        else:
+            # No raw text — use analyzer output then PDF codes
+            if row_a:
+                for tok in row_a.get("resolved_pre") or []:
+                    if isinstance(tok, str) and tok.strip():
+                        pre_tokens.append(tok.strip())
             for c in row.get("prerequisite_codes") or []:
                 cc = _canonical_course_code(str(c))
-                if cc:
+                if cc and cc not in pre_tokens:
                     pre_tokens.append(cc)
 
         pre_req_out: list[str | list[str]] = []
         seen_pre: set[str] = set()
         for tok in pre_tokens:
             ct = _canonical_course_code(tok)
-            if ct in known_codes:
-                key = ct
-            else:
-                key = tok.strip()
+            key = ct if ct in known_codes else tok.strip()
             if key not in seen_pre:
                 seen_pre.add(key)
                 pre_req_out.append(ct if ct in known_codes else tok.strip())
 
+        # raw_corequisites is authoritative when non-empty; fall back to
+        # corequisite_codes (PDF extraction) only when the raw field is blank.
+        raw_co_text = str(row.get("raw_corequisites") or "").strip()
         co_out: list[str] = []
-        if row_a:
-            for c in row_a.get("resolved_co") or []:
+        if raw_co_text:
+            for frag in _split_req_fragments(raw_co_text):
+                for extracted in _extract_codes_from_text(frag):
+                    cc = _canonical_course_code(extracted)
+                    if cc in known_codes and cc not in co_out:
+                        co_out.append(cc)
+        else:
+            if row_a:
+                for c in row_a.get("resolved_co") or []:
+                    cc = _canonical_course_code(str(c))
+                    if cc in known_codes and cc not in co_out:
+                        co_out.append(cc)
+            for c in row.get("corequisite_codes") or []:
                 cc = _canonical_course_code(str(c))
                 if cc in known_codes and cc not in co_out:
                     co_out.append(cc)
-        for c in row.get("corequisite_codes") or []:
-            cc = _canonical_course_code(str(c))
-            if cc in known_codes and cc not in co_out:
-                co_out.append(cc)
 
         courses[code] = {
             "course_title": title[:500],

@@ -105,16 +105,29 @@ def _analyze_row(
     raw_pre = str(row.get("raw_prerequisites") or "")
     raw_co = str(row.get("raw_corequisites") or "")
 
-    pc = [_canonical_course_code(c) for c in (row.get("prerequisite_codes") or [])]
-    cc = [_canonical_course_code(c) for c in (row.get("corequisite_codes") or [])]
+    # raw_prerequisites / raw_corequisites are authoritative when non-empty (staff edited them).
+    # Fall back to the original PDF-extracted code lists only when the raw field is blank.
+    if raw_pre.strip():
+        pc = []
+        for frag in _split_req_fragments(raw_pre):
+            for extracted in _extract_codes_from_text(frag):
+                ec = _canonical_course_code(extracted)
+                if ec and ec not in pc:
+                    pc.append(ec)
+    else:
+        pc = [_canonical_course_code(c) for c in (row.get("prerequisite_codes") or [])]
 
-    resolved_pre: list[str] = []
-    for c in pc:
-        if c in all_codes:
-            resolved_pre.append(c)
-        else:
-            resolved_pre.append(c)
+    if raw_co.strip():
+        cc = []
+        for frag in _split_req_fragments(raw_co):
+            for extracted in _extract_codes_from_text(frag):
+                ec = _canonical_course_code(extracted)
+                if ec and ec not in cc:
+                    cc.append(ec)
+    else:
+        cc = [_canonical_course_code(c) for c in (row.get("corequisite_codes") or [])]
 
+    resolved_pre: list[str] = list(pc)
     standing_pre = _collect_standing_phrases(raw_pre)
     for st in standing_pre:
         if st not in resolved_pre:

@@ -1499,7 +1499,7 @@ def pos_generate(request):
                         si = int(k)
                     except (TypeError, ValueError):
                         continue
-                    if si < 0 or si > max_si:
+                    if si < 0:
                         continue
                     if isinstance(courses, list) and any(
                         (c.get("code") if isinstance(c, dict) else None) for c in courses
@@ -1508,6 +1508,16 @@ def pos_generate(request):
 
             if table_scope_sem < 0:
                 table_scope_sem = _max_ui_section_from_grades_and_pos(saved_grades_by_section, gen_pos)
+
+            # The saved POS may contain semesters beyond the natural program length
+            # (e.g. 5th-year sections for a 4-year program due to petition / overload).
+            # Synthesise the extra section entries so the display loop can reach them.
+            if table_scope_sem > max_si:
+                for _ext_si in range(max_si + 1, table_scope_sem + 1):
+                    _yl, _sem, _lbl = section_meta_for_index(_ext_si)
+                    curriculum_sections.append({"year": _yl, "semester": _sem, "label": _lbl, "courses": []})
+                max_si = len(curriculum_sections) - 1
+
             table_scope_sem = max(0, min(table_scope_sem, max_si))
             effective_irreg_start_index = irreg_start_index
             if effective_irreg_start_index is None:

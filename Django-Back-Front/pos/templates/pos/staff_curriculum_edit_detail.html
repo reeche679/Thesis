@@ -730,8 +730,8 @@ document.getElementById('btn-approve').addEventListener('click', async function 
         statusEl.innerHTML = '<span class="err">' + escapeHtml(data.error || ('HTTP ' + r.status)) + '</span>';
         return;
     }
-    statusEl.innerHTML = '<span class="ok">Approved (' + (data.course_count || 0) + ' courses). Redirecting…</span>';
-    setTimeout(function () { window.location.href = cfg.curriculumEditUrl; }, 400);
+    statusEl.innerHTML = '<span class="ok">Approved (' + (data.course_count || 0) + ' courses). Reloading…</span>';
+    setTimeout(function () { window.location.reload(); }, 600);
 });
 
 loadDraft();
