@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pos.curriculum_draft_analyze import _split_req_fragments
+from pos.curriculum_draft_analyze import _collect_standing_phrases, _split_req_fragments
 from pos.curriculum_draft_semesters import orig_sem_for_course_row, term_index_to_orig_sem_map
 from pos.curriculum_pdf_extract import (
     _canonical_course_code,
@@ -18,6 +18,12 @@ from pos.curriculum_unit_caps import (
     validate_max_units_by_year_term,
 )
 from pos.solver_course_reference import resolve_course_category
+
+
+def _req_token_is_known_course(tok: str, known_codes: set[str]) -> bool:
+    """True when tok canonicalizes to a course code in this curriculum."""
+    ct = _canonical_course_code(tok)
+    return bool(ct and ct in known_codes)
 
 
 def _float_units(row: dict[str, Any]) -> float:
@@ -104,16 +110,21 @@ def draft_to_approved_json(
                     cc = _canonical_course_code(extracted)
                     if cc and cc not in pre_tokens:
                         pre_tokens.append(cc)
-            # Also keep standing phrases (e.g. "4th Year Standing") from analyzer
+            for st in _collect_standing_phrases(raw_pre_text):
+                if st not in pre_tokens:
+                    pre_tokens.append(st)
+            # Non-course tokens from analyzer (e.g. standing the regex missed)
             if row_a:
                 for tok in row_a.get("resolved_pre") or []:
-                    if (
-                        isinstance(tok, str)
-                        and tok.strip()
-                        and not _canonical_course_code(tok)
-                        and tok not in pre_tokens
-                    ):
-                        pre_tokens.append(tok.strip())
+                    if not isinstance(tok, str) or not tok.strip():
+                        continue
+                    t = tok.strip()
+                    if _req_token_is_known_course(t, known_codes):
+                        ct = _canonical_course_code(t)
+                        if ct not in pre_tokens:
+                            pre_tokens.append(ct)
+                    elif t not in pre_tokens:
+                        pre_tokens.append(t)
         else:
             # No raw text — use analyzer output then PDF codes
             if row_a:

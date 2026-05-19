@@ -15,6 +15,7 @@ from pos.curriculum_draft_analyze import (
 )
 from pos.curriculum_draft_semesters import term_index_to_orig_sem_map
 from pos.curriculum_draft_to_approved import draft_to_approved_json
+from pos.generate_curriculum_context import resolve_generate_curriculum_context
 from pos.curriculum_unit_caps import (
     build_max_units_by_semester_index,
     validate_max_units_by_year_term,
@@ -155,6 +156,80 @@ class OrigSemBandTests(TestCase):
         block = da["rows"][row["draft_row_id"]]
         self.assertEqual(block["orig_sem_source"], "term_index")
         self.assertEqual(block["orig_sem_suggested"], 1)
+
+    def test_approved_preserves_year_standing_in_prerequisites(self) -> None:
+        rid = str(uuid.uuid4())
+        row = {
+            "draft_row_id": rid,
+            "code": "CpE 204",
+            "title": "Adv Math",
+            "units": "3",
+            "term_index": 4,
+            "term_label": "2nd Year - First Semester",
+            "raw_prerequisites": "2nd Year Standing",
+            "raw_corequisites": "",
+            "prerequisite_codes": [],
+            "corequisite_codes": [],
+            "source": {"page": 1, "table": 0, "row_index": 0},
+        }
+        da = analyze_draft_json({"extracted_rows": [row]})
+        draft = {"extracted_rows": [row], "draft_analysis": da, "max_units_by_year_term": _default_caps()}
+        bundle = draft_to_approved_json(
+            draft,
+            program_slug="cpe",
+            curriculum_version_label="v1",
+            source_pdf_sha256="b" * 64,
+        )
+        validate_approved_bundle(bundle)
+        pre = bundle["courses"]["CpE 204"]["pre-requisites"]
+        self.assertIn("2nd Year Standing", pre)
+
+    def test_approved_standing_shows_on_generate_pos_lookup(self) -> None:
+        from django.contrib.auth.hashers import make_password
+
+        from accounts.models import Student
+
+        prog = Program.objects.create(slug="stand", name="Standing")
+        rid = str(uuid.uuid4())
+        row = {
+            "draft_row_id": rid,
+            "code": "CpE 204",
+            "title": "Adv Math",
+            "units": "3",
+            "term_index": 4,
+            "raw_prerequisites": "2nd Year Standing",
+            "raw_corequisites": "",
+            "prerequisite_codes": [],
+            "corequisite_codes": [],
+            "source": {"page": 1, "table": 0, "row_index": 0},
+        }
+        da = analyze_draft_json({"extracted_rows": [row]})
+        draft = {"extracted_rows": [row], "draft_analysis": da, "max_units_by_year_term": _default_caps()}
+        bundle = draft_to_approved_json(
+            draft,
+            program_slug="stand",
+            curriculum_version_label="v1",
+            source_pdf_sha256="c" * 64,
+        )
+        cv = CurriculumVersion.objects.create(
+            program=prog,
+            status=CurriculumVersion.STATUS_APPROVED,
+            version_label="s",
+            approved_json=bundle,
+        )
+        student = Student.objects.create(
+            sr_code="22-90001",
+            password=make_password("x"),
+            first_name="S",
+            middle_name="",
+            last_name="T",
+            email="stand@example.com",
+            program=prog,
+            selected_curriculum_version=cv,
+        )
+        ctx = resolve_generate_curriculum_context(student)
+        self.assertEqual(ctx["mode"], "db")
+        self.assertEqual(ctx["course_lookup"]["CpE 204"][4], "2nd Year Standing")
 
     def test_approved_uses_year_level_suggested_when_year_level_omitted(self) -> None:
         rid = str(uuid.uuid4())

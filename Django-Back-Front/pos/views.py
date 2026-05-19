@@ -31,6 +31,11 @@ from .solver_bridge import (
 from .constraint_trace_summary import build_constraint_trace_summary_by_course
 from .standing_parity import build_standing_logic_mismatch_rows
 from .curriculum_static_feasibility import static_prereq_horizon_diagnosis
+from .pdf_header_fields import merge_pdf_header_fields, pdf_header_fields_for_program
+from .semester_warnings import (
+    LOW_UNITS_WARNING_MESSAGE,
+    low_units_warning_for_solver_pos,
+)
 from .staff_auth_views import user_may_use_staff_curriculum_portal
 from .superuser_student_portal import (
     ensure_superuser_student_session,
@@ -1019,6 +1024,15 @@ def _first_excessive_failure_violation(grades_by_section, course_lookup=None):
             title = (info[0] if info else "") or ""
             return (code, n, title)
     return None
+
+
+def _pdf_header_for_student(student, snapshot=None):
+    """PDF header text from the student's program (staff-configured). Snapshot optional for history."""
+    program = getattr(student, "program", None) if student is not None else None
+    layers = [pdf_header_fields_for_program(program)]
+    if isinstance(snapshot, dict) and isinstance(snapshot.get("pdf_header"), dict):
+        layers.append(snapshot["pdf_header"])
+    return merge_pdf_header_fields(*layers)
 
 
 def _message_excessive_same_course_failures(code: str, count: int, title: str) -> str:
@@ -2180,6 +2194,7 @@ def validate_pos(request):
     solver_meta = _solver_meta_for_request(request) or {}
     solver_courses = solver_meta.get("courses") if isinstance(solver_meta.get("courses"), dict) else {}
     year_standing_rules = solver_meta.get("year_standing_rules") if isinstance(solver_meta.get("year_standing_rules"), dict) else {}
+    _grade_keys = set(solver_courses.keys()) if solver_courses else _curriculum_course_keys_for_request(request)
 
     for section_key, section_grades in (grades_by_section or {}).items():
         try:
@@ -2204,7 +2219,7 @@ def validate_pos(request):
             if not code_s:
                 continue
 
-            solver_code = _UI_TO_SOLVER_ELECTIVE.get(code_s, code_s)
+            solver_code = _to_solver_course_code(code_s, _grade_keys)
 
             if _is_passing_grade(grade):
                 passed_ui.add(code_s)
@@ -2345,8 +2360,9 @@ def validate_pos(request):
         )  # UI convention: section_index + 2; clamp to active curriculum MAX_SEMESTER
         current_sem_source = "session"
 
-    passed_solver = [_UI_TO_SOLVER_ELECTIVE.get(c, c) for c in passed_ui]
-    failed_solver = [_UI_TO_SOLVER_ELECTIVE.get(c, c) for c in failed_ui]
+    _cv_keys = _curriculum_course_keys_for_request(request)
+    passed_solver = _to_solver_pass_fail_codes(passed_ui, _cv_keys)
+    failed_solver = _to_solver_pass_fail_codes(failed_ui, _cv_keys)
 
     trace_raw = data.get("cp_sat_constraint_trace_courses")
     trace_solver: list[str] | None = None
@@ -2358,7 +2374,7 @@ def validate_pos(request):
         else:
             trace_parts = []
         if trace_parts:
-            trace_solver = [_UI_TO_SOLVER_ELECTIVE.get(c, c) for c in trace_parts]
+            trace_solver = [_to_solver_course_code(c, _cv_keys) for c in trace_parts]
 
     payload = {
         'current_sem': current_sem_solver,
@@ -2516,6 +2532,53 @@ _UI_TO_SOLVER_ELECTIVE = {
 }
 _SOLVER_TO_UI_ELECTIVE = {v: k for k, v in _UI_TO_SOLVER_ELECTIVE.items()}
 
+
+def _curriculum_course_keys_for_request(request) -> set[str]:
+    """Course-code keys from the student's active approved curriculum (or static solver grid)."""
+    meta = _solver_meta_for_request(request) or {}
+    courses = meta.get("courses")
+    if isinstance(courses, dict):
+        return {str(k) for k in courses}
+    return set()
+
+
+def _to_solver_course_code(ui_code: str, course_keys: set[str] | None = None) -> str:
+    """
+    Map a UI grade/POS code to the key used in the active curriculum bundle.
+
+    Staff-uploaded curricula use CpEE 401/402/403; the legacy static solver grid uses
+    Elective Course 1/2/3. Blindly mapping CpEE → Elective breaks passed-course detection
+    for DB curricula and causes duplicate elective rows in generated POS.
+    """
+    c = str(ui_code or "").strip()
+    if not c:
+        return c
+    keys = course_keys if course_keys is not None else set()
+    if keys:
+        if c in keys:
+            return c
+        alt = _UI_TO_SOLVER_ELECTIVE.get(c)
+        if alt and alt in keys:
+            return alt
+        rev = _SOLVER_TO_UI_ELECTIVE.get(c)
+        if rev and rev in keys:
+            return rev
+        return c
+    return _UI_TO_SOLVER_ELECTIVE.get(c, c)
+
+
+def _to_solver_pass_fail_codes(ui_codes, course_keys: set[str] | None = None) -> list[str]:
+    """Resolve passed/failed lists to curriculum bundle keys (deduplicated, sorted)."""
+    keys = course_keys if course_keys is not None else set()
+    out: set[str] = set()
+    for raw in ui_codes or []:
+        c = str(raw).strip()
+        if not c:
+            continue
+        out.add(_to_solver_course_code(c, keys))
+    return sorted(out)
+
+
 # CP-SAT pipes `_log_infeasible` stdout into `message`; students should not see that block.
 _SOLVER_VERBOSE_DIAGNOSTIC_MARKERS = (
     "NO VALID SCHEDULE (Infeasible)",
@@ -2584,14 +2647,14 @@ def generate_pos_api(request):
     if not isinstance(data, dict):
         return JsonResponse({"error": "Expected JSON object"}, status=400)
 
-    # Translate UI elective codes (CpEE 401/402/403) → solver course keys
-    # (Elective Course 1/2/3) so the solver correctly recognises passed/failed electives.
+    # Map UI elective codes to keys in the active curriculum (CpEE vs Elective Course N).
     raw_passed = data.get("passed_courses") or []
     raw_failed = data.get("failed_courses") or []
+    _cv_keys = _curriculum_course_keys_for_request(request)
     payload = {
         "current_sem": data.get("current_sem"),
-        "passed_courses": [_UI_TO_SOLVER_ELECTIVE.get(c, c) for c in raw_passed],
-        "failed_courses": [_UI_TO_SOLVER_ELECTIVE.get(c, c) for c in raw_failed],
+        "passed_courses": _to_solver_pass_fail_codes(raw_passed, _cv_keys),
+        "failed_courses": _to_solver_pass_fail_codes(raw_failed, _cv_keys),
         "with_petition": data.get("with_petition", False),
     }
 
@@ -2647,6 +2710,13 @@ def generate_pos_api(request):
             for _mode, opt in pos_options.items():
                 if isinstance(opt, dict) and opt.get("pos") is not None:
                     _translate_pos_courses(opt.get("pos"))
+        warn_pos = result.get("pos")
+        if isinstance(pos_options, dict):
+            default_mode = result.get("default_petition_mode") or "no_petition"
+            opt = pos_options.get(default_mode)
+            if isinstance(opt, dict) and opt.get("pos"):
+                warn_pos = opt.get("pos")
+        result["low_units_warning"] = low_units_warning_for_solver_pos(warn_pos)
 
     # If called from the authenticated app UI, cache the last generated solver output in session
     # so we can generate a PDF from it on demand.
@@ -2702,7 +2772,12 @@ def set_generated_pos_option(request):
     pos = opt.get("pos") or []
     request.session["last_generated_pos"] = pos
     request.session["last_selected_petition_mode"] = mode
-    return JsonResponse({"ok": True, "mode": mode, "pos": pos})
+    return JsonResponse({
+        "ok": True,
+        "mode": mode,
+        "pos": pos,
+        "low_units_warning": low_units_warning_for_solver_pos(pos),
+    })
 
 
 def _rebuild_tuned_pos_and_forced_map(base_pos, pos_overrides, preview_boundary_section_index):
@@ -2789,6 +2864,7 @@ def _rebuild_tuned_pos_and_forced_map(base_pos, pos_overrides, preview_boundary_
         modified_any = True
 
     # Build forced_semester_map for all non-passed courses in tuned schedule.
+    _cv_keys = set(course_lookup.keys())
     forced_semester_map = {}
     for sem in updated_pos:
         try:
@@ -2802,7 +2878,7 @@ def _rebuild_tuned_pos_and_forced_map(base_pos, pos_overrides, preview_boundary_
             code_s = str(code).strip()
             if not code_s:
                 continue
-            solver_code = _UI_TO_SOLVER_ELECTIVE.get(code_s, code_s)
+            solver_code = _to_solver_course_code(code_s, _cv_keys)
             forced_semester_map[solver_code] = solver_sem_idx
 
     return updated_pos, forced_semester_map, modified_any
@@ -2902,8 +2978,10 @@ def feasible_move_marks(request):
         preview_boundary_section_index=preview_boundary_section_index,
     )
 
+    _cv_keys = _curriculum_course_keys_for_request(request)
+
     def _ui_to_solver_code(code_ui: str) -> str:
-        return _UI_TO_SOLVER_ELECTIVE.get(code_ui, code_ui)
+        return _to_solver_course_code(code_ui, _cv_keys)
 
     # Build semester/course maps from the tuned schedule currently shown in the DOM.
     sem_by_idx_tuned = {}
@@ -3264,8 +3342,9 @@ def feasible_add_courses_for_section(request):
     if not isinstance(raw_failed, list):
         raw_failed = []
 
-    passed_courses_solver = [_UI_TO_SOLVER_ELECTIVE.get(str(c).strip(), str(c).strip()) for c in raw_passed if str(c).strip()]
-    failed_courses_solver = [_UI_TO_SOLVER_ELECTIVE.get(str(c).strip(), str(c).strip()) for c in raw_failed if str(c).strip()]
+    _cv_keys = _curriculum_course_keys_for_request(request)
+    passed_courses_solver = _to_solver_pass_fail_codes(raw_passed, _cv_keys)
+    failed_courses_solver = _to_solver_pass_fail_codes(raw_failed, _cv_keys)
 
     try:
         current_sem = int(solver_payload.get("current_sem"))
@@ -3320,7 +3399,7 @@ def feasible_add_courses_for_section(request):
                 feasible_courses.add(code_ui_s)
             continue
 
-        solver_code = _UI_TO_SOLVER_ELECTIVE.get(code_ui_s, code_ui_s)
+        solver_code = _to_solver_course_code(code_ui_s, _cv_keys)
 
         cache_key = (bool(with_petition), forced_solver_sem, _base_payload_fp, code_ui_s)
         cached = _feasible_add_courses_cache_get(cache_key)
@@ -3500,9 +3579,11 @@ def validate_tuned_pos(request):
 
     metadata_loaded = bool(solver_courses)
 
+    _cv_keys_diag = set(solver_courses.keys()) if solver_courses else set()
+
     # Solver-semester map keyed by solver course codes (not UI codes)
     def _ui_to_solver_code(code_ui: str) -> str:
-        return _UI_TO_SOLVER_ELECTIVE.get(code_ui, code_ui)
+        return _to_solver_course_code(code_ui, _cv_keys_diag)
 
     tuned_sem_map_solver = {
         _ui_to_solver_code(code_ui): si for code_ui, si in tuned_sem_map_ui.items()
@@ -3979,6 +4060,7 @@ def _snapshot_for_pos_history(request, student):
         "preview_boundary_section_index": boundary,
         "irreg_start_index": irreg_si,
         "irreg_with_petition": request.session.get("irreg_with_petition", "yes"),
+        "pdf_header": _pdf_header_for_student(student),
     }
 
 
@@ -4102,6 +4184,9 @@ def pos_preview(request):
     prog_options = signatory_options.get(SignatoryOption.ROLE_PROGRAM_CHAIR, [])
     selected_signatories["department_chair"] = dep_options[0]["name"] if dep_options else ""
     selected_signatories["program_chair"] = prog_options[0]["name"] if prog_options else ""
+    low_units_warning = (
+        low_units_warning_for_solver_pos(generated_pos) if has_generated_preview else None
+    )
     context = {
         'student': student,
         'curriculum_display_title': gctx.get("display_title") or "",
@@ -4112,6 +4197,8 @@ def pos_preview(request):
         'signatory_options': signatory_options,
         'selected_signatories': selected_signatories,
         'has_generated_preview': has_generated_preview,
+        'low_units_warning': low_units_warning,
+        'low_units_warning_message': LOW_UNITS_WARNING_MESSAGE,
     }
     return render(request, "pos/preview_pos.html", context)
 
@@ -4176,6 +4263,7 @@ def download_pos_pdf(request):
         academic_year_safe = (academic_year or '').replace("–", "-").replace(" ", "_")
         sr_code_safe = student.sr_code or 'SR'
         requested_name = f"{academic_year_safe} {sr_code_safe}"
+    pdf_header = _pdf_header_for_student(student)
     pdf_bytes = build_preview_pos_pdf(
         student_name=student.full_name or '',
         sr_code=student.sr_code or '',
@@ -4187,6 +4275,9 @@ def download_pos_pdf(request):
         adviser_name=signatories["adviser"],
         department_chair_name=signatories["department_chair"],
         program_chair_name=signatories["program_chair"],
+        pdf_department_label=pdf_header["department"],
+        pdf_program_curriculum=pdf_header["program_curriculum"],
+        pdf_program_shortcut=pdf_header["program_shortcut"],
     )
     filename = f"{requested_name}.pdf"
     response = HttpResponse(pdf_bytes, content_type='application/pdf')
@@ -4238,7 +4329,6 @@ def save_preview_pos_to_history(request):
         snap["preview_ui_sections"] = preview_ui_sections
     snap["pos_file_name"] = pos_file_name
     snap["signatories"] = signatories
-
     last = POSRecord.objects.filter(student=student).order_by('-generated_at').first()
     if last is not None and last.preview_snapshot == snap:
         return JsonResponse({"ok": True, "saved": False, "record_id": last.pk, "pos_file_name": pos_file_name})
@@ -4468,6 +4558,7 @@ def download_pos_pdf_record(request, record_id):
         else:
             preview_sections = _preview_sections_from_curriculum(grades_by_section)
         from .pos_pdf import build_preview_pos_pdf
+        pdf_header = _pdf_header_for_student(student, snapshot=snap)
         pdf_bytes = build_preview_pos_pdf(
             student_name=student.full_name or '',
             sr_code=student.sr_code or '',
@@ -4479,6 +4570,9 @@ def download_pos_pdf_record(request, record_id):
             adviser_name=signatories["adviser"],
             department_chair_name=signatories["department_chair"],
             program_chair_name=signatories["program_chair"],
+            pdf_department_label=pdf_header["department"],
+            pdf_program_curriculum=pdf_header["program_curriculum"],
+            pdf_program_shortcut=pdf_header["program_shortcut"],
         )
     else:
         snapshot = getattr(record, 'grades_snapshot', None) or {}

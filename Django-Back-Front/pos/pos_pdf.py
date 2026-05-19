@@ -5,6 +5,13 @@ Design matches template: BSU logo, header with specified fonts, student info tab
 import os
 from io import BytesIO
 from datetime import date
+from xml.sax.saxutils import escape as xml_escape
+
+from .pdf_header_fields import (
+    DEFAULT_PDF_DEPARTMENT_LABEL,
+    DEFAULT_PDF_PROGRAM_CURRICULUM,
+    DEFAULT_PDF_PROGRAM_SHORTCUT,
+)
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import legal
@@ -276,7 +283,11 @@ def _logo_image(logo_path, max_width=1.1 * inch, max_height=1.1 * inch):
         return None
 
 
-def _header_flowables(logo_path=None):
+def _header_flowables(
+    logo_path=None,
+    program_curriculum=None,
+    program_shortcut=None,
+):
     """
     BSU header: logo (if path given) + centered text, or centered text only.
     - Republic of the Philippines: Times New Roman 12
@@ -367,15 +378,23 @@ def _header_flowables(logo_path=None):
         spaceAfter=4,
     )
 
+    curriculum_title = (program_curriculum or DEFAULT_PDF_PROGRAM_CURRICULUM).strip()
+    shortcut_label = (program_shortcut or DEFAULT_PDF_PROGRAM_SHORTCUT).strip()
     return [
-        Paragraph("CURRICULUM<br/>BACHELOR OF SCIENCE IN COMPUTER ENGINEERING", p_curriculum_bold),
+        Paragraph(
+            "CURRICULUM<br/>" + xml_escape(curriculum_title),
+            p_curriculum_bold,
+        ),
         Paragraph(
             "Reference CMOs: CMO No. 87 s. 2017, CMO No. 4 s. 2018 and CMO No. 20,<br/>"
             "s. 2013, CMO 39, s. 2021, CMO 40, s. 2021",
             p_curriculum,
         ),
         Spacer(1, 0.08 * inch),
-        Paragraph("BS COMPUTER ENGINEERING<br/>PROGRAM OF STUDY<br/>EVALUATION", p_curriculum_bold),
+        Paragraph(
+            xml_escape(shortcut_label) + "<br/>PROGRAM OF STUDY<br/>EVALUATION",
+            p_curriculum_bold,
+        ),
         Spacer(1, 0.12 * inch),
     ]
 
@@ -410,7 +429,7 @@ def _footer_canvas(canvas, doc):
     canvas.restoreState()
 
 
-def _page_header_canvas(canvas, logo_path):
+def _page_header_canvas(canvas, logo_path, department_label=None):
     """Draw repeating header at top of every page (keeps original colors, incl. blue email)."""
     canvas.saveState()
     left = 0.5 * inch
@@ -458,7 +477,9 @@ def _page_header_canvas(canvas, logo_path):
     y -= 14
     canvas.setFont("Times-Bold", 12)
     canvas.setFillColor(colors.black)
-    canvas.drawString(left, y, "College of Engineering — Department of Electrical Engineering")
+    dept_line = (department_label or DEFAULT_PDF_DEPARTMENT_LABEL).strip()
+    dept_line = " ".join(dept_line.splitlines())
+    canvas.drawString(left, y, dept_line or DEFAULT_PDF_DEPARTMENT_LABEL)
     canvas.restoreState()
 
 
@@ -1110,6 +1131,9 @@ def build_preview_pos_pdf(
     adviser_name="Engr. LAILA C. HERNANDEZ",
     department_chair_name="Engr. RICMART V. GARBIN",
     program_chair_name="Engr. MARK JOHN FEL T. RAYOS",
+    pdf_department_label=None,
+    pdf_program_curriculum=None,
+    pdf_program_shortcut=None,
 ):
     """
     Build POS PDF that mirrors the Preview page:
@@ -1121,6 +1145,10 @@ def build_preview_pos_pdf(
     if eval_date is None:
         eval_date = date.today()
     date_str = eval_date.strftime("%B %d, %Y")
+
+    pdf_department = (pdf_department_label or DEFAULT_PDF_DEPARTMENT_LABEL).strip()
+    pdf_curriculum = (pdf_program_curriculum or DEFAULT_PDF_PROGRAM_CURRICULUM).strip()
+    pdf_shortcut = (pdf_program_shortcut or DEFAULT_PDF_PROGRAM_SHORTCUT).strip()
 
     buffer = BytesIO()
     doc = SimpleDocTemplate(
@@ -1192,7 +1220,13 @@ def build_preview_pos_pdf(
     )
 
     story = []
-    story.extend(_header_flowables(logo_path))
+    story.extend(
+        _header_flowables(
+            logo_path,
+            program_curriculum=pdf_curriculum,
+            program_shortcut=pdf_shortcut,
+        )
+    )
 
     info_cols = _info_table_col_widths()
     info_data = [
@@ -1646,7 +1680,7 @@ def build_preview_pos_pdf(
     story.append(KeepTogether([Spacer(1, 0.4 * inch), sign_table]))
 
     def page_canvas(canvas, doc):
-        _page_header_canvas(canvas, logo_path)
+        _page_header_canvas(canvas, logo_path, department_label=pdf_department)
         _footer_canvas(canvas, doc)
 
     doc.build(story, onFirstPage=page_canvas, onLaterPages=page_canvas)

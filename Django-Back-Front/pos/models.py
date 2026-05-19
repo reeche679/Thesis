@@ -8,6 +8,12 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 
+from .pdf_header_fields import (
+    DEFAULT_PDF_DEPARTMENT_LABEL,
+    DEFAULT_PDF_PROGRAM_CURRICULUM,
+    DEFAULT_PDF_PROGRAM_SHORTCUT,
+)
+
 
 class Program(models.Model):
     """
@@ -21,6 +27,21 @@ class Program(models.Model):
     )
     name = models.CharField(max_length=200)
     description = models.TextField(blank=True)
+    pdf_department_label = models.CharField(
+        max_length=300,
+        default=DEFAULT_PDF_DEPARTMENT_LABEL,
+        help_text="Left-aligned line under the BSU letterhead on every PDF page.",
+    )
+    pdf_program_curriculum = models.CharField(
+        max_length=300,
+        default=DEFAULT_PDF_PROGRAM_CURRICULUM,
+        help_text="Bold curriculum title on the PDF (below “CURRICULUM”).",
+    )
+    pdf_program_shortcut = models.CharField(
+        max_length=120,
+        default=DEFAULT_PDF_PROGRAM_SHORTCUT,
+        help_text="Short program label above “PROGRAM OF STUDY EVALUATION” on the PDF.",
+    )
     is_active = models.BooleanField(default=True)
     curriculum_managers = models.ManyToManyField(
         settings.AUTH_USER_MODEL,

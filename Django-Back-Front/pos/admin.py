@@ -74,7 +74,28 @@ class CurriculumVersionInline(admin.TabularInline):
 @admin.register(Program)
 class ProgramAdmin(admin.ModelAdmin):
     form = ProgramAdminForm
-    list_display = ("slug", "name", "is_active", "default_curriculum_version", "updated_at")
+    list_display = (
+        "slug",
+        "name",
+        "pdf_program_shortcut",
+        "is_active",
+        "default_curriculum_version",
+        "updated_at",
+    )
+    fieldsets = (
+        (None, {"fields": ("slug", "name", "description", "is_active")}),
+        (
+            "PDF header defaults",
+            {
+                "fields": (
+                    "pdf_department_label",
+                    "pdf_program_curriculum",
+                    "pdf_program_shortcut",
+                ),
+            },
+        ),
+        ("Curriculum", {"fields": ("default_curriculum_version", "curriculum_managers")}),
+    )
     list_filter = ("is_active",)
     search_fields = ("slug", "name")
     filter_horizontal = ("curriculum_managers",)

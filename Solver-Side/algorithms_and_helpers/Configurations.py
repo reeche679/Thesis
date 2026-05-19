@@ -65,8 +65,16 @@ def add_term_type_aligned_offering_constraints(
     failed_courses=None,
     **kwargs,
 ):
-    """Baseline modulo-3 offering rule (Rigid/Flexible/Bottleneck + petition)."""
-    failed_set = frozenset(failed_courses) if failed_courses is not None else frozenset()
+    """
+    Modulo-3 offering rule (Rigid/Flexible/Bottleneck + petition).
+
+    Policy:
+    - Rigid:       always locked to orig_sem term-type band, regardless of petition or
+                   whether the course was failed.  Retakes must stay in the same band.
+    - Flexible:    any 1st/2nd-sem slot (or summer if orig is summer); petition has no
+                   additional effect on Flexible.
+    - Bottleneck:  with_petition → any term; no petition → orig term-type band only.
+    """
     ct = kwargs.get("constraint_trace")
     tc = kwargs.get("trace_course_codes") or frozenset()
     for c, info in courses.items():
@@ -76,18 +84,15 @@ def add_term_type_aligned_offering_constraints(
         cat = normalize_offering_category_value(info)
         valid_sems = []
         for s in range(current_sem, max_semester + 1):
-            sem_type, orig_type = s % 3, orig % 3  # 1: 1st, 2: 2nd, 0: Summer
-            if cat == "Bottleneck":
-                # Bottleneck rules apply only with petition (failed or not).
-                # No petition: same term-type grid as Rigid.
-                if with_petition:
+            sem_type, orig_type = s % 3, orig % 3  # 1: 1st sem, 2: 2nd sem, 0: Midterm/Summer
+            if cat == "Rigid":
+                # Rigid stays in its orig term-type band — failed retakes included.
+                if sem_type == orig_type:
                     valid_sems.append(s)
-                elif sem_type == orig_type:
+            elif cat == "Bottleneck":
+                # Petition unlocks Bottleneck to any term; no petition = same grid as Rigid.
+                if with_petition or sem_type == orig_type:
                     valid_sems.append(s)
-            elif c in failed_set:
-                valid_sems.append(s)
-            elif cat == "Rigid" and sem_type == orig_type:
-                valid_sems.append(s)
             elif cat == "Flexible" and (
                 (orig_type in [1, 2] and sem_type in [1, 2])
                 or (orig_type == 0 and sem_type == 0)
@@ -176,18 +181,17 @@ def add_capped_petition_trio_offering_constraints(
         valid_sems = []
         for s in range(current_sem, cap_sem + 1):
             sem_type, orig_type = s % 3, orig % 3  # 1: 1st, 2: 2nd, 0: Summer
-            if c in failed_set and cat in ("Rigid", "Flexible"):
-                valid_sems.append(s)
-            elif cat == "Rigid" and sem_type == orig_type:
-                valid_sems.append(s)
+            if cat == "Rigid":
+                # Rigid always locked to orig term-type band (retakes included).
+                if sem_type == orig_type:
+                    valid_sems.append(s)
             elif cat == "Flexible" and (
                 (orig_type in [1, 2] and sem_type in [1, 2])
                 or (orig_type == 0 and sem_type == 0)
             ):
                 valid_sems.append(s)
             elif cat == "Bottleneck":
-                # For this configuration, treat bottlenecks as always petition-enabled:
-                # allow them in any regular term from current_sem to cap_sem.
+                # config3 treats Bottleneck as always petition-enabled.
                 valid_sems.append(s)
         if valid_sems:
             _offering_constraint_trace(

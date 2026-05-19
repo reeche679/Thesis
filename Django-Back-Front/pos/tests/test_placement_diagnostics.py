@@ -309,18 +309,28 @@ class BottleneckPetitionTests(SimpleTestCase):
         finally:
             m.CONFIGURATION = old_cfg
 
-    def test_failed_rigid_flexible_get_all_terms_no_petition(self) -> None:
-        """Failed Rigid/Flexible (not Bottleneck) can still retake in any future term without petition."""
+    def test_failed_rigid_stays_in_orig_term_type_band(self) -> None:
+        """
+        Failed Rigid courses must still retake in the same term-type band as orig_sem,
+        even without petition and even when failed.
+        With petition does NOT change Rigid — only Bottleneck gets extra freedom from petition.
+        """
         _valid, m = self._load_valid_semesters()
         old_cfg = m.CONFIGURATION
         try:
             m.CONFIGURATION = "config2_weighted"
-            for cat in ("Rigid", "Flexible"):
-                info = {"units": 3, "orig_sem": 1, "category": cat}
-                sems = _valid("X", info, 2, with_petition=False, failed_courses=["X"])
-                all_sems = list(range(2, m.u.MAX_SEMESTER + 1))
-                self.assertEqual(sems, all_sems,
-                                 f"Failed {cat} course should be placeable in any future semester")
+            # orig_sem=2 → term-type band = 2nd semester (s % 3 == 2)
+            info = {"units": 3, "orig_sem": 2, "category": "Rigid"}
+            for wp in (False, True):
+                sems = _valid("ENGG 402", info, 3, with_petition=wp, failed_courses=["ENGG 402"])
+                for s in sems:
+                    self.assertEqual(
+                        s % 3, 2,
+                        f"Failed Rigid course must stay in 2nd-sem band "
+                        f"(s={s}, s%3={s%3}, with_petition={wp})",
+                    )
+                # Must still have valid slots (the band is not empty from current_sem=3 onward)
+                self.assertTrue(len(sems) > 0, "Rigid failed course must have at least one valid semester")
         finally:
             m.CONFIGURATION = old_cfg
 
@@ -337,3 +347,22 @@ class BottleneckPetitionTests(SimpleTestCase):
                 self.assertEqual(s % 3, 1 % 3)
         finally:
             m.CONFIGURATION = old_cfg
+
+
+class ElectiveCodeMappingTests(SimpleTestCase):
+    """CpEE 401 (UI) vs Elective Course 1 (static solver) must match the active bundle."""
+
+    def test_db_bundle_keeps_cpee_passed_code(self) -> None:
+        from pos.views import _to_solver_pass_fail_codes
+
+        keys = {"CpEE 401", "CpEE 402", "MATH 101"}
+        passed = _to_solver_pass_fail_codes(["CpEE 401"], keys)
+        self.assertEqual(passed, ["CpEE 401"])
+        self.assertNotIn("Elective Course 1", passed)
+
+    def test_static_bundle_maps_ui_elective_to_solver_name(self) -> None:
+        from pos.views import _to_solver_pass_fail_codes
+
+        keys = {"Elective Course 1", "Elective Course 2", "MATH 101"}
+        passed = _to_solver_pass_fail_codes(["CpEE 401"], keys)
+        self.assertEqual(passed, ["Elective Course 1"])

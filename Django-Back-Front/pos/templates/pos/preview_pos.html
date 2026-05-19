@@ -595,6 +595,8 @@
     </div>
 
     <div id="pos-validation-alert" class="alert alert-danger mb-3" style="display:none;"></div>
+    <div id="pos-low-units-warning" class="alert alert-warning py-2 mb-3 small" role="alert"{% if not low_units_warning %} style="display:none;"{% endif %}>{% if low_units_warning %}{{ low_units_warning }}{% endif %}</div>
+    <div id="pos-repeat-fail-warning" class="alert alert-warning py-2 mb-3 small" role="alert" style="display:none;"></div>
     <div id="preview-edit-success-toast" role="status" aria-live="polite">Changes applied successfully.</div>
 
     <div id="pos-preview-server">
@@ -1678,6 +1680,127 @@
             if (isNaN(si) || si <= 0) return '';
             var yearNum = Math.floor((si - 1) / 3) + 1;
             return yearOrdinalWord(yearNum) + ' Year - ' + termLabelFromSolverIndex(si);
+        }
+        var LOW_UNITS_WARNING_MSG = "{{ low_units_warning_message|escapejs }}";
+        var LOW_UNITS_THRESHOLD = 15;
+        var OJT_COURSE_PATTERN = /on[-\s]?the[-\s]?job\s+training|\bojt\b|internship/i;
+        function courseTextIsOjt(code, title) {
+            var text = String(code || '') + ' ' + String(title || '');
+            text = text.trim();
+            return text !== '' && OJT_COURSE_PATTERN.test(text);
+        }
+        function semesterHasOjtCourse(courses) {
+            if (!Array.isArray(courses)) return false;
+            for (var j = 0; j < courses.length; j++) {
+                var c = courses[j];
+                if (c && courseTextIsOjt(c.code, c.title)) return true;
+            }
+            return false;
+        }
+        function lowUnitsWarningForSolverPos(posList) {
+            if (!Array.isArray(posList)) return null;
+            for (var i = 0; i < posList.length; i++) {
+                var sem = posList[i];
+                if (!sem || typeof sem !== 'object') continue;
+                var si = parseInt(sem.semester_index, 10);
+                if (isNaN(si) || si < 1) continue;
+                if (si % 3 === 0) continue;
+                var courses = sem.courses || [];
+                var hasCourse = false;
+                if (Array.isArray(courses)) {
+                    for (var j = 0; j < courses.length; j++) {
+                        var c = courses[j];
+                        if (c && String(c.code || '').trim() !== '') {
+                            hasCourse = true;
+                            break;
+                        }
+                    }
+                }
+                if (!hasCourse) continue;
+                if (semesterHasOjtCourse(courses)) continue;
+                var units = parseFloat(sem.total_units);
+                if (isNaN(units)) units = 0;
+                if (units < LOW_UNITS_THRESHOLD) return LOW_UNITS_WARNING_MSG;
+            }
+            return null;
+        }
+        function updateLowUnitsWarning(posList) {
+            var el = document.getElementById('pos-low-units-warning');
+            if (!el) return;
+            var msg = lowUnitsWarningForSolverPos(posList);
+            if (msg) {
+                el.textContent = msg;
+                el.style.display = '';
+            } else {
+                el.textContent = '';
+                el.style.display = 'none';
+            }
+        }
+        var REPEAT_FAIL_WARNING_THRESHOLD = 3;
+        var REPEAT_FAIL_WARNING_GENERIC = (
+            "One or more courses have been failed three or more times. "
+            + "Please consult your academic adviser."
+        );
+        function isExplicitFailingGrade(grade) {
+            if (grade == null || grade === '') return false;
+            var s = String(grade).trim();
+            if (!s) return false;
+            if (s === '5' || s === '5.0' || s === '5.00') return true;
+            var f = parseFloat(s);
+            return !isNaN(f) && f >= 5;
+        }
+        function explicitFailCountByCourseFromGrades(gradesBySection) {
+            var counts = {};
+            if (!gradesBySection || typeof gradesBySection !== 'object') return counts;
+            Object.keys(gradesBySection).forEach(function(sec) {
+                var sg = gradesBySection[sec];
+                if (!sg || typeof sg !== 'object') return;
+                Object.keys(sg).forEach(function(courseCode) {
+                    if (!courseCode) return;
+                    if (isExplicitFailingGrade(sg[courseCode])) {
+                        counts[courseCode] = (counts[courseCode] || 0) + 1;
+                    }
+                });
+            });
+            return counts;
+        }
+        function repeatFailWarningMessage(gradesBySection) {
+            var counts = explicitFailCountByCourseFromGrades(gradesBySection);
+            var codes = Object.keys(counts).filter(function(c) {
+                return counts[c] >= REPEAT_FAIL_WARNING_THRESHOLD;
+            });
+            if (!codes.length) return null;
+            codes.sort(function(a, b) {
+                var d = counts[b] - counts[a];
+                return d !== 0 ? d : a.localeCompare(b);
+            });
+            if (codes.length === 1) {
+                var code = codes[0];
+                var title = (courseLookup && courseLookup[code] && courseLookup[code].title)
+                    ? String(courseLookup[code].title).trim() : '';
+                var label = title ? (code + ' (' + title + ')') : code;
+                return 'You have failed ' + label + ' ' + counts[code]
+                    + ' times. Please consult your academic adviser.';
+            }
+            return REPEAT_FAIL_WARNING_GENERIC;
+        }
+        function updateRepeatFailWarning(gradesBySection) {
+            var el = document.getElementById('pos-repeat-fail-warning');
+            if (!el) return;
+            var msg = repeatFailWarningMessage(gradesBySection);
+            if (msg) {
+                el.textContent = msg;
+                el.style.display = '';
+            } else {
+                el.textContent = '';
+                el.style.display = 'none';
+            }
+        }
+        function hideRepeatFailWarning() {
+            var el = document.getElementById('pos-repeat-fail-warning');
+            if (!el) return;
+            el.textContent = '';
+            el.style.display = 'none';
         }
         var SEM_LABELS = [];
         for (var _si = 1; _si <= 60; _si++) {
@@ -3020,6 +3143,7 @@
             var currentSemRaw = localStorage.getItem('posCurrentSemIndex');
             var currentUiIndex = currentSemRaw !== null && currentSemRaw !== '' ? parseInt(currentSemRaw, 10) : null;
             if (currentUiIndex === null || isNaN(currentUiIndex)) {
+                hideRepeatFailWarning();
                 return;
             }
             // Solver is 1-based; everything after currentSemSolver is "future"
@@ -3165,6 +3289,8 @@
                             initPosSortables();
                         }
                     }
+                    updateLowUnitsWarning(posList);
+                    updateRepeatFailWarning(gradesBySection);
             }
 
             // Backward compatibility: if solver response is old-format, render res.pos.
@@ -3233,7 +3359,17 @@
                         }).then(function(r) { return r.json(); })
                           .then(function(data) {
                               if (!data || !data.ok) return;
-                              renderSolverPos(data.pos || []);
+                              var pos = data.pos || [];
+                              renderSolverPos(pos);
+                              if (data.low_units_warning) {
+                                  var warnEl = document.getElementById('pos-low-units-warning');
+                                  if (warnEl) {
+                                      warnEl.textContent = data.low_units_warning;
+                                      warnEl.style.display = '';
+                                  }
+                              } else {
+                                  updateLowUnitsWarning(pos);
+                              }
                           }).catch(function() {});
                     }
                     noRadio.addEventListener('change', onModeChange);

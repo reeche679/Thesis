@@ -920,17 +920,15 @@ def _valid_semesters_for_course(code, info, current_sem, with_petition: bool, fa
     valid = []
     for s in range(current_sem, max_sem + 1):
         sem_type, orig_type = s % 3, orig % 3
-        if cat == "Bottleneck":
+        if cat == "Rigid":
+            # Rigid is always locked to its orig term-type band (failed retakes included).
+            if sem_type == orig_type:
+                valid.append(s)
+        elif cat == "Bottleneck":
             if CONFIGURATION == "config3_weightedtriocap":
                 valid.append(s)
-            elif with_petition:
+            elif with_petition or sem_type == orig_type:
                 valid.append(s)
-            elif sem_type == orig_type:
-                valid.append(s)
-        elif code in failed_set:
-            valid.append(s)
-        elif cat == "Rigid" and sem_type == orig_type:
-            valid.append(s)
         elif cat == "Flexible" and (
             (orig_type in [1, 2] and sem_type in [1, 2]) or (orig_type == 0 and sem_type == 0)
         ):

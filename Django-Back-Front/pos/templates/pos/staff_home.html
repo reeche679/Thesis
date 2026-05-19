@@ -109,6 +109,26 @@
                        placeholder="Short note for staff">
             </div>
             <div class="full-width">
+                <div class="small fw-semibold mb-1">PDF header defaults <span class="text-muted fw-normal">(optional)</span></div>
+                <div class="row g-2">
+                    <div class="col-12">
+                        <label for="program-pdf-department" class="form-label small mb-0">Department</label>
+                        <input id="program-pdf-department" type="text" class="form-control form-control-sm" maxlength="300"
+                               placeholder="College of Engineering — Department of Electrical Engineering">
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label for="program-pdf-curriculum" class="form-label small mb-0">Program Curriculum</label>
+                        <input id="program-pdf-curriculum" type="text" class="form-control form-control-sm" maxlength="300"
+                               placeholder="BACHELOR OF SCIENCE IN COMPUTER ENGINEERING">
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label for="program-pdf-shortcut" class="form-label small mb-0">Shortcut</label>
+                        <input id="program-pdf-shortcut" type="text" class="form-control form-control-sm" maxlength="120"
+                               placeholder="BS COMPUTER ENGINEERING">
+                    </div>
+                </div>
+            </div>
+            <div class="full-width">
                 <button type="submit" class="btn btn-staff-primary btn-sm">
                     <i class="bi bi-plus-lg me-1"></i>Add program
                 </button>
@@ -222,6 +242,44 @@
         </div>
     </div>
 
+
+    <div class="modal fade" id="program-edit-modal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h6 class="modal-title mb-0">Edit program</h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="program-edit-name" class="form-label small fw-semibold mb-1">Program name</label>
+                        <input id="program-edit-name" type="text" class="form-control form-control-sm" maxlength="200">
+                    </div>
+                    <p class="small fw-semibold text-uppercase text-muted mb-2">PDF header (shown on downloaded POS)</p>
+                    <div class="mb-3">
+                        <label for="program-edit-pdf-department" class="form-label small fw-semibold mb-1">Department</label>
+                        <input id="program-edit-pdf-department" type="text" class="form-control form-control-sm" maxlength="300"
+                               placeholder="e.g. College of Engineering — Department of Electrical Engineering">
+                    </div>
+                    <div class="mb-3">
+                        <label for="program-edit-pdf-curriculum" class="form-label small fw-semibold mb-1">Program Curriculum</label>
+                        <input id="program-edit-pdf-curriculum" type="text" class="form-control form-control-sm" maxlength="300"
+                               placeholder="e.g. BACHELOR OF SCIENCE IN COMPUTER ENGINEERING">
+                    </div>
+                    <div class="mb-0">
+                        <label for="program-edit-pdf-shortcut" class="form-label small fw-semibold mb-1">Shortcut</label>
+                        <input id="program-edit-pdf-shortcut" type="text" class="form-control form-control-sm" maxlength="120"
+                               placeholder="e.g. BS COMPUTER ENGINEERING">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-staff-primary btn-sm" id="program-edit-save-btn">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
 </div>{# /staff-home-outer #}
 </div>
 {% endblock content %}
@@ -248,6 +306,45 @@ const programAddForm = document.getElementById('program-add-form');
 
 let allPrograms = [];
 let approvedVersionsByProgram = {};  // keyed by program_id (or '' for none)
+
+let programEditId = null;
+let programEditModal = null;
+
+function getProgramEditModal() {
+    if (programEditModal) return programEditModal;
+    const el = document.getElementById('program-edit-modal');
+    if (!el) return null;
+    if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+        programEditModal = bootstrap.Modal.getOrCreateInstance(el);
+    }
+    return programEditModal;
+}
+
+function openProgramEditModal(id) {
+    const prog = allPrograms.find(function (p) { return String(p.id) === String(id); });
+    if (!prog) {
+        programsStatusEl.innerHTML = '<span class="text-danger">Program not found. Refresh the page.</span>';
+        return;
+    }
+    programEditId = String(id);
+    const nameEl = document.getElementById('program-edit-name');
+    const deptEl = document.getElementById('program-edit-pdf-department');
+    const currEl = document.getElementById('program-edit-pdf-curriculum');
+    const shortEl = document.getElementById('program-edit-pdf-shortcut');
+    if (!nameEl || !deptEl || !currEl || !shortEl) {
+        programsStatusEl.innerHTML = '<span class="text-danger">Edit form is unavailable. Refresh the page.</span>';
+        return;
+    }
+    nameEl.value = prog.name || '';
+    deptEl.value = prog.pdf_department_label || '';
+    currEl.value = prog.pdf_program_curriculum || '';
+    shortEl.value = prog.pdf_program_shortcut || '';
+    const modal = getProgramEditModal();
+    if (modal) {
+        modal.show();
+    }
+}
+
 let debounceTimer;
 
 function getCookie(name) {
@@ -298,42 +395,8 @@ function renderPrograms(programs) {
             + '</tr>';
     }).join('');
     programsTbody.querySelectorAll('.btn-edit-program').forEach(function (btn) {
-        btn.addEventListener('click', async function () {
-            const id = btn.getAttribute('data-id');
-            const currentName = btn.getAttribute('data-name') || '';
-            const newName = window.prompt('Program name:', currentName);
-            if (newName === null) return;
-            const trimmed = newName.trim();
-            if (!trimmed) {
-                programsStatusEl.innerHTML = '<span class="text-danger">Program name cannot be empty.</span>';
-                return;
-            }
-            if (trimmed === currentName) return;
-            btn.disabled = true;
-            programsStatusEl.textContent = 'Saving…';
-            try {
-                const r = await fetch(programApiBase + id + '/', {
-                    method: 'PATCH',
-                    credentials: 'same-origin',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': getCookie('csrftoken'),
-                    },
-                    body: JSON.stringify({ name: trimmed }),
-                });
-                const data = await r.json().catch(function () { return {}; });
-                if (!r.ok || !data.ok) {
-                    programsStatusEl.innerHTML = '<span class="text-danger">' + escHtml(data.error || 'Update failed') + '</span>';
-                    btn.disabled = false;
-                    return;
-                }
-                programsStatusEl.innerHTML = '<span class="text-success">Updated program name.</span>';
-                await loadPrograms();
-                loadStudents();
-            } catch (e) {
-                programsStatusEl.innerHTML = '<span class="text-danger">' + escHtml(String(e)) + '</span>';
-                btn.disabled = false;
-            }
+        btn.addEventListener('click', function () {
+            openProgramEditModal(btn.getAttribute('data-id'));
         });
     });
     programsTbody.querySelectorAll('.btn-delete-program').forEach(function (btn) {
@@ -400,6 +463,52 @@ async function loadPrograms() {
     }
 }
 
+
+const programEditSaveBtn = document.getElementById('program-edit-save-btn');
+if (programEditSaveBtn && !programEditSaveBtn.dataset.bound) {
+    programEditSaveBtn.dataset.bound = '1';
+    programEditSaveBtn.addEventListener('click', async function () {
+        if (!programEditId) return;
+        const trimmed = (document.getElementById('program-edit-name').value || '').trim();
+        if (!trimmed) {
+            programsStatusEl.innerHTML = '<span class="text-danger">Program name cannot be empty.</span>';
+            return;
+        }
+        programsStatusEl.textContent = 'Saving…';
+        programEditSaveBtn.disabled = true;
+        try {
+            const r = await fetch(programApiBase + programEditId + '/', {
+                method: 'PATCH',
+                credentials: 'same-origin',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCookie('csrftoken'),
+                },
+                body: JSON.stringify({
+                    name: trimmed,
+                    pdf_department_label: (document.getElementById('program-edit-pdf-department').value || '').trim(),
+                    pdf_program_curriculum: (document.getElementById('program-edit-pdf-curriculum').value || '').trim(),
+                    pdf_program_shortcut: (document.getElementById('program-edit-pdf-shortcut').value || '').trim(),
+                }),
+            });
+            const data = await r.json().catch(function () { return {}; });
+            if (!r.ok || !data.ok) {
+                programsStatusEl.innerHTML = '<span class="text-danger">' + escHtml(data.error || 'Update failed') + '</span>';
+                programEditSaveBtn.disabled = false;
+                return;
+            }
+            programsStatusEl.innerHTML = '<span class="text-success">Updated program.</span>';
+            const modal = getProgramEditModal();
+            if (modal) modal.hide();
+            await loadPrograms();
+            loadStudents();
+        } catch (e) {
+            programsStatusEl.innerHTML = '<span class="text-danger">' + escHtml(String(e)) + '</span>';
+        }
+        programEditSaveBtn.disabled = false;
+    });
+}
+
 if (programAddForm) {
     programAddForm.addEventListener('submit', async function (e) {
         e.preventDefault();
@@ -416,7 +525,14 @@ if (programAddForm) {
                     'Content-Type': 'application/json',
                     'X-CSRFToken': getCookie('csrftoken'),
                 },
-                body: JSON.stringify({ name: name, slug: slug || null, description: description }),
+                body: JSON.stringify({
+                    name: name,
+                    slug: slug || null,
+                    description: description,
+                    pdf_department_label: (document.getElementById('program-pdf-department').value || '').trim(),
+                    pdf_program_curriculum: (document.getElementById('program-pdf-curriculum').value || '').trim(),
+                    pdf_program_shortcut: (document.getElementById('program-pdf-shortcut').value || '').trim(),
+                }),
             });
             const data = await r.json().catch(function () { return {}; });
             if (!r.ok || !data.ok) {

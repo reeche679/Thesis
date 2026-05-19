@@ -12,7 +12,7 @@ Edit these values when you want backend-only changes to solver behavior.
 "config3_weightedtriocap"
 
 # CP-SAT configuration key (must exist in Configurations.CONFIGURATIONS)
-CONFIGURATION = "config2_weighted"
+CONFIGURATION = "config1_baseline"
 
 # Alternative algorithm selector:
 # - None -> use pure CP-SAT configuration flow

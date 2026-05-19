@@ -25,6 +25,12 @@ from django.views.decorators.http import require_http_methods
 
 from accounts.models import Student
 from .models import CurriculumVersion, Program
+from .pdf_header_fields import (
+    DEFAULT_PDF_DEPARTMENT_LABEL,
+    DEFAULT_PDF_PROGRAM_CURRICULUM,
+    DEFAULT_PDF_PROGRAM_SHORTCUT,
+    normalize_pdf_header_fields,
+)
 from .staff_auth_views import staff_login_url, user_may_use_staff_curriculum_portal
 
 
@@ -57,10 +63,23 @@ def _program_row(p: Program) -> dict[str, Any]:
         "slug": p.slug,
         "name": p.name,
         "description": p.description or "",
+        "pdf_department_label": p.pdf_department_label or DEFAULT_PDF_DEPARTMENT_LABEL,
+        "pdf_program_curriculum": p.pdf_program_curriculum or DEFAULT_PDF_PROGRAM_CURRICULUM,
+        "pdf_program_shortcut": p.pdf_program_shortcut or DEFAULT_PDF_PROGRAM_SHORTCUT,
         "is_active": p.is_active,
         "student_count": student_count,
         "curriculum_version_count": cv_count,
     }
+
+
+def _pdf_header_from_body(body: dict) -> dict[str, str]:
+    return normalize_pdf_header_fields(
+        {
+            "pdf_department": body.get("pdf_department_label") or body.get("pdf_department"),
+            "pdf_program_curriculum": body.get("pdf_program_curriculum"),
+            "pdf_program_shortcut": body.get("pdf_program_shortcut"),
+        }
+    )
 
 
 def _unique_program_slug(base: str) -> str:
@@ -251,7 +270,15 @@ def staff_api_programs_list(request):
         slug = _unique_program_slug(name)
 
     description = (body.get("description") or "").strip()
-    program = Program.objects.create(name=name, slug=slug, description=description)
+    pdf_fields = _pdf_header_from_body(body)
+    program = Program.objects.create(
+        name=name,
+        slug=slug,
+        description=description,
+        pdf_department_label=pdf_fields.get("department") or DEFAULT_PDF_DEPARTMENT_LABEL,
+        pdf_program_curriculum=pdf_fields.get("program_curriculum") or DEFAULT_PDF_PROGRAM_CURRICULUM,
+        pdf_program_shortcut=pdf_fields.get("program_shortcut") or DEFAULT_PDF_PROGRAM_SHORTCUT,
+    )
     return JsonResponse({"ok": True, "program": _program_row(program)}, status=201)
 
 
@@ -278,7 +305,18 @@ def staff_api_program_patch(request, pk: int):
         return JsonResponse({"ok": False, "error": "Program name is too long (max 200 characters)."}, status=400)
 
     program.name = name
-    program.save(update_fields=["name"])
+    update_fields = ["name"]
+    pdf_fields = _pdf_header_from_body(body)
+    if pdf_fields.get("department"):
+        program.pdf_department_label = pdf_fields["department"]
+        update_fields.append("pdf_department_label")
+    if pdf_fields.get("program_curriculum"):
+        program.pdf_program_curriculum = pdf_fields["program_curriculum"]
+        update_fields.append("pdf_program_curriculum")
+    if pdf_fields.get("program_shortcut"):
+        program.pdf_program_shortcut = pdf_fields["program_shortcut"]
+        update_fields.append("pdf_program_shortcut")
+    program.save(update_fields=update_fields)
     return JsonResponse({"ok": True, "program": _program_row(program)})
 
 
