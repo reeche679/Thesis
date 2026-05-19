@@ -382,13 +382,16 @@
             <img src="{% static 'img/BSU_Logo.png' %}" alt="BSU Logo" class="bg-logo">
             <div class="inner-card">
                 <div>
-                <h1 class="fw-semibold mb-3">Student Login</h1>
+                <h1 class="fw-semibold mb-3">Sign In</h1>
                 <p class="text-muted mb-4">
-                    Sign in using your Batangas State University credentials.
+                    Sign in with your SR-Code and password. Students use the POS portal; curriculum managers and administrators are directed to the staff tools after sign-in.
                 </p>
 
                 <form method="post" action="{% url 'login' %}">
                     {% csrf_token %}
+                    {% if next %}
+                    <input type="hidden" name="next" value="{{ next }}">
+                    {% endif %}
                     {% if error %}
                     <div class="alert alert-danger small mb-3" role="alert">{{ error }}</div>
                     {% endif %}

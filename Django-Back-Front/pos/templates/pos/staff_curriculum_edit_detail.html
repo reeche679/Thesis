@@ -194,7 +194,7 @@
 {% if forbidden %}
     <div class="alert alert-danger">
         You are not allowed to view this curriculum version.
-        <a href="{% url 'staff_login' %}?next={{ request.path|urlencode }}">Staff sign-in</a>
+        <a href="{% url 'login' %}?next={{ request.path|urlencode }}">Sign in</a>
     </div>
 
 {% elif status == 'archived' %}
@@ -666,9 +666,8 @@ tbody.addEventListener('click', function (e) {
     statusEl.innerHTML = '<span class="ok">Row removed. Save draft to keep changes.</span>';
 });
 
-document.getElementById('btn-save').addEventListener('click', async function () {
+async function saveDraft() {
     const rows = collectRows((lastPayload && (lastPayload.extracted_rows || lastPayload.rows)) || []);
-    statusEl.textContent = 'Saving…';
     const r = await fetch(draftUrl, {
         method: 'PATCH',
         credentials: 'same-origin',
@@ -677,7 +676,18 @@ document.getElementById('btn-save').addEventListener('click', async function () 
     });
     const data = await r.json().catch(function () { return {}; });
     if (!r.ok || !data.ok) {
-        statusEl.innerHTML = '<span class="err">' + (data.error || ('HTTP ' + r.status)) + '</span>';
+        return { ok: false, error: data.error || ('HTTP ' + r.status) };
+    }
+    lastPayload = data;
+    render(data);
+    return { ok: true, data: data };
+}
+
+document.getElementById('btn-save').addEventListener('click', async function () {
+    statusEl.textContent = 'Saving…';
+    const result = await saveDraft();
+    if (!result.ok) {
+        statusEl.innerHTML = '<span class="err">' + escapeHtml(result.error) + '</span>';
         return;
     }
     statusEl.innerHTML = '<span class="ok">Saved. Redirecting…</span>';
@@ -702,7 +712,13 @@ document.getElementById('btn-analyze').addEventListener('click', async function 
 });
 
 document.getElementById('btn-approve').addEventListener('click', async function () {
-    if (!confirm('Approve this draft? This will validate against the curriculum schema and mark the version approved.')) return;
+    if (!confirm('Approve this draft? Your current edits will be saved, validated, and marked approved.')) return;
+    statusEl.textContent = 'Saving…';
+    const saveResult = await saveDraft();
+    if (!saveResult.ok) {
+        statusEl.innerHTML = '<span class="err">' + escapeHtml(saveResult.error) + '</span>';
+        return;
+    }
     statusEl.textContent = 'Approving…';
     const r = await fetch(approveUrl, {
         method: 'POST',
@@ -711,13 +727,11 @@ document.getElementById('btn-approve').addEventListener('click', async function 
     });
     const data = await r.json().catch(function () { return {}; });
     if (!r.ok || !data.ok) {
-        statusEl.innerHTML = '<span class="err">' + (data.error || ('HTTP ' + r.status)) + '</span>';
+        statusEl.innerHTML = '<span class="err">' + escapeHtml(data.error || ('HTTP ' + r.status)) + '</span>';
         return;
     }
-    statusEl.innerHTML = '<span class="ok">Approved (' + (data.course_count || 0) + ' courses). '
-        + '<a href="' + cfg.curriculumEditUrl + '">Back to all curricula</a></span>';
-    document.querySelectorAll('#btn-save, #btn-analyze, #btn-approve, .cap-input, #grid input, #grid select, #grid textarea')
-        .forEach(function (el) { el.disabled = true; });
+    statusEl.innerHTML = '<span class="ok">Approved (' + (data.course_count || 0) + ' courses). Redirecting…</span>';
+    setTimeout(function () { window.location.href = cfg.curriculumEditUrl; }, 400);
 });
 
 loadDraft();

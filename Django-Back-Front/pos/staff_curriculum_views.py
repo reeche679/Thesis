@@ -25,7 +25,7 @@ from pos.curriculum_draft_to_approved import draft_to_approved_json
 from pos.curriculum_pdf_extract import _canonical_course_code, extract_curriculum_rows_from_pdf
 from pos.models import CurriculumVersion, Program
 from pos.permissions import user_can_manage_program_curriculum
-from pos.staff_auth_views import user_may_use_staff_curriculum_portal
+from pos.staff_auth_views import staff_login_url, user_may_use_staff_curriculum_portal
 
 MAX_PDF_BYTES = 25 * 1024 * 1024
 
@@ -361,7 +361,7 @@ def staff_api_curriculum_approve(request, pk: int):
 @require_http_methods(["GET"])
 def staff_curriculum_edit_list_page(request):
     if not user_may_use_staff_curriculum_portal(request.user):
-        return redirect("staff_login")
+        return redirect(staff_login_url(next_path=request.get_full_path()))
     programs = _programs_for_staff(request.user)
     return render(
         request,

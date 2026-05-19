@@ -25,7 +25,7 @@ from django.views.decorators.http import require_http_methods
 
 from accounts.models import Student
 from .models import CurriculumVersion, Program
-from .staff_auth_views import user_may_use_staff_curriculum_portal
+from .staff_auth_views import staff_login_url, user_may_use_staff_curriculum_portal
 
 
 def _portal_forbidden(request) -> JsonResponse | None:
@@ -103,7 +103,7 @@ def _student_row(s: Student) -> dict[str, Any]:
 @require_http_methods(["GET"])
 def staff_home_page(request):
     if not user_may_use_staff_curriculum_portal(request.user):
-        return redirect("staff_login")
+        return redirect(staff_login_url(next_path=request.get_full_path()))
     programs = _programs_all()
     return render(request, "pos/staff_home.html", {"programs": programs})
 

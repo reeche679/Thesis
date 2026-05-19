@@ -552,13 +552,13 @@
                 </div>
                 <div>
                     <div class="text-muted text-uppercase">Program</div>
-                    <div class="fw-semibold">BS Computer Engineering</div>
+                    <div class="fw-semibold">{% if student.program %}{{ student.program.name }}{% else %}—{% endif %}</div>
                 </div>
             </div>
             <div class="col-4 mb-2">
                 <div class="mb-1">
                     <div class="text-muted text-uppercase">Curriculum</div>
-                    <div class="fw-semibold text-nowrap">BSCpE Curriculum 2025-2026</div>
+                    <div class="fw-semibold text-nowrap">{% if student.selected_curriculum_version %}{{ student.selected_curriculum_version.version_label|default:"—" }}{% else %}{{ curriculum_display_title|default:"—" }}{% endif %}</div>
                 </div>
                 <div>
                     <div class="text-muted text-uppercase">Campus</div>

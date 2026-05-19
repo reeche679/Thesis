@@ -30,7 +30,7 @@
     </header>
     <div class="staff-wrap">
         {% if forbidden %}
-            <p class="err">You are not allowed to view this draft. <a href="{% url 'staff_login' %}?next={{ request.path|urlencode }}">Staff sign-in</a></p>
+            <p class="err">You are not allowed to view this draft. <a href="{% url 'login' %}?next={{ request.path|urlencode }}">Sign in</a></p>
         {% elif not_draft %}
             <p class="err">This curriculum version is not a draft (open in admin or create a new version).</p>
         {% else %}

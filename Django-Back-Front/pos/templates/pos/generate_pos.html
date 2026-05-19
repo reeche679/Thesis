@@ -965,12 +965,7 @@
             <div class="col-4 mb-2">
                 <div class="mb-1">
                     <div class="text-muted text-uppercase">Curriculum</div>
-                    <div class="fw-semibold text-nowrap">{{ curriculum_display_title|default:"BSCpE (reference curriculum)" }}</div>
-                    {% if curriculum_source == "db" %}
-                    <div class="small text-success">Selected curriculum</div>
-                    {% elif curriculum_source == "static" %}
-                    <div class="small text-muted">Reference curriculum</div>
-                    {% endif %}
+                    <div class="fw-semibold text-nowrap">{% if student.selected_curriculum_version %}{{ student.selected_curriculum_version.version_label|default:"—" }}{% else %}{{ curriculum_display_title|default:"—" }}{% endif %}</div>
                     {% if curriculum_truncated %}
                     <div class="small text-warning">Curriculum list was truncated for display.</div>
                     {% endif %}

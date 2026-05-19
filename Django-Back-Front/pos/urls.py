@@ -37,7 +37,7 @@ from .views import (
     feasible_add_courses_for_section,
     save_tuned_pos,
 )
-from .staff_auth_views import staff_login_view, staff_logout_view
+from .staff_auth_views import staff_login_redirect, staff_logout_view
 from .staff_portal_views import (
     staff_home_page,
     staff_api_students_list,
@@ -62,8 +62,8 @@ from .staff_curriculum_views import (
 
 urlpatterns = [
     # Login as landing page
-    path("", login_view, name="login"),
-    path("login/", login_view),
+    path("login/", login_view, name="login"),
+    path("", login_view),
     path("main/", pos_main, name="pos_main"),
 
     path("home/", pos_home, name="pos_home"),
@@ -74,7 +74,7 @@ urlpatterns = [
     path("api/curriculum/set-active/", api_curriculum_set_active, name="api_curriculum_set_active"),
 
     path("staff/", staff_home_page, name="staff_home"),
-    path("staff/login/", staff_login_view, name="staff_login"),
+    path("staff/login/", staff_login_redirect, name="staff_login"),
     path("staff/logout/", staff_logout_view, name="staff_logout"),
     path("staff/api/students/", staff_api_students_list, name="staff_api_students_list"),
     path("staff/api/students/<int:pk>/", staff_api_student_patch, name="staff_api_student_patch"),

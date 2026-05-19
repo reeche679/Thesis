@@ -53,8 +53,8 @@
             <label for="file">PDF file</label>
             <input id="file" name="file" class="form-control" type="file" accept="application/pdf,.pdf" required>
 
-            <label for="version_label">Version Label (optional)</label>
-            <input id="version_label" name="version_label" class="form-control" type="text" maxlength="128" placeholder="e.g. version1.0">
+            <label for="version_label">Curriculum Name</label>
+            <input id="version_label" name="version_label" class="form-control" type="text" maxlength="128" placeholder="e.g. BSCpE Curriculum 2025-2026">
             <p class="hint">After upload, use <strong>Review &amp; edit draft</strong> to check rows, set max units per semester, then approve. Scanned PDFs may need <a href="https://github.com/tesseract-ocr/tesseract" target="_blank" rel="noopener">Tesseract OCR</a> installed on the server.</p>
 
             <button type="submit" class="btn btn-staff-primary text-white mt-3">Upload &amp; extract</button>
@@ -92,7 +92,7 @@ if (form) {
             });
             const data = await r.json().catch(() => ({}));
             if (r.status === 401 || r.status === 403) {
-                status.innerHTML = '<span class="err">' + (data.error || 'Forbidden — try signing in again.') + ' <a href="{% url "staff_login" %}?next=' + encodeURIComponent(window.location.pathname) + '">Staff sign-in</a></span>';
+                status.innerHTML = '<span class="err">' + (data.error || 'Forbidden — try signing in again.') + ' <a href="{% url "login" %}?next=' + encodeURIComponent(window.location.pathname) + '">Sign in</a></span>';
                 return;
             }
             if (!r.ok || !data.ok) {

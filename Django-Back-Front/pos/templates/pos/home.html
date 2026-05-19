@@ -278,7 +278,8 @@
             flex-direction: column;
         }
         .home-academic-term .d-flex.gap-2 .btn { width: 100%; }
-        .home-academic-year-select { max-width: 100% !important; }
+        .home-academic-year-select,
+        .home-prog-curriculum-select { max-width: 100% !important; }
         .home-profile-extra-grid {
             margin-top: 1rem;
             padding-top: 0.85rem;
@@ -304,7 +305,8 @@
         }
     }
     @media (min-width: 576px) {
-        .home-academic-year-select { max-width: 240px; }
+        .home-academic-year-select,
+        .home-prog-curriculum-select { max-width: 240px; }
     }
 
     /* Custom dropdown for Academic Year (Home) */
@@ -383,6 +385,56 @@
         z-index: 1054;
         display: none;
     }
+
+    .home-select-locked.form-select:disabled {
+        background-color: #e9ecef;
+        color: #495057;
+        border-color: #ced4da;
+        opacity: 1;
+        cursor: not-allowed;
+    }
+
+    .home-label-with-info {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+    }
+    .pos-info-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 0.86rem !important;
+        height: 0.86rem !important;
+        min-width: 0 !important;
+        min-height: 0 !important;
+        aspect-ratio: 1 / 1;
+        flex: 0 0 auto;
+        border-radius: 50% !important;
+        border: 1px solid #6c757d;
+        color: #495057;
+        background: #fff;
+        font-size: 0.58rem;
+        font-weight: 600;
+        line-height: 1;
+        padding: 0 !important;
+        box-sizing: border-box;
+    }
+    .pos-info-btn:hover,
+    .pos-info-btn:focus {
+        border-color: #495057;
+        color: #212529;
+        background: #f8f9fa;
+        box-shadow: none;
+    }
+    .popover.pos-info-popover {
+        border-radius: 0.5rem;
+    }
+    .popover.pos-info-popover .popover-body {
+        font-size: 0.74rem;
+        line-height: 1.2;
+        padding: 0.4rem 0.5rem;
+        max-width: 215px;
+    }
 </style>
 {% endblock %}
 
@@ -414,7 +466,7 @@
                             <button type="button" class="home-email-toggle-btn btn btn-link p-0 border-0 text-secondary fw-semibold" id="home-email-toggle" aria-label="Show or hide email" title="Show or hide email">
                                 <i class="bi bi-envelope fs-5" aria-hidden="true"></i>
                             </button>
-                            <span class="home-email-value ms-2 small text-muted fw-semibold" id="home-email-value">{{ student.email|default:"" }}</span>
+                            <span class="home-email-value ms-2 small text-muted fw-semibold" id="home-email-value">{% if is_superuser_demo %}-{% else %}{{ student.email|default:"" }}{% endif %}</span>
                         </div>
                     </div>
                 </div>
@@ -424,19 +476,11 @@
                 </div>
             </div>
             <div class="row home-profile-extra-grid">
-                <div class="col-12 col-md-6 home-profile-extra-column">
-                    <div class="home-profile-extra-item">
-                        <div class="home-profile-extra-label">program</div>
-                        <div class="home-profile-extra-value">BS Computer Engineering</div>
-                    </div>
+                <div class="col-12 home-profile-extra-column">
                     <div class="home-profile-extra-item">
                         <div class="home-profile-extra-label">campus</div>
                         <div class="home-profile-extra-value">Alangilan Campus</div>
                     </div>
-                </div>
-                <div class="col-12 col-md-6">
-                    <div class="home-profile-extra-label">curriculum</div>
-                    <div class="home-profile-extra-value">BSCpE Curriculum 2025-2026</div>
                 </div>
             </div>
         </div>
@@ -447,15 +491,82 @@
         <div class="home-term-content">
             <div class="pos-section-title mb-3">Current Academic Term</div>
 
+            {% if is_superuser_demo %}
+            <p class="small text-muted mb-3">Superuser trial profile — name and contact fields show “-”. Select program, curriculum, and academic year below, then use <strong>Generate POS</strong>.</p>
+            {% endif %}
+
             {% if required_term %}
             <div class="alert alert-warning small mb-3" role="alert">
-                Complete your information before proceeding. Upload your <strong>photo</strong> above and select <strong>Academic Year</strong>. Then you can use <strong>Generate POS</strong> below.
+                {% if is_superuser_demo and program_curriculum_locked %}
+                Select <strong>Academic Year</strong>, then use <strong>Generate POS</strong> below.
+                {% elif is_superuser_demo %}
+                Select <strong>Program</strong>, <strong>Curriculum</strong>, and <strong>Academic Year</strong>, then use <strong>Generate POS</strong> below.
+                {% elif program_curriculum_locked %}
+                Complete your information before proceeding. Upload your <strong>photo</strong> above and select <strong>Academic Year</strong>. Then use <strong>Generate POS</strong> below.
+                {% else %}
+                Complete your information before proceeding. Upload your <strong>photo</strong> above, then select <strong>Program</strong>, <strong>Curriculum</strong>, and <strong>Academic Year</strong>. Then use <strong>Generate POS</strong> below.
+                {% endif %}
             </div>
             {% endif %}
 
             <form method="post" action="{% url 'set_academic_term' %}" id="academic-term-form">
                 {% csrf_token %}
                 <input type="hidden" name="next" value="{% url 'pos_generate' %}">
+                {% if program_curriculum_locked %}
+                <input type="hidden" name="program_id" value="{{ selected_program_id }}">
+                <input type="hidden" name="curriculum_version_id" value="{{ selected_curriculum_id }}">
+                {% endif %}
+                <div class="mb-3">
+                    <label class="text-muted small text-uppercase home-label-with-info" for="id_program">
+                        Program
+                        {% if program_curriculum_locked %}
+                        <button
+                            type="button"
+                            class="btn pos-info-btn"
+                            data-pos-info="popover"
+                            data-bs-toggle="popover"
+                            data-bs-trigger="click"
+                            data-bs-placement="right"
+                            data-bs-custom-class="pos-info-popover"
+                            data-bs-content="Please coordinate with your academic supervisor if you wish to change your current Program."
+                            aria-label="Program info"
+                        >i</button>
+                        {% endif %}
+                    </label>
+                    <select id="id_program" class="form-select form-select-sm home-prog-curriculum-select{% if program_curriculum_locked %} home-select-locked{% endif %}" {% if not program_curriculum_locked %}name="program_id" required{% else %}disabled aria-readonly="true"{% endif %}>
+                        <option value="">-- Select Program --</option>
+                        {% for p in programs %}
+                        <option value="{{ p.id }}" {% if selected_program_id == p.id %}selected{% endif %}>{{ p.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="text-muted small text-uppercase home-label-with-info" for="id_curriculum">
+                        Curriculum
+                        {% if program_curriculum_locked %}
+                        <button
+                            type="button"
+                            class="btn pos-info-btn"
+                            data-pos-info="popover"
+                            data-bs-toggle="popover"
+                            data-bs-trigger="click"
+                            data-bs-placement="right"
+                            data-bs-custom-class="pos-info-popover"
+                            data-bs-content="Please coordinate with your academic supervisor if you wish to change your current curriculum."
+                            aria-label="Curriculum info"
+                        >i</button>
+                        {% endif %}
+                    </label>
+                    <select id="id_curriculum" class="form-select form-select-sm home-prog-curriculum-select{% if program_curriculum_locked %} home-select-locked{% endif %}" {% if not program_curriculum_locked %}name="curriculum_version_id" required{% else %}disabled aria-readonly="true"{% endif %}>
+                        <option value="">-- Select Curriculum --</option>
+                        {% if program_curriculum_locked and selected_curriculum_id %}
+                        <option value="{{ selected_curriculum_id }}" selected>{{ selected_curriculum_label }}</option>
+                        {% endif %}
+                    </select>
+                    {% if not program_curriculum_locked %}
+                    <p class="small text-muted mb-0 mt-1" id="home-curriculum-hint">Only approved curricula for the selected program are listed.</p>
+                    {% endif %}
+                </div>
                 <div class="mb-3">
                     <label class="text-muted small text-uppercase" for="id_academic_year">ACADEMIC YEAR</label>
                     <div class="home-academic-year-select home-select-wrap">
@@ -489,8 +600,70 @@
 {% endblock %}
 
 {% block extra_scripts %}
+{{ approved_curricula_by_program|json_script:"home-approved-curricula-data" }}
+{{ home_page_config|json_script:"home-page-config" }}
 <script>
     document.addEventListener('DOMContentLoaded', function() {
+        var programSelect = document.getElementById('id_program');
+        var curriculumSelect = document.getElementById('id_curriculum');
+        var curriculumHint = document.getElementById('home-curriculum-hint');
+        var homeCfg = {};
+        try {
+            var cfgEl = document.getElementById('home-page-config');
+            homeCfg = cfgEl ? JSON.parse(cfgEl.textContent || '{}') : {};
+        } catch (e) {
+            homeCfg = {};
+        }
+        var selectedCurriculumId = homeCfg.selected_curriculum_id != null ? homeCfg.selected_curriculum_id : null;
+        var programCurriculumLocked = !!homeCfg.program_curriculum_locked;
+        var approvedByProgram = {};
+        try {
+            var dataEl = document.getElementById('home-approved-curricula-data');
+            approvedByProgram = dataEl ? JSON.parse(dataEl.textContent || '{}') : {};
+        } catch (e) {
+            approvedByProgram = {};
+        }
+
+        function fillCurriculumOptions(programId, keepSelection) {
+            if (!curriculumSelect) return;
+            var prev = keepSelection ? curriculumSelect.value : '';
+            curriculumSelect.innerHTML = '<option value="">-- Select Curriculum --</option>';
+            var list = approvedByProgram[String(programId)] || [];
+            list.forEach(function (item) {
+                var opt = document.createElement('option');
+                opt.value = String(item.id);
+                opt.textContent = item.label;
+                curriculumSelect.appendChild(opt);
+            });
+            if (curriculumHint) {
+                if (!programId) {
+                    curriculumHint.textContent = 'Select a program first to see approved curricula.';
+                } else if (!list.length) {
+                    curriculumHint.textContent = 'No approved curricula are available for this program yet.';
+                } else {
+                    curriculumHint.textContent = 'Only approved curricula for the selected program are listed.';
+                }
+            }
+            var target = keepSelection ? prev : '';
+            if (!target && selectedCurriculumId && String(programId) === String(programSelect && programSelect.value)) {
+                target = String(selectedCurriculumId);
+            }
+            if (target) curriculumSelect.value = target;
+        }
+
+        if (programSelect && curriculumSelect) {
+            if (!programCurriculumLocked) {
+                fillCurriculumOptions(programSelect.value, true);
+                programSelect.addEventListener('change', function () {
+                    selectedCurriculumId = null;
+                    fillCurriculumOptions(programSelect.value, false);
+                });
+            } else {
+                if (programSelect) programSelect.disabled = true;
+                if (curriculumSelect) curriculumSelect.disabled = true;
+            }
+        }
+
         // Custom Academic Year dropdown (Home)
         var aySelect = document.getElementById('id_academic_year');
         var ayBtn = document.getElementById('home-academic-year-btn');
@@ -600,6 +773,21 @@
                 emailEl.style.display = hidden ? 'inline' : 'none';
                 btn.setAttribute('aria-label', hidden ? 'Hide email' : 'Show or hide email');
                 btn.setAttribute('title', hidden ? 'Hide email' : 'Show email');
+            });
+        }
+
+        if (typeof bootstrap !== 'undefined' && bootstrap.Popover) {
+            document.querySelectorAll('[data-pos-info="popover"]').forEach(function(el) {
+                new bootstrap.Popover(el, { container: 'body' });
+            });
+            document.addEventListener('click', function(e) {
+                var trigger = e.target.closest('[data-pos-info="popover"]');
+                var insidePopover = e.target.closest('.popover');
+                if (trigger || insidePopover) return;
+                document.querySelectorAll('[data-pos-info="popover"]').forEach(function(el) {
+                    var pop = bootstrap.Popover.getInstance(el);
+                    if (pop) pop.hide();
+                });
             });
         }
     });

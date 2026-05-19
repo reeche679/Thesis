@@ -11,6 +11,7 @@ import logging
 from collections import OrderedDict
 from pathlib import Path
 from django.conf import settings
+from django.contrib.auth import authenticate, login, logout
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.http import HttpResponse, HttpResponseBadRequest, JsonResponse
@@ -30,6 +31,11 @@ from .solver_bridge import (
 from .constraint_trace_summary import build_constraint_trace_summary_by_course
 from .standing_parity import build_standing_logic_mismatch_rows
 from .curriculum_static_feasibility import static_prereq_horizon_diagnosis
+from .staff_auth_views import user_may_use_staff_curriculum_portal
+from .superuser_student_portal import (
+    ensure_superuser_student_session,
+    is_superuser_demo_session,
+)
 
 SR_CODE_REGEX = re.compile(r'^\d{2}-\d{5}$')
 # BSU student email: local part may be SR-style (23-00000) or name-style (e.g. first.last@...); no spaces.
@@ -355,6 +361,9 @@ def _require_student(view_func):
     def wrapper(request, *args, **kwargs):
         student = get_logged_in_student(request)
         if student is None:
+            ensure_superuser_student_session(request)
+            student = get_logged_in_student(request)
+        if student is None:
             return redirect('login')
         _ensure_session_academic_year_from_student(request, student)
         return view_func(request, *args, **kwargs)
@@ -364,6 +373,8 @@ def _require_student(view_func):
 def _require_student_api(view_func):
     """JSON API: 401 if not logged in as a student."""
     def wrapper(request, *args, **kwargs):
+        if get_logged_in_student(request) is None:
+            ensure_superuser_student_session(request)
         if get_logged_in_student(request) is None:
             return JsonResponse({"ok": False, "error": "Not authenticated"}, status=401)
         return view_func(request, *args, **kwargs)
@@ -538,10 +549,102 @@ def _has_academic_term(request):
     return has_ay or has_yl_sem
 
 
+def _has_program_and_curriculum(student: Student | None) -> bool:
+    """True when the student has an approved curriculum selection for their program."""
+    if student is None:
+        return False
+    pid = getattr(student, "program_id", None)
+    vid = getattr(student, "selected_curriculum_version_id", None)
+    if not pid or not vid:
+        return False
+    return CurriculumVersion.objects.filter(
+        pk=vid,
+        program_id=pid,
+        status=CurriculumVersion.STATUS_APPROVED,
+    ).exists()
+
+
+def _program_curriculum_locked_for_request(request, student: Student | None) -> bool:
+    """Students lock program/curriculum after first save; superuser trial profiles stay editable."""
+    if is_superuser_demo_session(request):
+        return False
+    return _has_program_and_curriculum(student)
+
+
+def _approved_curricula_by_program() -> dict[str, list[dict]]:
+    """Map program id (str) -> approved curriculum options for home-page dropdowns."""
+    out: dict[str, list[dict]] = {}
+    for pid in Program.objects.filter(is_active=True).values_list("pk", flat=True):
+        versions = (
+            CurriculumVersion.objects.filter(
+                program_id=pid,
+                status=CurriculumVersion.STATUS_APPROVED,
+            )
+            .order_by("-updated_at")
+            .values("id", "version_label")
+        )
+        out[str(pid)] = [
+            {
+                "id": v["id"],
+                "label": (v["version_label"] or "").strip() or f"Version #{v['id']}",
+            }
+            for v in versions
+        ]
+    return out
+
+
+def _parse_positive_int(raw: str | None) -> int | None:
+    if raw in (None, ""):
+        return None
+    try:
+        n = int(raw)
+    except (TypeError, ValueError):
+        return None
+    return n if n > 0 else None
+
+
+def _save_student_program_and_curriculum(
+    student: Student,
+    program_id_raw: str | None,
+    curriculum_id_raw: str | None,
+) -> bool:
+    """Persist program + approved curriculum on the student. Returns False if invalid."""
+    program_id = _parse_positive_int((program_id_raw or "").strip() or None)
+    curriculum_id = _parse_positive_int((curriculum_id_raw or "").strip() or None)
+    if not program_id or not curriculum_id:
+        return False
+    program = Program.objects.filter(pk=program_id, is_active=True).first()
+    if program is None:
+        return False
+    cv = CurriculumVersion.objects.filter(
+        pk=curriculum_id,
+        program=program,
+        status=CurriculumVersion.STATUS_APPROVED,
+    ).first()
+    if cv is None:
+        return False
+    student.program = program
+    student.selected_curriculum_version = cv
+    student.save(update_fields=["program", "selected_curriculum_version"])
+    return True
+
+
 def _has_profile_photo(request):
     """True if logged-in student has a profile photo uploaded."""
+    if is_superuser_demo_session(request):
+        return True
     student = get_logged_in_student(request)
     return bool(student and student.profile_photo)
+
+
+def _student_with_program_curriculum(student: Student | None) -> Student | None:
+    """Reload student with program and selected curriculum for profile display."""
+    if student is None:
+        return None
+    try:
+        return Student.objects.select_related("program", "selected_curriculum_version").get(pk=student.pk)
+    except Student.DoesNotExist:
+        return None
 
 
 def pos_main(request):
@@ -553,6 +656,16 @@ def pos_main(request):
 def pos_home(request):
     """Home page - Student info and academic term. Choose Regular/Irregular (if first time) and Current semester."""
     student = get_logged_in_student(request)
+    if student is not None:
+        try:
+            student = Student.objects.select_related("program", "selected_curriculum_version").get(pk=student.pk)
+        except Student.DoesNotExist:
+            student = None
+    program_curriculum_locked = _program_curriculum_locked_for_request(request, student)
+    selected_curriculum_label = ""
+    if student and student.selected_curriculum_version_id:
+        cv = student.selected_curriculum_version
+        selected_curriculum_label = (cv.version_label or "").strip() or f"Version #{cv.pk}"
     if request.method == 'POST' and request.FILES.get('profile_photo'):
         student.profile_photo = request.FILES['profile_photo']
         student.save()
@@ -563,8 +676,21 @@ def pos_home(request):
     )
     if current_section_index is None:
         current_section_index = 0
+    programs = list(
+        Program.objects.filter(is_active=True).order_by("name").values("id", "name", "slug")
+    )
     context = {
         'student': student,
+        'programs': programs,
+        'approved_curricula_by_program': _approved_curricula_by_program(),
+        'selected_program_id': student.program_id if student else None,
+        'selected_curriculum_id': student.selected_curriculum_version_id if student else None,
+        'selected_curriculum_label': selected_curriculum_label,
+        'program_curriculum_locked': program_curriculum_locked,
+        'home_page_config': {
+            'selected_curriculum_id': student.selected_curriculum_version_id if student else None,
+            'program_curriculum_locked': program_curriculum_locked,
+        },
         'academic_year_choices': ACADEMIC_YEAR_CHOICES,
         'current_semester_choices': CURRENT_SEMESTER_CHOICES_YEAR4_ONLY,
         'session_academic_year': request.session.get('academic_year'),
@@ -573,8 +699,14 @@ def pos_home(request):
         'session_pos_path': request.session.get('pos_path'),
         'has_generated_pos': has_generated_pos,
         'has_academic_term': _has_academic_term(request),
-        'has_complete_info': _has_academic_term(request) and _has_profile_photo(request),
+        'has_program_curriculum': _has_program_and_curriculum(student),
+        'has_complete_info': (
+            _has_academic_term(request)
+            and _has_profile_photo(request)
+            and _has_program_and_curriculum(student)
+        ),
         'required_term': request.GET.get('required') == '1',
+        'is_superuser_demo': is_superuser_demo_session(request),
     }
     return render(request, "pos/home.html", context)
 
@@ -582,10 +714,28 @@ def pos_home(request):
 @_require_student
 @require_POST
 def set_academic_term(request):
-    """Set session academic year and default POS path configuration."""
+    """Set session academic year, program/curriculum, and default POS path configuration."""
     ay = (request.POST.get('academic_year') or '').strip()
     valid_ays = {c[0] for c in ACADEMIC_YEAR_CHOICES}
     student = get_logged_in_student(request)
+    program_curriculum_ok = True
+    if student is not None:
+        if is_superuser_demo_session(request):
+            program_curriculum_ok = _save_student_program_and_curriculum(
+                student,
+                request.POST.get("program_id"),
+                request.POST.get("curriculum_version_id"),
+            )
+            if not program_curriculum_ok:
+                program_curriculum_ok = _has_program_and_curriculum(student)
+        elif _has_program_and_curriculum(student):
+            program_curriculum_ok = True
+        else:
+            program_curriculum_ok = _save_student_program_and_curriculum(
+                student,
+                request.POST.get("program_id"),
+                request.POST.get("curriculum_version_id"),
+            )
     if ay in valid_ays:
         request.session['academic_year'] = ay
         if student is not None:
@@ -611,6 +761,13 @@ def set_academic_term(request):
                 student.save(update_fields=['year_level', 'semester'])
     next_url = request.POST.get('next') or request.GET.get('next')
     if next_url and next_url.startswith('/'):
+        if (
+            not program_curriculum_ok
+            or not _has_program_and_curriculum(student)
+            or not _has_academic_term(request)
+            or not _has_profile_photo(request)
+        ):
+            return redirect(reverse('pos_home') + '?required=1')
         return redirect(next_url)
     return redirect('pos_home')
 
@@ -1122,9 +1279,13 @@ def _session_year_sem_from_section_index(
 @_require_student
 def pos_generate(request):
     """Generate POS page. Current semester is set by ?section=N or from session (year_level + semester)."""
-    if not _has_academic_term(request) or not _has_profile_photo(request):
+    student = _student_with_program_curriculum(get_logged_in_student(request))
+    if (
+        not _has_academic_term(request)
+        or not _has_profile_photo(request)
+        or not _has_program_and_curriculum(student)
+    ):
         return redirect(reverse('pos_home') + '?required=1')
-    student = get_logged_in_student(request)
     saved_grades_by_section = _saved_grades_by_section(student)
     from .generate_curriculum_context import resolve_generate_curriculum_context
 
@@ -3859,9 +4020,13 @@ def _apply_grades_snapshot_to_student(student, grades_by_section):
 @_require_student
 def pos_preview(request):
     """Preview POS page - Read-only POS table matching PDF layout; each section shows that section's grades (same course can differ per section)."""
-    if not _has_academic_term(request) or not _has_profile_photo(request):
+    student = _student_with_program_curriculum(get_logged_in_student(request))
+    if (
+        not _has_academic_term(request)
+        or not _has_profile_photo(request)
+        or not _has_program_and_curriculum(student)
+    ):
         return redirect(reverse('pos_home') + '?required=1')
-    student = get_logged_in_student(request)
     grades_by_section = _saved_grades_by_section(student)
     from .generate_curriculum_context import resolve_generate_curriculum_context
 
@@ -3929,6 +4094,7 @@ def pos_preview(request):
     selected_signatories["program_chair"] = prog_options[0]["name"] if prog_options else ""
     context = {
         'student': student,
+        'curriculum_display_title': gctx.get("display_title") or "",
         'preview_sections': preview_sections,
         'course_lookup': course_lookup,
         'session_academic_year': request.session.get('academic_year', ''),
@@ -4422,43 +4588,81 @@ def pos_about(request):
 
 
 def sign_out(request):
-    """Clear session and redirect to landing page."""
+    """Clear student session and Django auth, then return to login."""
+    logout(request)
     request.session.flush()
     return redirect('login')
 
 
+def _safe_login_next(raw: str | None) -> str:
+    nxt = (raw or "").strip()
+    if nxt.startswith("/") and not nxt.startswith("//"):
+        return nxt
+    return ""
+
+
 def login_view(request):
-    """Login page - validate SR-Code + password and set session."""
-    if request.method == 'POST':
-        sr_code = (request.POST.get('sr_code') or '').strip()
-        password = request.POST.get('password') or ''
+    """Login page — SR-code + password for students and curriculum staff."""
+    next_value = _safe_login_next(request.GET.get("next") or request.POST.get("next"))
 
-        if not sr_code:
-            return render(request, "auth/login.html", {'error': 'Please enter your SR-Code.'})
-        if not SR_CODE_REGEX.match(sr_code):
-            return render(request, "auth/login.html", {'error': 'Please enter a valid SR-Code (e.g. 23-00000).'})
-        if not password:
-            return render(request, "auth/login.html", {'error': 'Please enter your password.'})
+    if request.method == "GET":
+        if request.user.is_authenticated and user_may_use_staff_curriculum_portal(request.user):
+            if next_value:
+                return redirect(next_value)
+            return redirect("staff_home")
+        if get_logged_in_student(request) is not None:
+            return redirect("pos_home")
+        return render(request, "auth/login.html", {"next": next_value})
 
-        try:
-            student = Student.objects.get(sr_code=sr_code)
-        except Student.DoesNotExist:
-            return render(request, "auth/login.html", {'error': 'Invalid SR-Code or password.'})
+    sr_code = (request.POST.get("sr_code") or "").strip()
+    password = request.POST.get("password") or ""
+    next_value = _safe_login_next(request.POST.get("next"))
 
-        if not student.check_password(password):
-            return render(request, "auth/login.html", {'error': 'Invalid SR-Code or password.'})
+    if not sr_code:
+        return render(request, "auth/login.html", {"error": "Please enter your SR-Code.", "next": next_value})
+    if not SR_CODE_REGEX.match(sr_code):
+        return render(
+            request,
+            "auth/login.html",
+            {"error": "Please enter a valid SR-Code (e.g. 23-00000).", "next": next_value},
+        )
+    if not password:
+        return render(request, "auth/login.html", {"error": "Please enter your password.", "next": next_value})
 
-        request.session['student_id'] = student.pk
-        ay_stored = (student.academic_year or '').strip()
-        if ay_stored in _VALID_ACADEMIC_YEAR_VALUES:
-            request.session['academic_year'] = ay_stored
-        if student.semester:
-            request.session['semester'] = student.semester
-        if student.year_level:
-            request.session['year_level'] = student.year_level
-        return redirect('pos_home')
+    staff_user = authenticate(request, username=sr_code, password=password)
+    if staff_user is not None and not user_may_use_staff_curriculum_portal(staff_user):
+        staff_user = None
 
-    return render(request, "auth/login.html")
+    student = None
+    try:
+        candidate = Student.objects.get(sr_code=sr_code)
+        if candidate.check_password(password):
+            student = candidate
+    except Student.DoesNotExist:
+        pass
+
+    if staff_user is None and student is None:
+        return render(
+            request,
+            "auth/login.html",
+            {"error": "Invalid SR-Code or password.", "next": next_value},
+        )
+
+    if staff_user is not None:
+        login(request, staff_user)
+        if next_value:
+            return redirect(next_value)
+        return redirect("staff_home")
+
+    request.session["student_id"] = student.pk
+    ay_stored = (student.academic_year or "").strip()
+    if ay_stored in _VALID_ACADEMIC_YEAR_VALUES:
+        request.session["academic_year"] = ay_stored
+    if student.semester:
+        request.session["semester"] = student.semester
+    if student.year_level:
+        request.session["year_level"] = student.year_level
+    return redirect("pos_home")
 
 
 def register_view(request):

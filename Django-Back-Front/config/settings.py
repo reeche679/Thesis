@@ -90,6 +90,7 @@ TEMPLATES = [
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
                 'pos.context_processors.academic_term_context',
+                'pos.context_processors.superuser_demo_context',
             ],
         },
     },
@@ -160,7 +161,7 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Staff curriculum tools (Django User); default @login_required redirect.
-LOGIN_URL = "/staff/login/"
+LOGIN_URL = "/login/"
 
 # User-uploaded files (e.g. student photos)
 MEDIA_URL = "/media/"
