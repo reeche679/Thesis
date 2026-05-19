@@ -1268,6 +1268,54 @@ def _preview_sections_from_resolved_sections(curriculum_sections, course_lookup,
     return sections
 
 
+def _extend_curriculum_sections_through(
+    curriculum_sections: list,
+    through_index: int | None,
+) -> None:
+    """Append synthetic section rows so indices through through_index (inclusive) exist."""
+    if through_index is None:
+        return
+    try:
+        target = int(through_index)
+    except (TypeError, ValueError):
+        return
+    if target < 0:
+        return
+    while len(curriculum_sections) <= target:
+        ext_si = len(curriculum_sections)
+        yl, sem, lbl = section_meta_for_index(ext_si)
+        curriculum_sections.append(
+            {"year": yl, "semester": sem, "label": lbl, "courses": []}
+        )
+
+
+def _max_loaded_history_section_index(
+    request,
+    saved_grades_by_section,
+) -> int:
+    """Largest UI section index present in a loaded-from-history snapshot."""
+    loaded_max_si = -1
+    loaded_preview_ui_sections = request.session.get("pos_loaded_preview_ui_sections") or {}
+    if isinstance(loaded_preview_ui_sections, dict) and loaded_preview_ui_sections:
+        for k, courses in loaded_preview_ui_sections.items():
+            try:
+                si = int(k)
+            except (TypeError, ValueError):
+                continue
+            if si < 0:
+                continue
+            if isinstance(courses, list) and any(
+                (c.get("code") if isinstance(c, dict) else None) for c in courses
+            ):
+                loaded_max_si = max(loaded_max_si, si)
+    if loaded_max_si < 0:
+        loaded_max_si = _max_ui_section_from_grades_and_pos(
+            saved_grades_by_section,
+            request.session.get("last_generated_pos") or [],
+        )
+    return loaded_max_si
+
+
 def _session_year_sem_from_section_index(
     gen_mode: str,
     curriculum_sections: list,
@@ -1308,6 +1356,11 @@ def pos_generate(request):
     course_lookup = gen_curriculum_ctx["course_lookup"]
     gen_curriculum_mode = gen_curriculum_ctx["mode"]
 
+    if bool(request.session.get("pos_loaded_from_history")):
+        loaded_max_si = _max_loaded_history_section_index(request, saved_grades_by_section)
+        if loaded_max_si >= 0:
+            _extend_curriculum_sections_through(curriculum_sections, loaded_max_si)
+
     section_param = request.GET.get('section')
     pos_reset = bool(request.session.get('pos_reset', False))
     section_param_provided = section_param is not None
@@ -1318,7 +1371,8 @@ def pos_generate(request):
             pos_reset = False
         try:
             idx = int(section_param)
-            if 0 <= idx < len(curriculum_sections):
+            if idx >= 0:
+                _extend_curriculum_sections_through(curriculum_sections, idx)
                 yl, sem = _session_year_sem_from_section_index(gen_curriculum_mode, curriculum_sections, idx)
                 request.session['year_level'] = yl
                 request.session['semester'] = sem
@@ -1467,6 +1521,11 @@ def pos_generate(request):
             if with_petition in ('yes', 'no'):
                 request.session['irreg_with_petition'] = with_petition
 
+            extend_through = irreg_current_sem if irreg_current_sem is not None else -1
+            if irreg_start_index is not None:
+                extend_through = max(extend_through, irreg_start_index)
+            if extend_through >= 0:
+                _extend_curriculum_sections_through(curriculum_sections, extend_through)
             max_si = len(curriculum_sections) - 1
             # Effective start: if user left it unset, it starts at current semester.
             effective_irreg_start_index = irreg_start_index
@@ -1525,12 +1584,8 @@ def pos_generate(request):
 
             # The saved POS may contain semesters beyond the natural program length
             # (e.g. 5th-year sections for a 4-year program due to petition / overload).
-            # Synthesise the extra section entries so the display loop can reach them.
-            if table_scope_sem > max_si:
-                for _ext_si in range(max_si + 1, table_scope_sem + 1):
-                    _yl, _sem, _lbl = section_meta_for_index(_ext_si)
-                    curriculum_sections.append({"year": _yl, "semester": _sem, "label": _lbl, "courses": []})
-                max_si = len(curriculum_sections) - 1
+            _extend_curriculum_sections_through(curriculum_sections, table_scope_sem)
+            max_si = len(curriculum_sections) - 1
 
             table_scope_sem = max(0, min(table_scope_sem, max_si))
             effective_irreg_start_index = irreg_start_index
@@ -1900,25 +1955,7 @@ def pos_generate(request):
     # - extend to 6th+ only when a loaded POS from history actually contains those semesters
     dropdown_max_generate = SECTION_INDEX_MAX_DROPDOWN_GENERATE
     if bool(request.session.get('pos_loaded_from_history')):
-        loaded_max_si = -1
-        loaded_preview_ui_sections = request.session.get("pos_loaded_preview_ui_sections") or {}
-        if isinstance(loaded_preview_ui_sections, dict) and loaded_preview_ui_sections:
-            for k, courses in loaded_preview_ui_sections.items():
-                try:
-                    si = int(k)
-                except (TypeError, ValueError):
-                    continue
-                if si < 0:
-                    continue
-                if isinstance(courses, list) and any(
-                    (c.get("code") if isinstance(c, dict) else None) for c in courses
-                ):
-                    loaded_max_si = max(loaded_max_si, si)
-        if loaded_max_si < 0:
-            loaded_max_si = _max_ui_section_from_grades_and_pos(
-                saved_grades_by_section,
-                request.session.get("last_generated_pos") or [],
-            )
+        loaded_max_si = _max_loaded_history_section_index(request, saved_grades_by_section)
         if loaded_max_si > dropdown_max_generate:
             dropdown_max_generate = loaded_max_si
     dropdown_max_generate = min(dropdown_max_generate, len(curriculum_sections) - 1)
