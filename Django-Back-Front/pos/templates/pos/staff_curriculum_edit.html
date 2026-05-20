@@ -17,8 +17,13 @@
     .filters select, .filters button { font-size: 0.875rem; }
     #tbl-body td { vertical-align: middle; font-size: 0.875rem; }
     #empty-row td { color: #666; font-style: italic; }
-    .actions-cell { white-space: nowrap; }
-    .actions-cell .btn { margin-right: 0.35rem; }
+    .status-cell,
+    .courses-cell,
+    .actions-edit-cell,
+    .actions-delete-cell {
+        text-align: center;
+        white-space: nowrap;
+    }
     .btn-staff-primary { text-decoration: none; }
 </style>
 {% endblock staff_page_head %}
@@ -60,14 +65,14 @@
                     <th>ID</th>
                     <th>Program</th>
                     <th>Curriculum Name</th>
-                    <th>Status</th>
-                    <th>Courses</th>
-                    <th>Updated</th>
-                    <th>Actions</th>
+                    <th class="text-center">Status</th>
+                    <th class="text-center">Courses</th>
+                    <th class="text-center">Updated</th>
+                    <th colspan="2" class="text-center">Action</th>
                 </tr>
             </thead>
             <tbody id="tbl-body">
-                <tr id="loading-row"><td colspan="7" class="text-muted small py-3">Loading…</td></tr>
+                <tr id="loading-row"><td colspan="8" class="text-muted small py-3">Loading…</td></tr>
             </tbody>
         </table>
     </div>
@@ -113,18 +118,18 @@ async function loadVersions() {
         const r = await fetch(url, { credentials: 'same-origin' });
         data = await r.json();
         if (!r.ok || !data.ok) {
-            tbody.innerHTML = '<tr><td colspan="7" class="err small">' + escapeHtml(data.error || 'HTTP ' + r.status) + '</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="8" class="err small">' + escapeHtml(data.error || 'HTTP ' + r.status) + '</td></tr>';
             statusEl.textContent = '';
             return;
         }
     } catch (e) {
-        tbody.innerHTML = '<tr><td colspan="7" class="err small">Network error: ' + escapeHtml(String(e)) + '</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" class="err small">Network error: ' + escapeHtml(String(e)) + '</td></tr>';
         statusEl.textContent = '';
         return;
     }
     const versions = data.versions || [];
     if (!versions.length) {
-        tbody.innerHTML = '<tr id="empty-row"><td colspan="7">No curriculum versions found.</td></tr>';
+        tbody.innerHTML = '<tr id="empty-row"><td colspan="8">No curriculum versions found.</td></tr>';
         statusEl.textContent = '';
         return;
     }
@@ -132,33 +137,35 @@ async function loadVersions() {
         const defBadge = v.is_program_default
             ? ' <span class="badge badge-default">default</span>'
             : '';
-        let actions = '';
+        let editAction = '';
         if (v.status === 'draft' || v.status === 'approved') {
             const openLabel = v.status === 'draft' ? 'Review & edit' : 'Edit POS';
             let openHref = v.edit_url;
             if (v.status === 'approved') {
                 openHref += (openHref.indexOf('?') >= 0 ? '&' : '?') + 'reopen=1';
             }
-            actions = '<a role="button" class="btn btn-staff-primary btn-sm" href="'
+            editAction = '<a role="button" class="btn btn-staff-primary btn-sm" href="'
                 + escapeHtml(openHref) + '">' + escapeHtml(openLabel) + '</a>';
         }
+        let deleteAction = '';
         if (v.can_delete) {
-            actions += ' <button type="button" class="btn btn-outline-danger btn-sm btn-delete-version"'
+            deleteAction = '<button type="button" class="btn btn-outline-danger btn-sm btn-delete-version"'
                 + ' data-id="' + escapeHtml(String(v.id)) + '"'
                 + ' data-label="' + escapeHtml(v.version_label || ('id ' + v.id)) + '"'
                 + ' data-default="' + (v.is_program_default ? '1' : '0') + '"'
                 + '>Delete</button>';
         } else if (v.status === 'archived') {
-            actions = '<span class="text-muted small">archived</span>';
+            deleteAction = '<span class="text-muted small">archived</span>';
         }
         return '<tr>'
             + '<td>' + escapeHtml(String(v.id)) + '</td>'
             + '<td>' + escapeHtml(v.program_name) + ' <span class="text-muted small">(' + escapeHtml(v.program_slug) + ')</span></td>'
             + '<td>' + escapeHtml(v.version_label || '—') + defBadge + '</td>'
-            + '<td>' + statusBadge(v.status) + '</td>'
-            + '<td>' + escapeHtml(String(v.row_count)) + '</td>'
+            + '<td class="status-cell">' + statusBadge(v.status) + '</td>'
+            + '<td class="courses-cell">' + escapeHtml(String(v.row_count)) + '</td>'
             + '<td>' + escapeHtml(fmtDate(v.updated_at)) + '</td>'
-            + '<td class="actions-cell">' + actions + '</td>'
+            + '<td class="actions-edit-cell">' + editAction + '</td>'
+            + '<td class="actions-delete-cell">' + deleteAction + '</td>'
             + '</tr>';
     }).join('');
     statusEl.textContent = versions.length + ' version' + (versions.length === 1 ? '' : 's') + '.';
