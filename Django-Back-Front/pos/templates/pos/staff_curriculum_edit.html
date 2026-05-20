@@ -32,7 +32,7 @@
 <div class="py-4">
 <div class="staff-home-outer">
 
-    <div class="staff-section-title staff-section-title-lg">Edit POS</div>
+    <div class="staff-section-title staff-section-title-lg">Edit Curriculum</div>
 
     <div class="staff-pos-card">
     <p class="small text-muted mb-3">View, edit, approve, reopen, or delete curriculum versions for your programs.<br>Use program/status filters to narrow down.</p>
@@ -139,7 +139,7 @@ async function loadVersions() {
             : '';
         let editAction = '';
         if (v.status === 'draft' || v.status === 'approved') {
-            const openLabel = v.status === 'draft' ? 'Review & edit' : 'Edit POS';
+            const openLabel = v.status === 'draft' ? 'Review & edit' : 'Edit Curriculum';
             let openHref = v.edit_url;
             if (v.status === 'approved') {
                 openHref += (openHref.indexOf('?') >= 0 ? '&' : '?') + 'reopen=1';
