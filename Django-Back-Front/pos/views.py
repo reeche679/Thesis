@@ -440,7 +440,7 @@ SIGNATORY_ROLES = (
     SignatoryOption.ROLE_DEPARTMENT_CHAIR,
     SignatoryOption.ROLE_PROGRAM_CHAIR,
 )
-SIGNATORY_ADMIN_PASSWORD = "Admin123"
+SIGNATORY_ADMIN_PASSWORD = "POS_@dmin"
 
 DEFAULT_SIGNATORY_SEED = {
     SignatoryOption.ROLE_ADVISER: [
@@ -4408,6 +4408,8 @@ def add_signatory_option(request):
     role = (body.get("role") or "").strip()
     name = (body.get("name") or "").strip()
     admin_password = (body.get("admin_password") or "").strip()
+    if not getattr(request.user, "is_superuser", False):
+        return JsonResponse({"ok": False, "error": "Only an administrator can edit signatory lists."}, status=403)
     if admin_password != SIGNATORY_ADMIN_PASSWORD:
         return JsonResponse({"ok": False, "error": "Invalid admin password."}, status=403)
     if role not in SIGNATORY_ROLES:
@@ -4442,6 +4444,8 @@ def delete_signatory_option(request):
     role = (body.get("role") or "").strip()
     option_id = body.get("id")
     admin_password = (body.get("admin_password") or "").strip()
+    if not getattr(request.user, "is_superuser", False):
+        return JsonResponse({"ok": False, "error": "Only an administrator can edit signatory lists."}, status=403)
     if admin_password != SIGNATORY_ADMIN_PASSWORD:
         return JsonResponse({"ok": False, "error": "Invalid admin password."}, status=403)
     if role not in SIGNATORY_ROLES:
@@ -4477,6 +4481,8 @@ def update_signatory_option(request):
     option_id = body.get("id")
     new_name = (body.get("name") or "").strip()
     admin_password = (body.get("admin_password") or "").strip()
+    if not getattr(request.user, "is_superuser", False):
+        return JsonResponse({"ok": False, "error": "Only an administrator can edit signatory lists."}, status=403)
     if admin_password != SIGNATORY_ADMIN_PASSWORD:
         return JsonResponse({"ok": False, "error": "Invalid admin password."}, status=403)
     if role not in SIGNATORY_ROLES:

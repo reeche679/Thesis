@@ -666,9 +666,11 @@
                 <div class="col-12 col-md-4">
                     <label for="preview-adviser-select" class="form-label small text-uppercase text-muted mb-1 d-flex align-items-center gap-2">
                         <span>ADVISER</span>
+                        {% if is_superuser_demo %}
                         <button type="button" class="preview-signatory-edit-btn" data-signatory-role="adviser" title="Edit Adviser list" aria-label="Edit Adviser list">
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
                         </button>
+                        {% endif %}
                     </label>
                     <div class="preview-signatory-select-wrap">
                         <select id="preview-adviser-select" class="form-select form-select-sm">
@@ -682,9 +684,11 @@
                 <div class="col-12 col-md-4">
                     <label for="preview-program-chair-select" class="form-label small text-uppercase text-muted mb-1 d-flex align-items-center gap-2">
                         <span>PROGRAM CHAIR</span>
+                        {% if is_superuser_demo %}
                         <button type="button" class="preview-signatory-edit-btn" data-signatory-role="program_chair" title="Edit Program Chair list" aria-label="Edit Program Chair list">
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
                         </button>
+                        {% endif %}
                     </label>
                     <div class="preview-signatory-select-wrap">
                         <select id="preview-program-chair-select" class="form-select form-select-sm" disabled>
@@ -697,9 +701,11 @@
                 <div class="col-12 col-md-4">
                     <label for="preview-department-chair-select" class="form-label small text-uppercase text-muted mb-1 d-flex align-items-center gap-2">
                         <span>DEPARTMENT CHAIR</span>
+                        {% if is_superuser_demo %}
                         <button type="button" class="preview-signatory-edit-btn" data-signatory-role="department_chair" title="Edit Department Chair list" aria-label="Edit Department Chair list">
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
                         </button>
+                        {% endif %}
                     </label>
                     <div class="preview-signatory-select-wrap">
                         <select id="preview-department-chair-select" class="form-select form-select-sm" disabled>

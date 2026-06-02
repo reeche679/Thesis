@@ -51,6 +51,10 @@ if _use_proxy in ("1", "true", "yes", "on"):
         SESSION_COOKIE_SECURE = True
         CSRF_COOKIE_SECURE = True
 
+# Log users out when the browser is fully closed (applies to both superuser
+# Django auth sessions and student portal sessions, which share request.session).
+SESSION_EXPIRE_AT_BROWSER_CLOSE = True
+
 
 # Application definition
 
