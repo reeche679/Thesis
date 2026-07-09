@@ -600,7 +600,7 @@ def add_prereq_year_coreq_constraints(
         if total_units <= 0:
             return
 
-        req_units = math.ceil(0.9 * total_units)
+        req_units = math.ceil(0.85 * total_units)
         # Units still needed from scheduled courses (beyond already-passed ones).
         remaining_needed = req_units - earned_fixed
 

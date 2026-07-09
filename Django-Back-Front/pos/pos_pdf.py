@@ -884,6 +884,7 @@ def build_generated_pos_pdf(
     logo_path=None,
     grades_by_section=None,
     boundary_section_index=None,
+    course_lookup=None,
 ):
     """
     Build a PDF from the solver-generated POS (list of semesters with courses).
@@ -973,7 +974,10 @@ def build_generated_pos_pdf(
         if grades_by_section is not None and ui_section_index is not None:
             section_grades = grades_by_section.get(ui_section_index) or grades_by_section.get(str(ui_section_index)) or {}
 
-        course_lookup = _course_lookup_from_curriculum()
+        # Prefer the student's resolved (DB) curriculum lookup; fall back to the
+        # legacy static curriculum only when none was supplied.
+        if course_lookup is None:
+            course_lookup = _course_lookup_from_curriculum()
 
         def _grade_cell(grade_str):
             """Render grade with red styling only for 5.00; keep blank when not entered."""
@@ -1134,6 +1138,7 @@ def build_preview_pos_pdf(
     pdf_department_label=None,
     pdf_program_curriculum=None,
     pdf_program_shortcut=None,
+    course_lookup=None,
 ):
     """
     Build POS PDF that mirrors the Preview page:
@@ -1254,7 +1259,11 @@ def build_preview_pos_pdf(
     # Code, Title, Units, Lec, Lab, Pre-req, Co-req, Grade, Remarks
     col_widths = [w * inch for w in _POS_COURSE_COL_WIDTHS_INCH]
 
-    course_lookup = _course_lookup_from_curriculum()
+    # Prefer the student's resolved (DB) curriculum lookup so future/solver
+    # semesters render the correct titles/units/requisites. Fall back to the
+    # legacy static curriculum only when no lookup is supplied.
+    if course_lookup is None:
+        course_lookup = _course_lookup_from_curriculum()
 
     # Map solver UI section index -> total units for that semester.
     # Solver semester_index is 1-based: 1=1st Year First Semester.

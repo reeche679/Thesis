@@ -4315,6 +4315,7 @@ def download_pos_pdf(request):
         pdf_department_label=pdf_header["department"],
         pdf_program_curriculum=pdf_header["program_curriculum"],
         pdf_program_shortcut=pdf_header["program_shortcut"],
+        course_lookup=gctx.get("course_lookup"),
     )
     filename = f"{requested_name}.pdf"
     response = HttpResponse(pdf_bytes, content_type='application/pdf')
@@ -4542,6 +4543,10 @@ def download_generated_pos_pdf(request):
     )
     grades_by_section = _saved_grades_by_section(student)
 
+    from .generate_curriculum_context import resolve_generate_curriculum_context
+
+    gctx = resolve_generate_curriculum_context(student)
+
     from .pos_pdf import build_generated_pos_pdf
     logo_path = os.path.abspath(os.path.normpath(os.path.join(str(settings.BASE_DIR), 'static', 'img', 'BSU_Logo.png')))
     if not os.path.isfile(logo_path):
@@ -4554,6 +4559,7 @@ def download_generated_pos_pdf(request):
         grades_by_section=grades_by_section,
         boundary_section_index=preview_boundary_section_index,
         logo_path=logo_path,
+        course_lookup=gctx.get("course_lookup"),
     )
     filename = f"POS_Generated_{student.sr_code or 'POS'}.pdf"
     response = HttpResponse(pdf_bytes, content_type='application/pdf')
@@ -4616,6 +4622,7 @@ def download_pos_pdf_record(request, record_id):
             pdf_department_label=pdf_header["department"],
             pdf_program_curriculum=pdf_header["program_curriculum"],
             pdf_program_shortcut=pdf_header["program_shortcut"],
+            course_lookup=gctx.get("course_lookup"),
         )
     else:
         snapshot = getattr(record, 'grades_snapshot', None) or {}
