@@ -15,3 +15,5 @@ jsonschema>=4.0,<5
 discrete-optimization
 cpmpy
 minizinc
+dj-database-url
+psycopg2-binary
