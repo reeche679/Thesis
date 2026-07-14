@@ -39,7 +39,7 @@ ALLOWED_HOSTS.append("programofstudy-generator-bsu.up.railway.app")
 # CSRF_TRUSTED_ORIGINS=https://example.com,https://www.example.com
 _csrf = os.environ.get("CSRF_TRUSTED_ORIGINS", "")
 CSRF_TRUSTED_ORIGINS = [o.strip() for o in _csrf.split(",") if o.strip()]
-CSRF_TRUSTED_ORIGINS.append("https://programofstudy-generator-bsu.up.railway.app/")
+CSRF_TRUSTED_ORIGINS.append("https://programofstudy-generator-bsu.up.railway.app")
 
 # When behind Apache/nginx/Cloudflare (trusted), set USE_TRUSTED_REVERSE_PROXY=1
 _use_proxy = os.environ.get("USE_TRUSTED_REVERSE_PROXY", "").strip().lower()
