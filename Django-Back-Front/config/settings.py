@@ -28,17 +28,18 @@ SECRET_KEY = os.environ.get(
 )
 
 # SECURITY WARNING: don't run with debug turned on in production!
-_debug = os.environ.get("DEBUG", "True").strip().lower()
+_debug = os.environ.get("DEBUG", "False").strip().lower()
+DEBUG = _debug in ("1", "true", "yes", "on")
 
 _allowed = os.environ.get("ALLOWED_HOSTS", "localhost,127.0.0.1")
 ALLOWED_HOSTS = [h.strip() for h in _allowed.split(",") if h.strip()]
-ALLOWED_HOSTS.append("thesis-production-03bb.up.railway.app")
+ALLOWED_HOSTS.append("programofstudy-generator-bsu.up.railway.app")
 
 # Required for HTTPS sites (e.g. Cloudflare). Comma-separated, e.g.
 # CSRF_TRUSTED_ORIGINS=https://example.com,https://www.example.com
 _csrf = os.environ.get("CSRF_TRUSTED_ORIGINS", "")
 CSRF_TRUSTED_ORIGINS = [o.strip() for o in _csrf.split(",") if o.strip()]
-CSRF_TRUSTED_ORIGINS.append("https://thesis-production-03bb.up.railway.app")
+CSRF_TRUSTED_ORIGINS.append("https://programofstudy-generator-bsu.up.railway.app/")
 
 # When behind Apache/nginx/Cloudflare (trusted), set USE_TRUSTED_REVERSE_PROXY=1
 _use_proxy = os.environ.get("USE_TRUSTED_REVERSE_PROXY", "").strip().lower()
